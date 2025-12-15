@@ -318,6 +318,9 @@ class FieldOSAPITester:
         # Get lead details
         if self.lead_id:
             self.run_test("Get Lead Details", "GET", f"leads/{self.lead_id}", 200)
+        
+        # Restore superadmin token
+        self.superadmin_token = original_token
 
     def test_job_management(self):
         """Test job CRUD operations"""
