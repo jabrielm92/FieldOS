@@ -378,6 +378,9 @@ class FieldOSAPITester:
         # Test mark en-route
         if self.job_id:
             self.run_test("Mark Job En-Route", "POST", f"jobs/{self.job_id}/en-route", 200)
+        
+        # Restore superadmin token
+        self.superadmin_token = original_token
 
     def test_quote_management(self):
         """Test quote CRUD operations"""
