@@ -556,6 +556,120 @@ class FieldOSAPITester:
         # Test reports summary
         self.run_test("Get Reports Summary", "GET", "reports/summary", 200)
 
+    def test_new_features(self):
+        """Test new features: Dispatch Board, Analytics, Portal, Invoices"""
+        self.log("\n=== NEW FEATURES TESTING ===")
+        
+        # Switch to tenant owner token
+        original_token = self.superadmin_token
+        self.superadmin_token = self.tenant_owner_token
+        
+        # Test Dispatch Board
+        self.log("\n--- DISPATCH BOARD TESTS ---")
+        today = datetime.now().strftime("%Y-%m-%d")
+        self.run_test("Get Dispatch Board", "GET", f"dispatch/board?date={today}", 200)
+        
+        # Test job assignment (might fail if no technicians, but tests endpoint)
+        if self.job_id:
+            self.run_test("Assign Job to Technician", "POST", f"dispatch/assign?job_id={self.job_id}&technician_id=", 200)
+        
+        # Test Analytics Overview
+        self.log("\n--- ANALYTICS TESTS ---")
+        self.run_test("Analytics Overview 7d", "GET", "analytics/overview?period=7d", 200)
+        self.run_test("Analytics Overview 30d", "GET", "analytics/overview?period=30d", 200)
+        self.run_test("Analytics Overview 90d", "GET", "analytics/overview?period=90d", 200)
+        
+        # Test Invoice Management
+        self.log("\n--- INVOICE TESTS ---")
+        if self.customer_id and self.job_id:
+            # Create invoice
+            invoice_data = {
+                "customer_id": self.customer_id,
+                "job_id": self.job_id,
+                "amount": 450.00,
+                "due_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+            }
+            
+            success, response = self.run_test("Create Invoice", "POST", "invoices", 200, data=invoice_data)
+            
+            if success and 'id' in response:
+                invoice_id = response['id']
+                self.log(f"✅ Invoice created with ID: {invoice_id}")
+                
+                # Test mark invoice as paid
+                self.run_test("Mark Invoice Paid", "POST", f"invoices/{invoice_id}/mark-paid", 200)
+        
+        # List invoices
+        self.run_test("List Invoices", "GET", "invoices", 200)
+        
+        # Test Customer Portal
+        self.log("\n--- CUSTOMER PORTAL TESTS ---")
+        if self.customer_id:
+            # Generate portal link
+            success, response = self.run_test(
+                "Generate Portal Link", 
+                "POST", 
+                "portal/generate-link", 
+                200, 
+                data={"customer_id": self.customer_id}
+            )
+            
+            if success and 'token' in response:
+                portal_token = response['token']
+                self.log(f"✅ Portal token generated: {portal_token[:20]}...")
+                
+                # Test portal data access (no auth required)
+                portal_headers = {}  # No auth for portal endpoints
+                self.run_test(
+                    "Get Portal Data", 
+                    "GET", 
+                    f"portal/{portal_token}", 
+                    200, 
+                    headers=portal_headers
+                )
+                
+                # Test portal review submission
+                if self.job_id:
+                    self.run_test(
+                        "Submit Portal Review", 
+                        "POST", 
+                        f"portal/{portal_token}/review?job_id={self.job_id}&rating=5&comment=Great service!", 
+                        200, 
+                        headers=portal_headers
+                    )
+                
+                # Test portal note submission
+                self.run_test(
+                    "Submit Portal Note", 
+                    "POST", 
+                    f"portal/{portal_token}/add-note?note=Test message from customer", 
+                    200, 
+                    headers=portal_headers
+                )
+        
+        # Restore superadmin token
+        self.superadmin_token = original_token
+
+    def test_background_scheduler(self):
+        """Test background scheduler functionality"""
+        self.log("\n=== BACKGROUND SCHEDULER TESTS ===")
+        
+        # Check if scheduler is running by testing job reminder flags
+        # This is indirect testing since we can't directly test the scheduler
+        if self.job_id:
+            # Switch to tenant owner token
+            original_token = self.superadmin_token
+            self.superadmin_token = self.tenant_owner_token
+            
+            # Get job details to check reminder flags
+            success, response = self.run_test("Check Job Reminder Flags", "GET", f"jobs/{self.job_id}", 200)
+            
+            if success and 'reminder_day_before_sent' in response:
+                self.log(f"✅ Job has reminder tracking fields: day_before={response.get('reminder_day_before_sent')}, morning_of={response.get('reminder_morning_of_sent')}")
+            
+            # Restore superadmin token
+            self.superadmin_token = original_token
+
     def test_auth_endpoints(self):
         """Test additional auth endpoints"""
         self.log("\n=== ADDITIONAL AUTH TESTS ===")
