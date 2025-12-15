@@ -511,12 +511,19 @@ class TokenResponse(BaseModel):
 
 class VapiCreateLeadRequest(BaseModel):
     tenant_slug: str
-    caller_phone: str
+    # Support both field naming conventions
+    caller_phone: Optional[str] = None
+    caller_number: Optional[str] = None  # Alias for caller_phone
     caller_name: Optional[str] = None
+    captured_name: Optional[str] = None  # Alias for caller_name
+    captured_email: Optional[str] = None  # Optional email
     issue_type: Optional[str] = None
+    issue_description: Optional[str] = None  # Alias for description
     urgency: Optional[str] = "ROUTINE"
     description: Optional[str] = None
+    # Address fields - support both formats
     address_line1: Optional[str] = None
+    captured_address: Optional[str] = None  # Alias - will be parsed
     city: Optional[str] = None
     state: Optional[str] = None
     postal_code: Optional[str] = None
