@@ -90,11 +90,47 @@ class FieldOSAPITester:
         """Test basic health endpoints"""
         self.log("\n=== HEALTH CHECK TESTS ===")
         
-        # Test root endpoint
-        self.run_test("Root Health Check", "GET", "", 200)
+        # Test root endpoint (on api router, not v1)
+        url = f"{self.base_url}/api/"
+        try:
+            response = requests.get(url, timeout=30)
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                self.log(f"✅ Root Health Check - Status: {response.status_code}")
+            else:
+                self.log(f"❌ Root Health Check - Expected 200, got {response.status_code}")
+                self.failed_tests.append({
+                    'name': 'Root Health Check',
+                    'expected': 200,
+                    'actual': response.status_code,
+                    'response': response.text[:200]
+                })
+        except Exception as e:
+            self.log(f"❌ Root Health Check - Error: {str(e)}")
+            self.failed_tests.append({'name': 'Root Health Check', 'error': str(e)})
+        self.tests_run += 1
         
-        # Test health endpoint
-        self.run_test("Health Endpoint", "GET", "health", 200)
+        # Test health endpoint (on api router, not v1)
+        url = f"{self.base_url}/api/health"
+        try:
+            response = requests.get(url, timeout=30)
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                self.log(f"✅ Health Endpoint - Status: {response.status_code}")
+            else:
+                self.log(f"❌ Health Endpoint - Expected 200, got {response.status_code}")
+                self.failed_tests.append({
+                    'name': 'Health Endpoint',
+                    'expected': 200,
+                    'actual': response.status_code,
+                    'response': response.text[:200]
+                })
+        except Exception as e:
+            self.log(f"❌ Health Endpoint - Error: {str(e)}")
+            self.failed_tests.append({'name': 'Health Endpoint', 'error': str(e)})
+        self.tests_run += 1
 
     def test_superadmin_login(self):
         """Test superadmin authentication"""
