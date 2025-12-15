@@ -390,6 +390,10 @@ class FieldOSAPITester:
             self.log("❌ Skipping quote tests - missing customer or property ID")
             return
         
+        # Switch to tenant owner token
+        original_token = self.superadmin_token
+        self.superadmin_token = self.tenant_owner_token
+        
         # Create quote
         quote_data = {
             "customer_id": self.customer_id,
