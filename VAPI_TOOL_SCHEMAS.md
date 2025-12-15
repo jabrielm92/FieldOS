@@ -286,11 +286,11 @@
 
 | Tool | URL |
 |------|-----|
-| create_lead | https://field-track.preview.emergentagent.com/api/v1/vapi/create-lead |
-| check_availability | https://field-track.preview.emergentagent.com/api/v1/vapi/check-availability |
-| book_job | https://field-track.preview.emergentagent.com/api/v1/vapi/book-job |
-| send_followup_sms | https://field-track.preview.emergentagent.com/api/v1/vapi/send-sms |
-| log_call_summary | https://field-track.preview.emergentagent.com/api/v1/vapi/call-summary |
+| create_lead | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/create-lead |
+| check_availability | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/check-availability |
+| book_job | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/book-job |
+| send_followup_sms | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/send-sms |
+| log_call_summary | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/call-summary |
 
 All tools use:
 - **Method:** POST
