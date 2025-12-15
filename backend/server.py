@@ -1484,10 +1484,19 @@ async def vapi_check_availability(
             })
             available_slots -= 1
     
+    # Format human-readable response for Vapi
+    if len(available_windows) == 0:
+        response_message = f"Unfortunately, there are no available time slots for {data.date}. Please ask the customer for an alternative date."
+    else:
+        slots_text = ", ".join([w["label"] for w in available_windows])
+        response_message = f"For {data.date}, the following time slots are available: {slots_text}. Ask the customer which time slot works best for them."
+    
     return {
         "date": data.date,
         "windows": available_windows,
-        "message": f"Found {len(available_windows)} available time slots for {data.date}"
+        "has_availability": len(available_windows) > 0,
+        "message": response_message,
+        "next_step": "Ask the customer which time slot they prefer, then call the book-job tool with their selection."
     }
 
 
