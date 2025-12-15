@@ -1762,7 +1762,7 @@ async def get_dashboard(
 
 @app.on_event("startup")
 async def startup_event():
-    """Create default superadmin if not exists"""
+    """Create default superadmin if not exists and start scheduler"""
     superadmin = await db.users.find_one({"role": UserRole.SUPERADMIN.value})
     if not superadmin:
         admin = User(
@@ -1778,6 +1778,560 @@ async def startup_event():
         admin_dict["updated_at"] = admin_dict["updated_at"].isoformat()
         await db.users.insert_one(admin_dict)
         logger.info("Created default superadmin: admin@fieldos.app / admin123")
+    
+    # Initialize background scheduler
+    try:
+        from scheduler import init_scheduler
+        init_scheduler()
+        logger.info("Background scheduler initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize scheduler: {e}")
+
+
+# ============= DISPATCH BOARD ENDPOINTS =============
+
+@v1_router.get("/dispatch/board")
+async def get_dispatch_board(
+    date: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get dispatch board data - jobs and technicians for a day"""
+    # Default to today
+    if not date:
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # Parse date
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format")
+    
+    date_start = target_date.replace(hour=0, minute=0, second=0)
+    date_end = date_start + timedelta(days=1)
+    
+    # Get jobs for the day
+    jobs = await db.jobs.find({
+        "tenant_id": tenant_id,
+        "service_window_start": {
+            "$gte": date_start.isoformat(),
+            "$lt": date_end.isoformat()
+        },
+        "status": {"$nin": ["CANCELLED"]}
+    }).to_list(100)
+    
+    # Enrich jobs with customer and property info
+    for job in jobs:
+        customer = await db.customers.find_one({"id": job.get("customer_id")}, {"_id": 0})
+        prop = await db.properties.find_one({"id": job.get("property_id")}, {"_id": 0})
+        job["customer"] = serialize_doc(customer) if customer else None
+        job["property"] = serialize_doc(prop) if prop else None
+    
+    # Get all active technicians
+    technicians = await db.technicians.find({
+        "tenant_id": tenant_id,
+        "active": True
+    }, {"_id": 0}).to_list(50)
+    
+    # Group jobs by technician
+    unassigned_jobs = []
+    assigned_jobs = {}
+    
+    for job in jobs:
+        tech_id = job.get("assigned_technician_id")
+        if tech_id:
+            if tech_id not in assigned_jobs:
+                assigned_jobs[tech_id] = []
+            assigned_jobs[tech_id].append(serialize_doc(job))
+        else:
+            unassigned_jobs.append(serialize_doc(job))
+    
+    return {
+        "date": date,
+        "technicians": serialize_docs(technicians),
+        "unassigned_jobs": unassigned_jobs,
+        "assigned_jobs": assigned_jobs,
+        "summary": {
+            "total_jobs": len(jobs),
+            "unassigned": len(unassigned_jobs),
+            "assigned": len(jobs) - len(unassigned_jobs)
+        }
+    }
+
+
+@v1_router.post("/dispatch/assign")
+async def assign_job_to_tech(
+    job_id: str,
+    technician_id: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Assign or unassign a job to a technician"""
+    # Verify job exists
+    job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Verify technician if assigning
+    if technician_id:
+        tech = await db.technicians.find_one({"id": technician_id, "tenant_id": tenant_id})
+        if not tech:
+            raise HTTPException(status_code=404, detail="Technician not found")
+    
+    # Update job
+    await db.jobs.update_one(
+        {"id": job_id},
+        {"$set": {
+            "assigned_technician_id": technician_id,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"success": True, "job_id": job_id, "technician_id": technician_id}
+
+
+# ============= ANALYTICS/REPORTS ENDPOINTS =============
+
+@v1_router.get("/analytics/overview")
+async def get_analytics_overview(
+    period: str = "30d",
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get comprehensive analytics overview"""
+    # Calculate date range
+    now = datetime.now(timezone.utc)
+    if period == "7d":
+        start_date = now - timedelta(days=7)
+    elif period == "30d":
+        start_date = now - timedelta(days=30)
+    elif period == "90d":
+        start_date = now - timedelta(days=90)
+    else:
+        start_date = now - timedelta(days=30)
+    
+    start_str = start_date.isoformat()
+    
+    # Lead metrics
+    total_leads = await db.leads.count_documents({
+        "tenant_id": tenant_id,
+        "created_at": {"$gte": start_str}
+    })
+    
+    leads_by_status = await db.leads.aggregate([
+        {"$match": {"tenant_id": tenant_id, "created_at": {"$gte": start_str}}},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]).to_list(20)
+    
+    leads_by_source = await db.leads.aggregate([
+        {"$match": {"tenant_id": tenant_id, "created_at": {"$gte": start_str}}},
+        {"$group": {"_id": "$source", "count": {"$sum": 1}}}
+    ]).to_list(20)
+    
+    # Job metrics
+    total_jobs = await db.jobs.count_documents({
+        "tenant_id": tenant_id,
+        "created_at": {"$gte": start_str}
+    })
+    
+    jobs_by_status = await db.jobs.aggregate([
+        {"$match": {"tenant_id": tenant_id, "created_at": {"$gte": start_str}}},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]).to_list(20)
+    
+    jobs_by_type = await db.jobs.aggregate([
+        {"$match": {"tenant_id": tenant_id, "created_at": {"$gte": start_str}}},
+        {"$group": {"_id": "$job_type", "count": {"$sum": 1}}}
+    ]).to_list(20)
+    
+    completed_jobs = await db.jobs.count_documents({
+        "tenant_id": tenant_id,
+        "status": "COMPLETED",
+        "created_at": {"$gte": start_str}
+    })
+    
+    # Quote metrics
+    total_quotes = await db.quotes.count_documents({
+        "tenant_id": tenant_id,
+        "created_at": {"$gte": start_str}
+    })
+    
+    accepted_quotes = await db.quotes.count_documents({
+        "tenant_id": tenant_id,
+        "status": "ACCEPTED",
+        "created_at": {"$gte": start_str}
+    })
+    
+    # Revenue from accepted quotes
+    revenue_pipeline = [
+        {"$match": {
+            "tenant_id": tenant_id,
+            "status": "ACCEPTED",
+            "created_at": {"$gte": start_str}
+        }},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]
+    revenue_result = await db.quotes.aggregate(revenue_pipeline).to_list(1)
+    total_revenue = revenue_result[0]["total"] if revenue_result else 0
+    
+    # Daily trends (last 14 days)
+    daily_trends = []
+    for i in range(14):
+        day = now - timedelta(days=i)
+        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        
+        day_leads = await db.leads.count_documents({
+            "tenant_id": tenant_id,
+            "created_at": {"$gte": day_start.isoformat(), "$lt": day_end.isoformat()}
+        })
+        
+        day_jobs = await db.jobs.count_documents({
+            "tenant_id": tenant_id,
+            "created_at": {"$gte": day_start.isoformat(), "$lt": day_end.isoformat()}
+        })
+        
+        daily_trends.append({
+            "date": day_start.strftime("%Y-%m-%d"),
+            "leads": day_leads,
+            "jobs": day_jobs
+        })
+    
+    daily_trends.reverse()
+    
+    # Conversion rates
+    leads_converted = await db.leads.count_documents({
+        "tenant_id": tenant_id,
+        "status": "JOB_BOOKED",
+        "created_at": {"$gte": start_str}
+    })
+    
+    lead_conversion_rate = round(leads_converted / total_leads * 100, 1) if total_leads > 0 else 0
+    quote_conversion_rate = round(accepted_quotes / total_quotes * 100, 1) if total_quotes > 0 else 0
+    job_completion_rate = round(completed_jobs / total_jobs * 100, 1) if total_jobs > 0 else 0
+    
+    # Technician performance
+    tech_performance = await db.jobs.aggregate([
+        {"$match": {
+            "tenant_id": tenant_id,
+            "status": "COMPLETED",
+            "assigned_technician_id": {"$ne": None},
+            "created_at": {"$gte": start_str}
+        }},
+        {"$group": {
+            "_id": "$assigned_technician_id",
+            "completed_jobs": {"$sum": 1}
+        }}
+    ]).to_list(20)
+    
+    # Enrich with tech names
+    for perf in tech_performance:
+        tech = await db.technicians.find_one({"id": perf["_id"]}, {"_id": 0, "name": 1})
+        perf["technician_name"] = tech["name"] if tech else "Unknown"
+    
+    return {
+        "period": period,
+        "summary": {
+            "total_leads": total_leads,
+            "total_jobs": total_jobs,
+            "completed_jobs": completed_jobs,
+            "total_quotes": total_quotes,
+            "accepted_quotes": accepted_quotes,
+            "total_revenue": total_revenue
+        },
+        "conversion_rates": {
+            "lead_to_job": lead_conversion_rate,
+            "quote_acceptance": quote_conversion_rate,
+            "job_completion": job_completion_rate
+        },
+        "leads": {
+            "by_status": {item["_id"]: item["count"] for item in leads_by_status},
+            "by_source": {item["_id"]: item["count"] for item in leads_by_source}
+        },
+        "jobs": {
+            "by_status": {item["_id"]: item["count"] for item in jobs_by_status},
+            "by_type": {item["_id"]: item["count"] for item in jobs_by_type}
+        },
+        "daily_trends": daily_trends,
+        "technician_performance": tech_performance
+    }
+
+
+# ============= CUSTOMER PORTAL ENDPOINTS =============
+
+async def generate_portal_token(customer_id: str, tenant_id: str) -> str:
+    """Generate a portal access token for a customer"""
+    import hashlib
+    import secrets
+    
+    # Create a simple token (in production, use proper JWT)
+    random_part = secrets.token_urlsafe(16)
+    token = f"{customer_id[:8]}-{random_part}"
+    
+    # Store token in customer record
+    await db.customers.update_one(
+        {"id": customer_id, "tenant_id": tenant_id},
+        {"$set": {"portal_token": token, "portal_token_created": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return token
+
+
+@v1_router.post("/portal/generate-link")
+async def generate_portal_link(
+    customer_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate a customer portal link"""
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": tenant_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    token = await generate_portal_token(customer_id, tenant_id)
+    base_url = os.environ.get('APP_BASE_URL', 'http://localhost:3000')
+    portal_url = f"{base_url}/portal/{token}"
+    
+    return {
+        "success": True,
+        "portal_url": portal_url,
+        "token": token
+    }
+
+
+@v1_router.get("/portal/{token}")
+async def get_portal_data(token: str):
+    """Get customer portal data (public endpoint)"""
+    # Find customer by token
+    customer = await db.customers.find_one({"portal_token": token}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    tenant_id = customer["tenant_id"]
+    customer_id = customer["id"]
+    
+    # Get tenant info
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0, "name": 1, "primary_phone": 1})
+    
+    # Get upcoming jobs
+    now = datetime.now(timezone.utc)
+    upcoming_jobs = await db.jobs.find({
+        "customer_id": customer_id,
+        "status": {"$in": ["BOOKED", "EN_ROUTE"]},
+        "service_window_start": {"$gte": now.isoformat()}
+    }, {"_id": 0}).sort("service_window_start", 1).to_list(10)
+    
+    # Enrich with property info
+    for job in upcoming_jobs:
+        prop = await db.properties.find_one({"id": job.get("property_id")}, {"_id": 0})
+        job["property"] = serialize_doc(prop) if prop else None
+        # Get technician if assigned
+        if job.get("assigned_technician_id"):
+            tech = await db.technicians.find_one({"id": job["assigned_technician_id"]}, {"_id": 0, "name": 1, "phone": 1})
+            job["technician"] = serialize_doc(tech) if tech else None
+    
+    # Get past jobs
+    past_jobs = await db.jobs.find({
+        "customer_id": customer_id,
+        "status": "COMPLETED"
+    }, {"_id": 0}).sort("service_window_start", -1).limit(5).to_list(5)
+    
+    # Get pending quotes
+    pending_quotes = await db.quotes.find({
+        "customer_id": customer_id,
+        "status": {"$in": ["DRAFT", "SENT"]}
+    }, {"_id": 0}).to_list(10)
+    
+    # Enrich quotes with property info
+    for quote in pending_quotes:
+        prop = await db.properties.find_one({"id": quote.get("property_id")}, {"_id": 0})
+        quote["property"] = serialize_doc(prop) if prop else None
+    
+    # Get properties
+    properties = await db.properties.find({
+        "customer_id": customer_id
+    }, {"_id": 0}).to_list(20)
+    
+    return {
+        "customer": {
+            "first_name": customer.get("first_name"),
+            "last_name": customer.get("last_name"),
+            "phone": customer.get("phone"),
+            "email": customer.get("email")
+        },
+        "company": tenant,
+        "upcoming_appointments": serialize_docs(upcoming_jobs),
+        "past_appointments": serialize_docs(past_jobs),
+        "pending_quotes": serialize_docs(pending_quotes),
+        "properties": serialize_docs(properties)
+    }
+
+
+@v1_router.post("/portal/{token}/quote/{quote_id}/respond")
+async def respond_to_quote(token: str, quote_id: str, action: str):
+    """Customer responds to a quote (accept/decline)"""
+    # Verify token
+    customer = await db.customers.find_one({"portal_token": token})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    # Get quote
+    quote = await db.quotes.find_one({"id": quote_id, "customer_id": customer["id"]})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    if action == "accept":
+        new_status = "ACCEPTED"
+        update_field = "accepted_at"
+    elif action == "decline":
+        new_status = "DECLINED"
+        update_field = "declined_at"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+    
+    await db.quotes.update_one(
+        {"id": quote_id},
+        {"$set": {
+            "status": new_status,
+            update_field: datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"success": True, "status": new_status}
+
+
+@v1_router.post("/portal/{token}/reschedule-request")
+async def request_reschedule(token: str, job_id: str, message: str):
+    """Customer requests to reschedule an appointment"""
+    # Verify token
+    customer = await db.customers.find_one({"portal_token": token})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    # Get job
+    job = await db.jobs.find_one({"id": job_id, "customer_id": customer["id"]})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Create a message/note for staff
+    tenant_id = customer["tenant_id"]
+    
+    # Find or create conversation
+    conv = await db.conversations.find_one({
+        "customer_id": customer["id"],
+        "tenant_id": tenant_id,
+        "status": "OPEN"
+    })
+    
+    if not conv:
+        conv = {
+            "id": str(__import__('uuid').uuid4()),
+            "tenant_id": tenant_id,
+            "customer_id": customer["id"],
+            "primary_channel": "SMS",
+            "status": "OPEN",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.conversations.insert_one(conv)
+    
+    # Create message
+    msg = {
+        "id": str(__import__('uuid').uuid4()),
+        "tenant_id": tenant_id,
+        "conversation_id": conv["id"],
+        "customer_id": customer["id"],
+        "direction": "INBOUND",
+        "sender_type": "CUSTOMER",
+        "channel": "SMS",
+        "content": f"[Portal] Reschedule Request for job {job_id}: {message}",
+        "is_call_summary": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.messages.insert_one(msg)
+    
+    # Update conversation
+    await db.conversations.update_one(
+        {"id": conv["id"]},
+        {"$set": {
+            "last_message_from": "CUSTOMER",
+            "last_message_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"success": True, "message": "Reschedule request submitted"}
+
+
+# ============= SEND PORTAL LINK VIA SMS =============
+
+@v1_router.post("/customers/{customer_id}/send-portal-link")
+async def send_portal_link_sms(
+    customer_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate and send portal link to customer via SMS"""
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    
+    # Generate token
+    token = await generate_portal_token(customer_id, tenant_id)
+    base_url = os.environ.get('APP_BASE_URL', 'http://localhost:3000')
+    portal_url = f"{base_url}/portal/{token}"
+    
+    # Send SMS
+    from services.twilio_service import twilio_service
+    
+    message = f"Hi {customer['first_name']}! View your appointments and quotes with {tenant['name']}: {portal_url}"
+    
+    result = await twilio_service.send_sms(
+        to_phone=customer['phone'],
+        body=message
+    )
+    
+    return {
+        "success": result.get("success", False),
+        "portal_url": portal_url,
+        "error": result.get("error")
+    }
+
+
+# ============= MANUAL REMINDER TRIGGER =============
+
+@v1_router.post("/jobs/{job_id}/send-reminder")
+async def send_manual_reminder(
+    job_id: str,
+    reminder_type: str = "day_before",
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Manually send a reminder for a job"""
+    job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    customer = await db.customers.find_one({"id": job["customer_id"]}, {"_id": 0})
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    
+    if not customer or not tenant:
+        raise HTTPException(status_code=404, detail="Customer or tenant not found")
+    
+    from scheduler import send_reminder_sms
+    success = await send_reminder_sms(tenant, customer, job, reminder_type)
+    
+    if success:
+        # Update the appropriate flag
+        flag_field = f"reminder_{reminder_type}_sent"
+        await db.jobs.update_one(
+            {"id": job_id},
+            {"$set": {flag_field: True}}
+        )
+    
+    return {"success": success}
 
 
 # ============= HEALTH CHECK =============
