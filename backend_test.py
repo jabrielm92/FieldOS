@@ -423,6 +423,10 @@ class FieldOSAPITester:
         """Test campaign CRUD operations"""
         self.log("\n=== CAMPAIGN MANAGEMENT ===")
         
+        # Switch to tenant owner token
+        original_token = self.superadmin_token
+        self.superadmin_token = self.tenant_owner_token
+        
         # Create campaign
         campaign_data = {
             "name": "Test Reactivation Campaign",
