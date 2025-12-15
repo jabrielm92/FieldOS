@@ -18,7 +18,7 @@ from passlib.context import CryptContext
 from models import (
     # Enums
     UserRole, UserStatus, LeadSource, LeadChannel, LeadStatus, Urgency,
-    JobType, JobPriority, JobStatus, JobCreatedBy, QuoteStatus,
+    JobType, JobPriority, JobStatus, JobCreatedBy, QuoteStatus, InvoiceStatus,
     ConversationStatus, MessageDirection, SenderType, PreferredChannel,
     CampaignStatus, RecipientStatus, BookingMode, ToneProfile,
     # Models
@@ -30,6 +30,7 @@ from models import (
     Lead, LeadCreate,
     Job, JobCreate,
     Quote, QuoteCreate,
+    Invoice, InvoiceCreate,
     Conversation, Message, MessageCreate,
     Campaign, CampaignCreate, CampaignRecipient,
     # Auth
