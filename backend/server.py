@@ -1181,17 +1181,47 @@ async def vapi_create_lead(
     
     tenant_id = tenant["id"]
     
+    # Resolve field aliases (support both old Make.com names and new names)
+    phone = data.caller_phone or data.caller_number
+    name = data.caller_name or data.captured_name
+    description = data.description or data.issue_description
+    issue_type = data.issue_type or data.issue_description  # Use issue_description as issue_type if not provided
+    
+    # Parse address - support both structured and single-line formats
+    address_line1 = data.address_line1
+    city = data.city
+    state = data.state
+    postal_code = data.postal_code
+    
+    if data.captured_address and not address_line1:
+        # Try to parse "123 Main St, Chicago, IL 60601" format
+        parts = [p.strip() for p in data.captured_address.split(',')]
+        if len(parts) >= 1:
+            address_line1 = parts[0]
+        if len(parts) >= 2:
+            city = parts[1]
+        if len(parts) >= 3:
+            # Try to parse "IL 60601" or just "IL"
+            state_zip = parts[2].strip().split()
+            if len(state_zip) >= 1:
+                state = state_zip[0]
+            if len(state_zip) >= 2:
+                postal_code = state_zip[1]
+    
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone number is required (caller_phone or caller_number)")
+    
     # Find or create customer
     customer = await db.customers.find_one(
-        {"phone": data.caller_phone, "tenant_id": tenant_id}, {"_id": 0}
+        {"phone": phone, "tenant_id": tenant_id}, {"_id": 0}
     )
     
     if not customer:
         # Parse name
         first_name = "Unknown"
         last_name = ""
-        if data.caller_name:
-            parts = data.caller_name.split(" ", 1)
+        if name:
+            parts = name.split(" ", 1)
             first_name = parts[0]
             last_name = parts[1] if len(parts) > 1 else ""
         
@@ -1199,7 +1229,8 @@ async def vapi_create_lead(
             tenant_id=tenant_id,
             first_name=first_name,
             last_name=last_name,
-            phone=data.caller_phone
+            phone=phone,
+            email=data.captured_email
         )
         customer_dict = customer.model_dump()
         customer_dict["created_at"] = customer_dict["created_at"].isoformat()
@@ -1209,14 +1240,14 @@ async def vapi_create_lead(
     
     # Create property if address provided
     property_id = None
-    if data.address_line1:
+    if address_line1:
         prop = Property(
             tenant_id=tenant_id,
             customer_id=customer["id"],
-            address_line1=data.address_line1,
-            city=data.city or "",
-            state=data.state or "",
-            postal_code=data.postal_code or ""
+            address_line1=address_line1,
+            city=city or "",
+            state=state or "",
+            postal_code=postal_code or ""
         )
         prop_dict = prop.model_dump()
         prop_dict["created_at"] = prop_dict["created_at"].isoformat()
@@ -1239,9 +1270,9 @@ async def vapi_create_lead(
         source=LeadSource.VAPI_CALL,
         channel=LeadChannel.VOICE,
         status=LeadStatus.NEW,
-        issue_type=data.issue_type,
+        issue_type=issue_type,
         urgency=urgency_value,
-        description=data.description
+        description=description
     )
     lead_dict = lead.model_dump()
     lead_dict["created_at"] = lead_dict["created_at"].isoformat()
