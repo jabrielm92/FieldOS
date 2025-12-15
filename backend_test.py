@@ -244,6 +244,9 @@ class FieldOSAPITester:
         # Get customer details
         if self.customer_id:
             self.run_test("Get Customer", "GET", f"customers/{self.customer_id}", 200)
+        
+        # Restore superadmin token
+        self.superadmin_token = original_token
 
     def test_property_management(self):
         """Test property CRUD operations"""
