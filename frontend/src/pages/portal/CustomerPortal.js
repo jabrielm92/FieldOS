@@ -29,7 +29,11 @@ import {
   Building2,
   DollarSign,
   CalendarCheck,
-  Loader2
+  Loader2,
+  Star,
+  Receipt,
+  CreditCard,
+  Send
 } from "lucide-react";
 import axios from "axios";
 
@@ -49,14 +53,27 @@ const quoteStatusColors = {
   DECLINED: "bg-red-100 text-red-800",
 };
 
+const invoiceStatusColors = {
+  DRAFT: "bg-gray-100 text-gray-800",
+  SENT: "bg-blue-100 text-blue-800",
+  PARTIALLY_PAID: "bg-yellow-100 text-yellow-800",
+  PAID: "bg-green-100 text-green-800",
+  OVERDUE: "bg-red-100 text-red-800",
+};
+
 export default function CustomerPortal() {
   const { token } = useParams();
   const [portalData, setPortalData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showRescheduleDialog, setShowRescheduleDialog] = useState(false);
+  const [showReviewDialog, setShowReviewDialog] = useState(false);
+  const [showNoteDialog, setShowNoteDialog] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [rescheduleMessage, setRescheduleMessage] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [noteContent, setNoteContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -106,6 +123,46 @@ export default function CustomerPortal() {
     }
   };
 
+  const handleSubmitReview = async () => {
+    if (!selectedJob) return;
+    
+    setSubmitting(true);
+    try {
+      await axios.post(
+        `${API_URL}/api/v1/portal/${token}/review?job_id=${selectedJob.id}&rating=${reviewRating}&comment=${encodeURIComponent(reviewComment || '')}`
+      );
+      toast.success('Thank you for your review!');
+      setShowReviewDialog(false);
+      setReviewRating(5);
+      setReviewComment("");
+      setSelectedJob(null);
+      fetchPortalData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to submit review');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmitNote = async () => {
+    if (!noteContent.trim()) return;
+    
+    setSubmitting(true);
+    try {
+      await axios.post(
+        `${API_URL}/api/v1/portal/${token}/add-note?note=${encodeURIComponent(noteContent)}${selectedJob ? `&job_id=${selectedJob.id}` : ''}`
+      );
+      toast.success('Note sent successfully');
+      setShowNoteDialog(false);
+      setNoteContent("");
+      setSelectedJob(null);
+    } catch (err) {
+      toast.error('Failed to send note');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
     return new Date(dateStr).toLocaleDateString(undefined, {
@@ -145,7 +202,7 @@ export default function CustomerPortal() {
     );
   }
 
-  const { customer, company, upcoming_appointments, past_appointments, pending_quotes, properties } = portalData;
+  const { customer, company, upcoming_appointments, past_appointments, pending_quotes, pending_invoices, properties } = portalData;
 
   return (
     <div className="min-h-screen bg-background">
@@ -168,12 +225,12 @@ export default function CustomerPortal() {
               <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center">
                 <User className="h-7 w-7 text-primary" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h2 className="text-xl font-bold font-heading">
                   Welcome, {customer?.first_name}!
                 </h2>
                 <p className="text-muted-foreground">
-                  View your appointments, approve quotes, and manage your account.
+                  View appointments, pay invoices, approve quotes, and leave reviews.
                 </p>
                 <div className="flex flex-wrap gap-4 mt-3 text-sm">
                   <span className="flex items-center gap-1">
@@ -186,6 +243,19 @@ export default function CustomerPortal() {
                       {customer?.email}
                     </span>
                   )}
+                </div>
+                <div className="mt-4">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setSelectedJob(null);
+                      setShowNoteDialog(true);
+                    }}
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    Send a Message
+                  </Button>
                 </div>
               </div>
             </div>
@@ -269,6 +339,56 @@ export default function CustomerPortal() {
             </div>
           )}
         </section>
+
+        {/* Pending Invoices */}
+        {pending_invoices?.length > 0 && (
+          <section>
+            <h3 className="text-lg font-bold font-heading mb-4 flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-red-500" />
+              Pending Invoices
+            </h3>
+            
+            <div className="space-y-4">
+              {pending_invoices.map((invoice) => (
+                <Card key={invoice.id} data-testid={`invoice-${invoice.id}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <DollarSign className="h-5 w-5 text-red-600" />
+                          <span className="text-2xl font-bold font-mono">
+                            ${invoice.amount?.toFixed(2)}
+                          </span>
+                          <Badge className={invoiceStatusColors[invoice.status]}>
+                            {invoice.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Due: {formatDate(invoice.due_date)}
+                        </p>
+                        {invoice.job && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            For: {invoice.job.job_type} service
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4">
+                      <Button className="w-full" disabled>
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Pay Invoice (Coming Soon)
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center mt-2">
+                        Please contact us to arrange payment
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Pending Quotes */}
         {pending_quotes?.length > 0 && (
@@ -363,7 +483,7 @@ export default function CustomerPortal() {
           </section>
         )}
 
-        {/* Past Appointments */}
+        {/* Past Appointments with Reviews */}
         {past_appointments?.length > 0 && (
           <section>
             <h3 className="text-lg font-bold font-heading mb-4 flex items-center gap-2">
@@ -375,14 +495,44 @@ export default function CustomerPortal() {
               <CardContent className="p-0">
                 <div className="divide-y">
                   {past_appointments.map((job) => (
-                    <div key={job.id} className="p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{job.job_type}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(job.service_window_start)}
-                        </p>
+                    <div key={job.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{job.job_type}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatDate(job.service_window_start)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {job.review ? (
+                            <div className="flex items-center gap-1">
+                              {[...Array(5)].map((_, i) => (
+                                <Star 
+                                  key={i} 
+                                  className={`h-4 w-4 ${i < job.review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} 
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                setSelectedJob(job);
+                                setShowReviewDialog(true);
+                              }}
+                            >
+                              <Star className="h-4 w-4 mr-1" />
+                              Leave Review
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <Badge className="bg-green-100 text-green-800">Completed</Badge>
+                      {job.review?.comment && (
+                        <p className="text-sm text-muted-foreground mt-2 italic">
+                          "{job.review.comment}"
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -440,6 +590,116 @@ export default function CustomerPortal() {
                 </>
               ) : (
                 'Submit Request'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Review Dialog */}
+      <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Leave a Review</DialogTitle>
+            <DialogDescription>
+              Share your experience with the {selectedJob?.job_type?.toLowerCase()} service.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Rating</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    className="focus:outline-none"
+                  >
+                    <Star 
+                      className={`h-8 w-8 transition-colors ${
+                        star <= reviewRating 
+                          ? 'text-yellow-400 fill-yellow-400' 
+                          : 'text-gray-300 hover:text-yellow-200'
+                      }`} 
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Comment (optional)</label>
+              <Textarea
+                placeholder="Tell us about your experience..."
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowReviewDialog(false);
+              setReviewRating(5);
+              setReviewComment("");
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSubmitReview} 
+              disabled={submitting}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Review'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Note Dialog */}
+      <Dialog open={showNoteDialog} onOpenChange={setShowNoteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send a Message</DialogTitle>
+            <DialogDescription>
+              Send a message or note to {company?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              placeholder="Type your message here..."
+              value={noteContent}
+              onChange={(e) => setNoteContent(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowNoteDialog(false);
+              setNoteContent("");
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSubmitNote} 
+              disabled={submitting || !noteContent.trim()}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Send Message
+                </>
               )}
             </Button>
           </DialogFooter>
