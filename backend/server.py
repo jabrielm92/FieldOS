@@ -1034,10 +1034,14 @@ async def list_campaigns(
 @v1_router.post("/campaigns")
 async def create_campaign(
     data: CampaignCreate,
-    tenant_id: str = Depends(get_tenant_id),
+    tenant_id: Optional[str] = Depends(get_tenant_id),
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new campaign"""
+    # For superadmin without tenant_id, require it to be specified
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id is required for campaign creation")
+    
     campaign = Campaign(
         tenant_id=tenant_id,
         **data.model_dump()
