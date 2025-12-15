@@ -609,9 +609,8 @@ class FieldOSAPITester:
             success, response = self.run_test(
                 "Generate Portal Link", 
                 "POST", 
-                "portal/generate-link", 
-                200, 
-                data={"customer_id": self.customer_id}
+                f"portal/generate-link?customer_id={self.customer_id}", 
+                200
             )
             
             if success and 'token' in response:
