@@ -284,6 +284,9 @@ class FieldOSAPITester:
         
         # List properties
         self.run_test("List Properties", "GET", "properties", 200)
+        
+        # Restore superadmin token
+        self.superadmin_token = original_token
 
     def test_lead_management(self):
         """Test lead CRUD operations"""
