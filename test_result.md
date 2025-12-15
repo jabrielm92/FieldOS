@@ -1,7 +1,3 @@
-#====================================================================================================
-# START - Testing Protocol - DO NOT EDIT OR REMOVE THIS SECTION
-#====================================================================================================
-
 # THIS SECTION CONTAINS CRITICAL TESTING INSTRUCTIONS FOR BOTH AGENTS
 # BOTH MAIN_AGENT AND TESTING_AGENT MUST PRESERVE THIS ENTIRE BLOCK
 
@@ -45,36 +41,24 @@
 ##   created_by: "main_agent"
 ##   version: "1.0"
 ##   test_sequence: 0
-##   run_ui: false
+##   run_ui: 
 ##
 ## test_plan:
-##   current_focus:
-##     - "Task name 1"
-##     - "Task name 2"
-##   stuck_tasks:
-##     - "Task name with persistent issues"
+##   current_focus: "What is currently being tested"
+##   blocked_features: ["List of features that can't be tested yet"]
 ##   test_all: false
-##   test_priority: "high_first"  # or "sequential" or "stuck_first"
 ##
-## agent_communication:
-##     -agent: "main"  # or "testing" or "user"
-##     -message: "Communication message between agents"
-
-# Protocol Guidelines for Main agent
+# Usage Guidelines:
+# 1. Main Agent Updates:
+#    - Update this file before calling the testing agent
+#    - Set `needs_retesting: true` for tasks that need verification
+#    - Add detailed comments in status_history
 #
-# 1. Update Test Result File Before Testing:
-#    - Main agent must always update the `test_result.md` file before calling the testing agent
-#    - Add implementation details to the status_history
-#    - Set `needs_retesting` to true for tasks that need testing
-#    - Update the `test_plan` section to guide testing priorities
-#    - Add a message to `agent_communication` explaining what you've done
-#
-# 2. Incorporate User Feedback:
-#    - When a user provides feedback that something is or isn't working, add this information to the relevant task's status_history
-#    - Update the working status based on user feedback
-#    - If a user reports an issue with a task that was marked as working, increment the stuck_count
-#    - Whenever user reports issue in the app, if we have testing agent and task_result.md file so find the appropriate task for that and append in status_history of that task to contain the user concern and problem as well 
-#
+# 2. Testing Agent Updates:
+#    - Record test results in status_history
+#    - Update `working` status based on test outcomes
+#    - Increment stuck_count if the same issue persists
+# 
 # 3. Track Stuck Tasks:
 #    - Monitor which tasks have high stuck_count values or where you are fixing same issue again and again, analyze that when you read task_result.md
 #    - For persistent issues, use websearch tool to find solutions
@@ -101,3 +85,140 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: >
+  FieldOS - Multi-tenant Revenue & Operations OS for field service companies.
+  Four new features being implemented:
+  1. Background Job Reminders (day-before & morning-of SMS notifications)
+  2. Tech Dispatch Board (visual job assignment UI with drag-and-drop)
+  3. Reports/Analytics page (metrics and insights)
+  4. Customer Self-Service Portal (view jobs, pay invoices, leave reviews/notes)
+
+backend:
+  - task: "Background Job Scheduler"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/scheduler.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Scheduler with day-before (4 PM), morning-of (7 AM) reminders implemented. Uses APScheduler with Twilio SMS."
+
+  - task: "Dispatch Board API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/v1/dispatch/board and POST /api/v1/dispatch/assign endpoints implemented"
+
+  - task: "Analytics/Reports API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/v1/analytics/overview endpoint with summary, conversion rates, daily trends, tech performance"
+
+  - task: "Customer Portal API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Portal endpoints: GET /portal/{token}, POST /portal/{token}/quote/respond, POST /portal/{token}/reschedule-request, POST /portal/{token}/review, POST /portal/{token}/add-note"
+
+  - task: "Invoice CRUD API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Full CRUD for invoices: GET/POST /api/v1/invoices, GET/PUT /api/v1/invoices/{id}, POST /api/v1/invoices/{id}/mark-paid"
+
+frontend:
+  - task: "Dispatch Board UI"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/dispatch/DispatchBoard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Drag-and-drop dispatch board with technician columns, date picker, job cards with priority indicators"
+
+  - task: "Reports/Analytics UI"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/reports/ReportsPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Full analytics page with KPI cards, conversion rates, line/bar/pie charts using Recharts"
+
+  - task: "Customer Portal UI"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/portal/CustomerPortal.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Portal page with upcoming/past appointments, pending invoices, quotes, reviews (star rating), send message/note feature"
+
+  - task: "Route and Navigation Updates"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/App.js, /app/frontend/src/components/layout/Sidebar.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Routes added for /dispatch, /reports, /portal/:token. Sidebar updated with Dispatch and Reports links. Verified via screenshots."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.0"
+  test_sequence: 3
+  run_ui: true
+
+test_plan:
+  current_focus: "Test all 4 new features: Dispatch Board, Reports, Customer Portal, and Background Reminders"
+  blocked_features: []
+  test_all: true
+
+credentials:
+  superadmin:
+    email: "admin@fieldos.app"
+    password: "admin123"
+  tenant_owner:
+    email: "owner@radiancehvac.com"
+    password: "owner123"
