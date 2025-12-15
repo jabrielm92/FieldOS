@@ -494,6 +494,26 @@ class CampaignRecipient(BaseModel):
     response: Optional[str] = None
 
 
+# ============= REVIEW MODELS =============
+
+class ReviewBase(BaseModel):
+    rating: int = Field(ge=1, le=5)  # 1-5 stars
+    comment: Optional[str] = None
+
+
+class ReviewCreate(ReviewBase):
+    job_id: str
+
+
+class Review(ReviewBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=generate_id)
+    tenant_id: str
+    customer_id: str
+    job_id: str
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 # ============= AUTH MODELS =============
 
 class LoginRequest(BaseModel):
