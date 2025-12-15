@@ -98,9 +98,18 @@ export default function LoginPage() {
             </Button>
           </form>
           
-          <div className="mt-6 p-4 bg-muted rounded-md">
-            <p className="text-xs text-muted-foreground mb-2">Demo Credentials:</p>
-            <p className="text-sm font-mono">admin@fieldos.app / admin123</p>
+          <div className="mt-6 p-4 bg-muted rounded-md space-y-2">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Demo Credentials:</p>
+            <div className="space-y-1">
+              <p className="text-sm">
+                <span className="text-muted-foreground">Superadmin:</span>{" "}
+                <span className="font-mono">admin@fieldos.app / admin123</span>
+              </p>
+              <p className="text-sm">
+                <span className="text-muted-foreground">Tenant Owner:</span>{" "}
+                <span className="font-mono">owner@radiancehvac.com / owner123</span>
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
