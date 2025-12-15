@@ -140,14 +140,11 @@ async def require_superadmin(current_user: dict = Depends(get_current_user)) -> 
     return current_user
 
 
-async def get_tenant_id(current_user: dict = Depends(get_current_user)) -> str:
+async def get_tenant_id(current_user: dict = Depends(get_current_user)) -> Optional[str]:
     """Get tenant_id for scoped queries"""
     tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        if current_user.get("role") == UserRole.SUPERADMIN.value:
-            raise HTTPException(status_code=400, detail="Superadmin must specify tenant_id in request")
-        else:
-            raise HTTPException(status_code=400, detail="No tenant associated with user")
+    if not tenant_id and current_user.get("role") != UserRole.SUPERADMIN.value:
+        raise HTTPException(status_code=400, detail="No tenant associated with user")
     return tenant_id
 
 
