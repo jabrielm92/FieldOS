@@ -448,6 +448,9 @@ class FieldOSAPITester:
         
         # List campaigns
         self.run_test("List Campaigns", "GET", "campaigns", 200)
+        
+        # Restore superadmin token
+        self.superadmin_token = original_token
 
     def test_vapi_endpoints(self):
         """Test Vapi integration endpoints"""
