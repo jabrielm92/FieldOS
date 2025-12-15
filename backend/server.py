@@ -2412,6 +2412,114 @@ async def request_reschedule(token: str, job_id: str, message: str):
     return {"success": True, "message": "Reschedule request submitted"}
 
 
+@v1_router.post("/portal/{token}/review")
+async def submit_review(token: str, job_id: str, rating: int, comment: Optional[str] = None):
+    """Customer submits a review for a completed job"""
+    # Verify token
+    customer = await db.customers.find_one({"portal_token": token})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    # Validate rating
+    if rating < 1 or rating > 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    
+    # Get job
+    job = await db.jobs.find_one({"id": job_id, "customer_id": customer["id"]})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Check if job is completed
+    if job.get("status") != "COMPLETED":
+        raise HTTPException(status_code=400, detail="Can only review completed jobs")
+    
+    # Check if already reviewed
+    existing_review = await db.reviews.find_one({"job_id": job_id, "customer_id": customer["id"]})
+    if existing_review:
+        raise HTTPException(status_code=400, detail="Job already reviewed")
+    
+    # Create review
+    review = {
+        "id": str(__import__('uuid').uuid4()),
+        "tenant_id": customer["tenant_id"],
+        "customer_id": customer["id"],
+        "job_id": job_id,
+        "rating": rating,
+        "comment": comment,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.reviews.insert_one(review)
+    
+    return {"success": True, "review_id": review["id"]}
+
+
+@v1_router.post("/portal/{token}/add-note")
+async def add_customer_note(token: str, note: str, job_id: Optional[str] = None):
+    """Customer adds a note (general or for a specific job)"""
+    # Verify token
+    customer = await db.customers.find_one({"portal_token": token})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    tenant_id = customer["tenant_id"]
+    
+    # If job_id is provided, verify it belongs to customer
+    if job_id:
+        job = await db.jobs.find_one({"id": job_id, "customer_id": customer["id"]})
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Find or create conversation
+    conv = await db.conversations.find_one({
+        "customer_id": customer["id"],
+        "tenant_id": tenant_id,
+        "status": "OPEN"
+    })
+    
+    if not conv:
+        conv = {
+            "id": str(__import__('uuid').uuid4()),
+            "tenant_id": tenant_id,
+            "customer_id": customer["id"],
+            "primary_channel": "SMS",
+            "status": "OPEN",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.conversations.insert_one(conv)
+    
+    # Create message as a note
+    note_content = f"[Portal Note]"
+    if job_id:
+        note_content += f" (Job: {job_id})"
+    note_content += f": {note}"
+    
+    msg = {
+        "id": str(__import__('uuid').uuid4()),
+        "tenant_id": tenant_id,
+        "conversation_id": conv["id"],
+        "customer_id": customer["id"],
+        "direction": "INBOUND",
+        "sender_type": "CUSTOMER",
+        "channel": "SMS",
+        "content": note_content,
+        "is_call_summary": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.messages.insert_one(msg)
+    
+    # Update conversation
+    await db.conversations.update_one(
+        {"id": conv["id"]},
+        {"$set": {
+            "last_message_from": "CUSTOMER",
+            "last_message_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"success": True, "message": "Note added successfully"}
+
+
 # ============= SEND PORTAL LINK VIA SMS =============
 
 @v1_router.post("/customers/{customer_id}/send-portal-link")
