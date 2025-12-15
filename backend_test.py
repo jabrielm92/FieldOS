@@ -717,6 +717,10 @@ class FieldOSAPITester:
         self.test_dashboard_metrics()
         self.test_auth_endpoints()
         
+        # New features testing
+        self.test_new_features()
+        self.test_background_scheduler()
+        
         return self.generate_report()
 
     def generate_report(self):
