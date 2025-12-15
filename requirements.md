@@ -66,6 +66,7 @@ FieldOS is a multi-tenant Revenue & Operations OS for field service companies (H
 
 ## Default Credentials
 - **Superadmin**: admin@fieldos.app / admin123
+- **Tenant Owner (Radiance HVAC)**: owner@radiancehvac.com / owner123
 
 ## Environment Variables Required
 ```
