@@ -213,6 +213,10 @@ class FieldOSAPITester:
         """Test customer CRUD operations"""
         self.log("\n=== CUSTOMER MANAGEMENT ===")
         
+        # Switch to tenant owner token for tenant-scoped operations
+        original_token = self.superadmin_token
+        self.superadmin_token = self.tenant_owner_token
+        
         # Create customer
         customer_data = {
             "first_name": "John",
