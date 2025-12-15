@@ -2278,6 +2278,27 @@ async def get_portal_data(token: str):
         "customer_id": customer_id
     }, {"_id": 0}).to_list(20)
     
+    # Get pending invoices (unpaid)
+    pending_invoices = await db.invoices.find({
+        "customer_id": customer_id,
+        "status": {"$in": ["DRAFT", "SENT", "PARTIALLY_PAID", "OVERDUE"]}
+    }, {"_id": 0}).to_list(10)
+    
+    # Enrich invoices with job info
+    for invoice in pending_invoices:
+        job = await db.jobs.find_one({"id": invoice.get("job_id")}, {"_id": 0, "job_type": 1, "service_window_start": 1})
+        invoice["job"] = serialize_doc(job) if job else None
+    
+    # Get reviews by customer
+    reviews = await db.reviews.find({
+        "customer_id": customer_id
+    }, {"_id": 0}).to_list(20)
+    
+    # Enrich past jobs with review status
+    for job in past_jobs:
+        existing_review = await db.reviews.find_one({"job_id": job["id"]}, {"_id": 0})
+        job["review"] = serialize_doc(existing_review) if existing_review else None
+    
     return {
         "customer": {
             "first_name": customer.get("first_name"),
@@ -2289,7 +2310,9 @@ async def get_portal_data(token: str):
         "upcoming_appointments": serialize_docs(upcoming_jobs),
         "past_appointments": serialize_docs(past_jobs),
         "pending_quotes": serialize_docs(pending_quotes),
-        "properties": serialize_docs(properties)
+        "pending_invoices": serialize_docs(pending_invoices),
+        "properties": serialize_docs(properties),
+        "reviews": serialize_docs(reviews)
     }
 
 
