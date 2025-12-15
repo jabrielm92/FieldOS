@@ -4,6 +4,7 @@ OpenAI Service - Handles AI-powered SMS generation
 import os
 import logging
 from typing import List, Dict, Optional
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,12 +14,20 @@ logger = logging.getLogger(__name__)
 
 class OpenAIService:
     def __init__(self):
-        self.api_key = os.environ.get('EMERGENT_LLM_KEY')
+        self.api_key = os.environ.get('OPENAI_API_KEY')
         self.model = "gpt-4o-mini"
+        self.client = None
+        
+        if self.api_key:
+            try:
+                self.client = OpenAI(api_key=self.api_key)
+                logger.info("OpenAI client initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI client: {e}")
     
     def is_configured(self) -> bool:
         """Check if OpenAI is properly configured"""
-        return self.api_key is not None
+        return self.client is not None
     
     async def generate_sms_reply(
         self,
@@ -50,39 +59,38 @@ class OpenAIService:
             return self._get_fallback_message(context_type)
         
         try:
-            from emergentintegrations.llm.chat import LlmChat, UserMessage
-            
             system_prompt = self._build_system_prompt(
                 tenant_name, tenant_timezone, tone_profile, context_type
             )
             
-            chat = LlmChat(
-                api_key=self.api_key,
-                session_id=f"sms-{customer_name}-{context_type}",
-                system_message=system_prompt
-            )
-            chat.with_model("openai", self.model)
-            
             # Build conversation context
             context_text = self._format_conversation_history(conversation_history)
             
-            user_message = UserMessage(
-                text=f"""Previous conversation:
+            user_message = f"""Previous conversation:
 {context_text}
 
 Latest customer message: "{current_message}"
 
 Generate a helpful SMS reply (max 320 characters). Be direct and action-oriented."""
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                max_tokens=150,
+                temperature=0.7
             )
             
-            response = await chat.send_message(user_message)
+            reply = response.choices[0].message.content.strip()
             
             # Ensure response is within character limit
-            if len(response) > 320:
-                response = response[:317] + "..."
+            if len(reply) > 320:
+                reply = reply[:317] + "..."
             
             logger.info(f"AI SMS generated successfully for {customer_name}")
-            return response
+            return reply
             
         except Exception as e:
             logger.error(f"Error generating AI SMS: {e}")
