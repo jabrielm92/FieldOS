@@ -1577,10 +1577,20 @@ async def vapi_book_job(
             from_phone=tenant["twilio_phone_number"]
         )
     
+    # Format confirmation for Vapi
+    window_date = window_start.strftime("%A, %B %d")
+    window_time_str = f"{window_start.strftime('%I:%M %p')} to {window_end.strftime('%I:%M %p')}"
+    
     return {
         "success": True,
         "job_id": job.id,
-        "message": "Job booked successfully"
+        "message": f"Great news! The appointment has been successfully booked for {window_date} between {window_time_str}. The customer will receive a confirmation text message. Job ID is {job.id}.",
+        "confirmation": {
+            "date": window_date,
+            "time_window": window_time_str,
+            "customer_name": customer.get("first_name", "Customer")
+        },
+        "next_step": "Confirm with the customer that their appointment is booked and let them know they will receive a text confirmation."
     }
 
 
