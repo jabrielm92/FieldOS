@@ -417,6 +417,9 @@ class FieldOSAPITester:
         
         # List quotes
         self.run_test("List Quotes", "GET", "quotes", 200)
+        
+        # Restore superadmin token
+        self.superadmin_token = original_token
 
     def test_conversation_management(self):
         """Test conversation and message operations"""
