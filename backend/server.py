@@ -586,10 +586,14 @@ async def get_lead(
 @v1_router.post("/leads")
 async def create_lead(
     data: LeadCreate,
-    tenant_id: str = Depends(get_tenant_id),
+    tenant_id: Optional[str] = Depends(get_tenant_id),
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new lead"""
+    # For superadmin without tenant_id, require it to be specified
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id is required for lead creation")
+    
     lead = Lead(
         tenant_id=tenant_id,
         **data.model_dump()
