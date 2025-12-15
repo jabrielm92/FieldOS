@@ -285,6 +285,10 @@ class FieldOSAPITester:
         """Test lead CRUD operations"""
         self.log("\n=== LEAD MANAGEMENT ===")
         
+        # Switch to tenant owner token
+        original_token = self.superadmin_token
+        self.superadmin_token = self.tenant_owner_token
+        
         # Create lead
         lead_data = {
             "customer_id": self.customer_id,
