@@ -11,7 +11,9 @@ import {
   TrendingUp,
   Megaphone,
   LogOut,
-  ChevronLeft
+  ChevronLeft,
+  Truck,
+  BarChart3
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -22,11 +24,13 @@ const tenantNavItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/leads", icon: TrendingUp, label: "Leads" },
   { to: "/jobs", icon: Briefcase, label: "Jobs" },
+  { to: "/dispatch", icon: Truck, label: "Dispatch" },
   { to: "/conversations", icon: MessageSquare, label: "Inbox" },
   { to: "/customers", icon: Users, label: "Customers" },
   { to: "/technicians", icon: Wrench, label: "Technicians" },
   { to: "/quotes", icon: FileText, label: "Quotes" },
   { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
+  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

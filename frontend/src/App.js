@@ -14,6 +14,9 @@ import QuotesPage from "./pages/quotes/QuotesPage";
 import CampaignsPage from "./pages/campaigns/CampaignsPage";
 import SettingsPage from "./pages/settings/SettingsPage";
 import AdminTenantsPage from "./pages/admin/AdminTenantsPage";
+import DispatchBoard from "./pages/dispatch/DispatchBoard";
+import ReportsPage from "./pages/reports/ReportsPage";
+import CustomerPortal from "./pages/portal/CustomerPortal";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireSuperAdmin = false }) {
@@ -108,11 +111,24 @@ function AppRoutes() {
           <CampaignsPage />
         </ProtectedRoute>
       } />
+      <Route path="/dispatch" element={
+        <ProtectedRoute>
+          <DispatchBoard />
+        </ProtectedRoute>
+      } />
+      <Route path="/reports" element={
+        <ProtectedRoute>
+          <ReportsPage />
+        </ProtectedRoute>
+      } />
       <Route path="/settings" element={
         <ProtectedRoute>
           <SettingsPage />
         </ProtectedRoute>
       } />
+
+      {/* Customer Portal (Public) */}
+      <Route path="/portal/:token" element={<CustomerPortal />} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={
