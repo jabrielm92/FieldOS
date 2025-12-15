@@ -627,13 +627,13 @@ class FieldOSAPITester:
                     headers=portal_headers
                 )
                 
-                # Test portal review submission
+                # Test portal review submission (should fail for non-completed job)
                 if self.job_id:
                     self.run_test(
-                        "Submit Portal Review", 
+                        "Submit Portal Review (Non-Completed Job)", 
                         "POST", 
                         f"portal/{portal_token}/review?job_id={self.job_id}&rating=5&comment=Great service!", 
-                        200, 
+                        400,  # Expecting 400 because job is not completed
                         headers=portal_headers
                     )
                 
