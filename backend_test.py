@@ -419,6 +419,8 @@ class FieldOSAPITester:
             message_data = {
                 "conversation_id": "test-conv-id",  # This might fail, but tests the endpoint
                 "customer_id": self.customer_id,
+                "direction": "OUTBOUND",
+                "sender_type": "STAFF",
                 "channel": "SMS",
                 "content": "Test message from staff"
             }
