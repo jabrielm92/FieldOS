@@ -910,6 +910,131 @@ async def update_quote(
     return serialize_doc(quote)
 
 
+# ============= INVOICES ENDPOINTS =============
+
+@v1_router.get("/invoices")
+async def list_invoices(
+    status: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """List invoices with optional filters"""
+    query = {"tenant_id": tenant_id}
+    if status:
+        query["status"] = status
+    if customer_id:
+        query["customer_id"] = customer_id
+    
+    invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    
+    for invoice in invoices:
+        customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+        job = await db.jobs.find_one({"id": invoice.get("job_id")}, {"_id": 0})
+        invoice["customer"] = serialize_doc(customer) if customer else None
+        invoice["job"] = serialize_doc(job) if job else None
+    
+    return serialize_docs(invoices)
+
+
+@v1_router.get("/invoices/{invoice_id}")
+async def get_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get invoice details"""
+    invoice = await db.invoices.find_one(
+        {"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0}
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+    job = await db.jobs.find_one({"id": invoice.get("job_id")}, {"_id": 0})
+    
+    return {
+        **serialize_doc(invoice),
+        "customer": serialize_doc(customer) if customer else None,
+        "job": serialize_doc(job) if job else None
+    }
+
+
+@v1_router.post("/invoices")
+async def create_invoice(
+    data: InvoiceCreate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new invoice"""
+    # Verify customer exists
+    customer = await db.customers.find_one({"id": data.customer_id, "tenant_id": tenant_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Verify job exists
+    job = await db.jobs.find_one({"id": data.job_id, "tenant_id": tenant_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    invoice = Invoice(
+        tenant_id=tenant_id,
+        **data.model_dump()
+    )
+    
+    invoice_dict = invoice.model_dump()
+    invoice_dict["created_at"] = invoice_dict["created_at"].isoformat()
+    invoice_dict["updated_at"] = invoice_dict["updated_at"].isoformat()
+    await db.invoices.insert_one(invoice_dict)
+    
+    return serialize_doc(invoice_dict)
+
+
+@v1_router.put("/invoices/{invoice_id}")
+async def update_invoice(
+    invoice_id: str,
+    data: InvoiceCreate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update invoice"""
+    update_data = data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    return serialize_doc(invoice)
+
+
+@v1_router.post("/invoices/{invoice_id}/mark-paid")
+async def mark_invoice_paid(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark invoice as paid"""
+    result = await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": {
+            "status": InvoiceStatus.PAID.value,
+            "paid_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    return {"success": True, "message": "Invoice marked as paid"}
+
+
 # ============= CONVERSATIONS & MESSAGES =============
 
 @v1_router.get("/conversations")
