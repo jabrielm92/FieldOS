@@ -14,6 +14,7 @@ class TwilioService:
     def __init__(self):
         self.account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
         self.auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+        self.default_messaging_service_sid = os.environ.get('TWILIO_MESSAGING_SERVICE_SID')
         self.client = None
         
         if self.account_sid and self.auth_token:
@@ -31,11 +32,17 @@ class TwilioService:
         self,
         to_phone: str,
         body: str,
-        from_phone: str,
+        from_phone: Optional[str] = None,
         messaging_service_sid: Optional[str] = None
     ) -> dict:
         """
         Send SMS via Twilio
+        
+        Args:
+            to_phone: Recipient phone number
+            body: Message content
+            from_phone: Sender phone number (optional if using messaging service)
+            messaging_service_sid: Twilio Messaging Service SID (optional)
         
         Returns:
             dict with success status, provider_message_id, and error if any
@@ -49,24 +56,33 @@ class TwilioService:
             }
         
         try:
-            # Clean phone numbers
+            # Clean phone number
             to_phone = self._format_phone(to_phone)
-            from_phone = self._format_phone(from_phone)
             
             message_params = {
                 "body": body,
                 "to": to_phone
             }
             
-            # Use messaging service if provided, otherwise use from number
-            if messaging_service_sid:
-                message_params["messaging_service_sid"] = messaging_service_sid
+            # Use messaging service if provided or default, otherwise use from number
+            service_sid = messaging_service_sid or self.default_messaging_service_sid
+            if service_sid:
+                message_params["messaging_service_sid"] = service_sid
+                logger.info(f"Sending SMS via Messaging Service: {service_sid}")
+            elif from_phone:
+                message_params["from_"] = self._format_phone(from_phone)
+                logger.info(f"Sending SMS from: {from_phone}")
             else:
-                message_params["from_"] = from_phone
+                logger.error("No from_phone or messaging_service_sid provided")
+                return {
+                    "success": False,
+                    "provider_message_id": None,
+                    "error": "No sender configured"
+                }
             
             message = self.client.messages.create(**message_params)
             
-            logger.info(f"SMS sent successfully: {message.sid}")
+            logger.info(f"SMS sent successfully: {message.sid} to {to_phone}")
             return {
                 "success": True,
                 "provider_message_id": message.sid,
@@ -90,6 +106,8 @@ class TwilioService:
     
     def _format_phone(self, phone: str) -> str:
         """Format phone number to E.164 format"""
+        if not phone:
+            return phone
         # Remove any non-digit characters except +
         cleaned = ''.join(c for c in phone if c.isdigit() or c == '+')
         
