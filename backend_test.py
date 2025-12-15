@@ -337,6 +337,10 @@ class FieldOSAPITester:
             self.log("❌ Skipping job tests - missing customer or property ID")
             return
         
+        # Switch to tenant owner token
+        original_token = self.superadmin_token
+        self.superadmin_token = self.tenant_owner_token
+        
         # Create job
         start_time = datetime.now() + timedelta(days=1)
         end_time = start_time + timedelta(hours=2)
