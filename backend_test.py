@@ -256,6 +256,10 @@ class FieldOSAPITester:
             self.log("❌ Skipping property tests - no customer ID")
             return
         
+        # Switch to tenant owner token
+        original_token = self.superadmin_token
+        self.superadmin_token = self.tenant_owner_token
+        
         # Create property
         property_data = {
             "customer_id": self.customer_id,
