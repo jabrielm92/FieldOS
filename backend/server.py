@@ -1419,12 +1419,15 @@ async def vapi_create_lead(
     conv_dict["updated_at"] = conv_dict["updated_at"].isoformat()
     await db.conversations.insert_one(conv_dict)
     
+    # Return clear response for Vapi
+    first_name = customer.get("first_name", "there")
     return {
         "success": True,
         "lead_id": lead.id,
         "customer_id": customer["id"],
         "property_id": property_id,
-        "conversation_id": conv.id
+        "conversation_id": conv.id,
+        "message": f"Lead created successfully for {first_name}. Customer ID is {customer['id']}, property ID is {property_id or 'not provided'}, and lead ID is {lead.id}. You can now check availability and book a job using these IDs."
     }
 
 
