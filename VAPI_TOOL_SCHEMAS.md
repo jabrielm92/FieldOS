@@ -48,7 +48,8 @@
   "type": "object",
   "properties": {
     "success": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Whether the lead was created successfully"
     },
     "lead_id": {
       "type": "string",
@@ -65,8 +66,24 @@
     "conversation_id": {
       "type": "string",
       "description": "Conversation ID"
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable status message explaining what was created and what to do next"
     }
   }
+}
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "lead_id": "abc123-...",
+  "customer_id": "cust456-...",
+  "property_id": "prop789-...",
+  "conversation_id": "conv012-...",
+  "message": "Lead created successfully for John. Customer ID is cust456-..., property ID is prop789-..., and lead ID is abc123-.... You can now check availability and book a job using these IDs."
 }
 ```
 
@@ -105,7 +122,12 @@
   "type": "object",
   "properties": {
     "date": {
-      "type": "string"
+      "type": "string",
+      "description": "The date that was checked"
+    },
+    "has_availability": {
+      "type": "boolean",
+      "description": "Whether there are any available slots"
     },
     "windows": {
       "type": "array",
@@ -113,17 +135,47 @@
       "items": {
         "type": "object",
         "properties": {
-          "start": {"type": "string"},
-          "end": {"type": "string"},
-          "label": {"type": "string"},
+          "start": {"type": "string", "description": "Start time (24hr format, e.g., 08:00)"},
+          "end": {"type": "string", "description": "End time (24hr format, e.g., 12:00)"},
+          "label": {"type": "string", "description": "Human-readable label like 'Morning (8am-12pm)'"},
           "available": {"type": "boolean"}
         }
       }
     },
     "message": {
-      "type": "string"
+      "type": "string",
+      "description": "Human-readable message to tell the customer about available slots"
+    },
+    "next_step": {
+      "type": "string",
+      "description": "Instructions for what to do next"
     }
   }
+}
+```
+
+**Example Response (slots available):**
+```json
+{
+  "date": "2025-12-16",
+  "has_availability": true,
+  "windows": [
+    {"date": "2025-12-16", "start": "08:00", "end": "12:00", "label": "Morning (8am-12pm)", "available": true},
+    {"date": "2025-12-16", "start": "12:00", "end": "17:00", "label": "Afternoon (12pm-5pm)", "available": true}
+  ],
+  "message": "For 2025-12-16, the following time slots are available: Morning (8am-12pm), Afternoon (12pm-5pm). Ask the customer which time slot works best for them.",
+  "next_step": "Ask the customer which time slot they prefer, then call the book-job tool with their selection."
+}
+```
+
+**Example Response (no slots):**
+```json
+{
+  "date": "2025-12-16",
+  "has_availability": false,
+  "windows": [],
+  "message": "Unfortunately, there are no available time slots for 2025-12-16. Please ask the customer for an alternative date.",
+  "next_step": "Ask the customer which time slot they prefer, then call the book-job tool with their selection."
 }
 ```
 
@@ -177,15 +229,45 @@
   "type": "object",
   "properties": {
     "success": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Whether the job was booked successfully"
     },
     "job_id": {
-      "type": "string"
+      "type": "string",
+      "description": "The unique job ID"
     },
     "message": {
-      "type": "string"
+      "type": "string",
+      "description": "Human-readable confirmation message to tell the customer"
+    },
+    "confirmation": {
+      "type": "object",
+      "properties": {
+        "date": {"type": "string", "description": "Formatted date like 'Monday, December 16'"},
+        "time_window": {"type": "string", "description": "Formatted time like '8:00 AM to 12:00 PM'"},
+        "customer_name": {"type": "string"}
+      }
+    },
+    "next_step": {
+      "type": "string",
+      "description": "What to tell the customer after booking"
     }
   }
+}
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "job_id": "job123-...",
+  "message": "Great news! The appointment has been successfully booked for Monday, December 16 between 08:00 AM to 12:00 PM. The customer will receive a confirmation text message. Job ID is job123-....",
+  "confirmation": {
+    "date": "Monday, December 16",
+    "time_window": "08:00 AM to 12:00 PM",
+    "customer_name": "John"
+  },
+  "next_step": "Confirm with the customer that their appointment is booked and let them know they will receive a text confirmation."
 }
 ```
 
@@ -227,8 +309,13 @@
     "message_id": {
       "type": "string"
     },
+    "message": {
+      "type": "string",
+      "description": "Status message indicating success or failure"
+    },
     "error": {
-      "type": "string"
+      "type": "string",
+      "description": "Error message if send failed"
     }
   }
 }
@@ -286,13 +373,34 @@
 
 | Tool | URL |
 |------|-----|
-| create_lead | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/create-lead |
-| check_availability | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/check-availability |
-| book_job | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/book-job |
-| send_followup_sms | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/send-sms |
-| log_call_summary | https://service-hub-258.preview.emergentagent.com/api/v1/vapi/call-summary |
+| create_lead | https://YOUR_DEPLOYMENT_URL/api/v1/vapi/create-lead |
+| check_availability | https://YOUR_DEPLOYMENT_URL/api/v1/vapi/check-availability |
+| book_job | https://YOUR_DEPLOYMENT_URL/api/v1/vapi/book-job |
+| send_followup_sms | https://YOUR_DEPLOYMENT_URL/api/v1/vapi/send-sms |
+| log_call_summary | https://YOUR_DEPLOYMENT_URL/api/v1/vapi/call-summary |
 
 All tools use:
 - **Method:** POST
 - **Header:** Content-Type: application/json
 - **No Authentication Required** (handled by tenant_slug)
+
+---
+
+## IMPORTANT NOTES FOR VAPI ASSISTANT
+
+1. **Always save the IDs** returned from `create_lead`:
+   - `lead_id` - needed for `book_job` and `log_call_summary`
+   - `customer_id` - needed for `book_job`
+   - `property_id` - needed for `book_job`
+
+2. **Date format for check_availability**: Use `YYYY-MM-DD` format (e.g., `2025-12-16`)
+
+3. **DateTime format for book_job**: Use ISO 8601 with timezone (e.g., `2025-12-16T08:00:00-06:00`)
+
+4. **Read the `message` field** in responses - it tells you exactly what to say to the customer.
+
+5. **Read the `next_step` field** in responses - it tells you what action to take next.
+
+6. **Time windows**:
+   - Morning: 08:00 to 12:00 (8am-12pm)
+   - Afternoon: 12:00 to 17:00 (12pm-5pm)
