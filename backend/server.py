@@ -1615,11 +1615,18 @@ async def vapi_send_sms(
         from_phone=tenant["twilio_phone_number"]
     )
     
-    return {
-        "success": result["success"],
-        "message_id": result.get("provider_message_id"),
-        "error": result.get("error")
-    }
+    if result["success"]:
+        return {
+            "success": True,
+            "message_id": result.get("provider_message_id"),
+            "message": f"SMS sent successfully to {data.to_phone}."
+        }
+    else:
+        return {
+            "success": False,
+            "error": result.get("error"),
+            "message": f"Failed to send SMS: {result.get('error', 'Unknown error')}"
+        }
 
 
 @v1_router.post("/vapi/call-summary")
