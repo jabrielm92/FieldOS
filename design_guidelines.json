@@ -1,0 +1,171 @@
+{
+  "identity": {
+    "name": "FieldOS v1 - The Digital Jobsite",
+    "persona": "E1: The Anti-AI Designer",
+    "core_philosophy": "Fusion of Industrial Safety Signage + Architectural Blueprints. Functional, rugged, high-contrast, and precise.",
+    "emotional_tone": "Reliable, Professional, Urgent, Organized.",
+    "design_principles": [
+      "Fusion over Imitation: Mix construction aesthetics with SaaS usability.",
+      "Content is King: Data density for dispatchers, big buttons for field techs.",
+      "Contrast: High visibility is a safety requirement, not just a style.",
+      "Negative Space: Use it to group functional areas, not just for air."
+    ]
+  },
+  "typography": {
+    "primary_font": "Manrope",
+    "secondary_font": "Chivo",
+    "mono_font": "JetBrains Mono",
+    "usage": {
+      "headings": "Chivo, font-weight: 700/900, tracking-tight, uppercase for top-level headers.",
+      "body": "Manrope, font-weight: 400/500, leading-relaxed.",
+      "data_display": "JetBrains Mono, font-weight: 500, for IDs, prices, and timestamps.",
+      "ui_elements": "Manrope, font-weight: 600, for buttons and navigation."
+    },
+    "scale": {
+      "h1": "text-4xl md:text-5xl font-black tracking-tighter",
+      "h2": "text-3xl font-bold tracking-tight",
+      "h3": "text-xl font-bold uppercase tracking-wide text-muted-foreground",
+      "body": "text-base",
+      "small": "text-sm font-medium text-muted-foreground"
+    }
+  },
+  "colors": {
+    "palette_name": "Industrial Safety",
+    "mode_strategy": "Smart Hybrid: Light Mode for Field Techs (Sunlight visibility), Dark Mode for Dispatchers (Eye strain reduction).",
+    "light_theme": {
+      "background": "#F3F4F6",
+      "foreground": "#111827",
+      "card": "#FFFFFF",
+      "card_foreground": "#1F2937",
+      "primary": "#0047AB",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#E5E7EB",
+      "secondary_foreground": "#111827",
+      "accent": "#FF5F00",
+      "accent_foreground": "#FFFFFF",
+      "border": "#D1D5DB",
+      "input": "#E5E7EB",
+      "ring": "#0047AB"
+    },
+    "dark_theme": {
+      "background": "#0F172A",
+      "foreground": "#F8FAFC",
+      "card": "#1E293B",
+      "card_foreground": "#F8FAFC",
+      "primary": "#3B82F6",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#334155",
+      "secondary_foreground": "#F8FAFC",
+      "accent": "#F97316",
+      "accent_foreground": "#FFFFFF",
+      "border": "#334155",
+      "input": "#1E293B",
+      "ring": "#3B82F6"
+    },
+    "semantic_colors": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444",
+      "info": "#3B82F6",
+      "pending": "#6B7280"
+    }
+  },
+  "visual_enhancers": {
+    "borders": "1px solid var(--border). Use 'border-l-4' for status indicators on cards.",
+    "shadows": "shadow-sm for cards, shadow-md for dropdowns. Avoid large diffuse shadows; keep them tight and mechanical.",
+    "radius": "rounded-md (6px) - Avoid fully rounded 'pill' shapes for containers; keep it structural.",
+    "textures": "Subtle noise texture on sidebar backgrounds to mimic concrete/matte finish.",
+    "glassmorphism": "Use sparingly. Only for sticky headers: bg-background/80 backdrop-blur-md border-b."
+  },
+  "layout": {
+    "grid_system": "The Control Room Grid",
+    "spacing": "Generous padding inside containers (p-6), tight gaps between related data points (gap-2).",
+    "container_styles": {
+      "dashboard_card": "bg-card border border-border rounded-md shadow-sm p-6 flex flex-col",
+      "list_item": "flex items-center justify-between p-4 border-b border-border hover:bg-muted/50 transition-colors",
+      "page_header": "flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm font-semibold uppercase tracking-wide text-xs h-10 px-4 rounded-md",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 font-medium h-10 px-4 rounded-md",
+      "outline": "border-2 border-input bg-background hover:bg-accent hover:text-accent-foreground font-medium h-10 px-4 rounded-md",
+      "ghost": "hover:bg-muted hover:text-foreground font-medium h-10 px-4 rounded-md"
+    },
+    "cards": {
+      "default": "bg-card text-card-foreground rounded-md border shadow-sm",
+      "interactive": "hover:border-primary/50 transition-colors cursor-pointer"
+    },
+    "inputs": {
+      "default": "h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    },
+    "badges": {
+      "default": "inline-flex items-center rounded-sm border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      "status_new": "border-transparent bg-blue-100 text-blue-800 hover:bg-blue-200",
+      "status_pending": "border-transparent bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
+      "status_completed": "border-transparent bg-green-100 text-green-800 hover:bg-green-200",
+      "status_cancelled": "border-transparent bg-red-100 text-red-800 hover:bg-red-200"
+    }
+  },
+  "motion": {
+    "type": "Mechanical & Snappy",
+    "duration": "duration-200",
+    "ease": "ease-out",
+    "transitions": "transition-all duration-200 ease-out",
+    "hover_effects": "translate-y-[-2px] shadow-md"
+  },
+  "images": {
+    "technicians": [
+      {
+        "url": "https://images.pexels.com/photos/257736/pexels-photo-257736.jpeg",
+        "alt": "Electrician working on panel",
+        "category": "technician"
+      },
+      {
+        "url": "https://images.pexels.com/photos/5463576/pexels-photo-5463576.jpeg",
+        "alt": "HVAC technician with tools",
+        "category": "technician"
+      },
+      {
+        "url": "https://images.pexels.com/photos/7220892/pexels-photo-7220892.jpeg",
+        "alt": "Plumber fixing pipe",
+        "category": "technician"
+      }
+    ],
+    "environment": [
+      {
+        "url": "https://images.unsplash.com/photo-1737256359080-9354dbcc21ef?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwxfHxhaXIlMjBjb25kaXRpb25lciUyMHJlcGFpciUyMG91dGRvb3J8ZW58MHx8fHwxNzY1NzcxMTg1fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Industrial rooftop HVAC",
+        "category": "background"
+      }
+    ]
+  },
+  "instructions_to_main_agent": {
+    "general": "You are building FieldOS. It must feel like a high-end power tool. Robust, reliable, and fast.",
+    "layout_rules": [
+      "Use the 'Control Room Grid' for dashboards: Dense data, clear hierarchy.",
+      "Use 'Big Button' layouts for mobile views (technician interface).",
+      "Always use 'Manrope' for UI text and 'Chivo' for Headings.",
+      "Use 'JetBrains Mono' for any ID, Order Number, Price, or Timestamp."
+    ],
+    "component_rules": [
+      "Customize Shadcn components to match the 'Industrial Safety' theme.",
+      "Use 'sonner' for toasts.",
+      "Use 'lucide-react' for icons.",
+      "Ensure all interactive elements have 'data-testid'."
+    ],
+    "theme_implementation": [
+      "Implement the color palette in 'tailwind.config.js' and 'index.css'.",
+      "Ensure dark mode is 'slate' based, not pure black."
+    ]
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Avoid 'AI Slop': No generic gradients, no centered text blocks without purpose.",
+    "Create depth: Use z-index and subtle borders to create layers.",
+    "Micro-animations: Every button press, hover, and toggle must have feedback.",
+    "Spacing: Use 2x more padding than you think is necessary for 'breathing room' in the UI, but keep data grids dense.",
+    "No Emoji Icons: Use Lucide icons only.",
+    "Accessibility: Ensure contrast ratios are met (APCA preferred)."
+  ]
+}
