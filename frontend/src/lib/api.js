@@ -89,8 +89,18 @@ export const jobAPI = {
 // Quote APIs
 export const quoteAPI = {
   list: (filters = {}) => api.get('/quotes', { params: filters }),
+  get: (id) => api.get(`/quotes/${id}`),
   create: (data) => api.post('/quotes', data),
   update: (id, data) => api.put(`/quotes/${id}`, data),
+};
+
+// Invoice APIs
+export const invoiceAPI = {
+  list: (filters = {}) => api.get('/invoices', { params: filters }),
+  get: (id) => api.get(`/invoices/${id}`),
+  create: (data) => api.post('/invoices', data),
+  update: (id, data) => api.put(`/invoices/${id}`, data),
+  markPaid: (id) => api.post(`/invoices/${id}/mark-paid`),
 };
 
 // Conversation APIs
