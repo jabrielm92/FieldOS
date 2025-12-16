@@ -122,6 +122,11 @@ function AppRoutes() {
           <ReportsPage />
         </ProtectedRoute>
       } />
+      <Route path="/calendar" element={
+        <ProtectedRoute>
+          <CalendarPage />
+        </ProtectedRoute>
+      } />
       <Route path="/settings" element={
         <ProtectedRoute>
           <SettingsPage />
