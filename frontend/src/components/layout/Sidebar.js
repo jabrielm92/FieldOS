@@ -25,6 +25,7 @@ const tenantNavItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/leads", icon: TrendingUp, label: "Leads" },
   { to: "/jobs", icon: Briefcase, label: "Jobs" },
+  { to: "/calendar", icon: Calendar, label: "Calendar" },
   { to: "/dispatch", icon: Truck, label: "Dispatch" },
   { to: "/conversations", icon: MessageSquare, label: "Inbox" },
   { to: "/customers", icon: Users, label: "Customers" },
