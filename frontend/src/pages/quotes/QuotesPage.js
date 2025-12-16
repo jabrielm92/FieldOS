@@ -763,10 +763,10 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
 
             <div className="space-y-2">
               <Label>Link to Job (optional)</Label>
-              <Select value={formData.job_id} onValueChange={(v) => setFormData({...formData, job_id: v})}>
+              <Select value={formData.job_id || "none"} onValueChange={(v) => setFormData({...formData, job_id: v === "none" ? "" : v})}>
                 <SelectTrigger><SelectValue placeholder="Select job" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No job</SelectItem>
+                  <SelectItem value="none">No job</SelectItem>
                   {jobs.map((j) => (
                     <SelectItem key={j.id} value={j.id}>{j.job_type} - {j.customer?.first_name}</SelectItem>
                   ))}
