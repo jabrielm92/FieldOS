@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
+import { Textarea } from "../../components/ui/textarea";
+import { Separator } from "../../components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -22,9 +24,14 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
-import { customerAPI, propertyAPI } from "../../lib/api";
+import { customerAPI, propertyAPI
+
+ } from "../../lib/api";
 import { toast } from "sonner";
-import { Plus, Search, User, MapPin, Phone, Mail, Home } from "lucide-react";
+import { 
+  Plus, Search, User, MapPin, Phone, Mail, Home, Edit, 
+  Save, X, MessageSquare, Calendar, ChevronRight, FileText
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -38,17 +45,31 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showPropertyDialog, setShowPropertyDialog] = useState(false);
+  const [showCustomerDetailDialog, setShowCustomerDetailDialog] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   useEffect(() => {
     fetchCustomers();
+    // Polling for real-time updates
+    const interval = setInterval(fetchCustomers, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchCustomers = async () => {
     try {
       const response = await customerAPI.list();
-      setCustomers(response.data);
+      // Fetch properties for each customer
+      const customersWithProps = await Promise.all(
+        response.data.map(async (customer) => {
+          try {
+            const propsResponse = await propertyAPI.list(customer.id);
+            return { ...customer, properties: propsResponse.data };
+          } catch {
+            return { ...customer, properties: [] };
+          }
+        })
+      );
+      setCustomers(customersWithProps);
     } catch (error) {
       toast.error("Failed to load customers");
     } finally {
@@ -56,14 +77,24 @@ export default function CustomersPage() {
     }
   };
 
+  const handleCustomerClick = (customer) => {
+    setSelectedCustomer(customer);
+    setShowCustomerDetailDialog(true);
+  };
+
   const filteredCustomers = customers.filter((customer) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
+    const propertyMatch = customer.properties?.some(p => 
+      p.address_line1?.toLowerCase().includes(searchLower) ||
+      p.city?.toLowerCase().includes(searchLower)
+    );
     return (
       customer.first_name?.toLowerCase().includes(searchLower) ||
       customer.last_name?.toLowerCase().includes(searchLower) ||
       customer.email?.toLowerCase().includes(searchLower) ||
-      customer.phone?.includes(search)
+      customer.phone?.includes(search) ||
+      propertyMatch
     );
   });
 
@@ -74,7 +105,7 @@ export default function CustomersPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search customers..."
+            placeholder="Search customers, addresses..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -114,13 +145,19 @@ export default function CustomersPage() {
               <TableRow className="table-industrial">
                 <TableHead>Customer</TableHead>
                 <TableHead>Contact</TableHead>
+                <TableHead>Property Address</TableHead>
                 <TableHead>Preferred Channel</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredCustomers.map((customer) => (
-                <TableRow key={customer.id} className="table-industrial" data-testid={`customer-row-${customer.id}`}>
+                <TableRow 
+                  key={customer.id} 
+                  className="table-industrial cursor-pointer hover:bg-muted/50" 
+                  data-testid={`customer-row-${customer.id}`}
+                  onClick={() => handleCustomerClick(customer)}
+                >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
@@ -151,21 +188,38 @@ export default function CustomersPage() {
                     </div>
                   </TableCell>
                   <TableCell>
+                    {customer.properties?.length > 0 ? (
+                      <div className="flex items-start gap-2">
+                        <MapPin className="h-3.5 w-3.5 text-muted-foreground mt-0.5" />
+                        <div className="text-sm">
+                          <p>{customer.properties[0].address_line1}</p>
+                          <p className="text-muted-foreground">
+                            {customer.properties[0].city}, {customer.properties[0].state}
+                          </p>
+                          {customer.properties.length > 1 && (
+                            <span className="text-xs text-primary">
+                              +{customer.properties.length - 1} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">No properties</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <Badge variant="outline">
                       {customer.preferred_channel}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <Button 
                       size="sm" 
-                      variant="outline"
-                      onClick={() => {
-                        setSelectedCustomer(customer);
-                        setShowPropertyDialog(true);
-                      }}
+                      variant="ghost"
+                      onClick={() => handleCustomerClick(customer)}
                     >
-                      <Home className="h-3 w-3 mr-1" />
-                      Add Property
+                      <Edit className="h-3.5 w-3.5 mr-1" />
+                      View/Edit
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -175,17 +229,276 @@ export default function CustomersPage() {
         </Card>
       )}
 
-      {/* Add Property Dialog */}
-      <AddPropertyDialog
-        open={showPropertyDialog}
-        onOpenChange={setShowPropertyDialog}
+      {/* Customer Detail Dialog */}
+      <CustomerDetailDialog
+        open={showCustomerDetailDialog}
+        onOpenChange={setShowCustomerDetailDialog}
         customer={selectedCustomer}
-        onSuccess={() => {
-          setShowPropertyDialog(false);
-          toast.success("Property added successfully");
-        }}
+        onUpdate={fetchCustomers}
       />
     </Layout>
+  );
+}
+
+function CustomerDetailDialog({ open, onOpenChange, customer, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [formData, setFormData] = useState({});
+  const [newNote, setNewNote] = useState("");
+  const [properties, setProperties] = useState([]);
+  const [showAddProperty, setShowAddProperty] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (customer) {
+      setFormData({
+        first_name: customer.first_name || "",
+        last_name: customer.last_name || "",
+        phone: customer.phone || "",
+        email: customer.email || "",
+        preferred_channel: customer.preferred_channel || "SMS",
+        notes: customer.notes || "",
+      });
+      setProperties(customer.properties || []);
+    }
+  }, [customer]);
+
+  const handleSave = async () => {
+    if (!customer) return;
+    setLoading(true);
+    try {
+      await customerAPI.update(customer.id, formData);
+      toast.success("Customer updated!");
+      setEditing(false);
+      onUpdate();
+    } catch (error) {
+      toast.error("Failed to update customer");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!customer || !newNote.trim()) return;
+    
+    const existingNotes = formData.notes || "";
+    const timestamp = new Date().toLocaleString();
+    const updatedNotes = existingNotes 
+      ? `${existingNotes}\n\n[${timestamp}]\n${newNote}`
+      : `[${timestamp}]\n${newNote}`;
+    
+    setLoading(true);
+    try {
+      await customerAPI.update(customer.id, { ...formData, notes: updatedNotes });
+      setFormData({ ...formData, notes: updatedNotes });
+      setNewNote("");
+      toast.success("Note added!");
+      onUpdate();
+    } catch (error) {
+      toast.error("Failed to add note");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!customer) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-heading text-xl flex items-center gap-2">
+            <User className="h-5 w-5" />
+            {editing ? "Edit Customer" : "Customer Details"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          {/* Basic Info */}
+          <div className="bg-muted/50 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-medium">Contact Information</h4>
+              {!editing && (
+                <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              )}
+            </div>
+            
+            {editing ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>First Name</Label>
+                  <Input
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({...formData, first_name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Last Name</Label>
+                  <Input
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({...formData, last_name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label>Preferred Channel</Label>
+                  <Select 
+                    value={formData.preferred_channel} 
+                    onValueChange={(v) => setFormData({...formData, preferred_channel: v})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SMS">SMS</SelectItem>
+                      <SelectItem value="CALL">Call</SelectItem>
+                      <SelectItem value="EMAIL">Email</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2 flex gap-2 mt-2">
+                  <Button onClick={handleSave} disabled={loading}>
+                    <Save className="h-4 w-4 mr-1" />
+                    Save Changes
+                  </Button>
+                  <Button variant="outline" onClick={() => setEditing(false)}>
+                    <X className="h-4 w-4 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Name:</span>
+                  <p className="font-medium">{customer.first_name} {customer.last_name}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Phone:</span>
+                  <p className="font-medium flex items-center gap-1">
+                    <Phone className="h-3 w-3" />
+                    {customer.phone}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Email:</span>
+                  <p className="font-medium flex items-center gap-1">
+                    <Mail className="h-3 w-3" />
+                    {customer.email || "Not provided"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Preferred Channel:</span>
+                  <p><Badge variant="outline">{customer.preferred_channel}</Badge></p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Properties */}
+          <div className="bg-muted/50 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-medium flex items-center gap-2">
+                <Home className="h-4 w-4" />
+                Properties ({properties.length})
+              </h4>
+              <Button variant="outline" size="sm" onClick={() => setShowAddProperty(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Property
+              </Button>
+            </div>
+            
+            {properties.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No properties on file
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {properties.map((prop, idx) => (
+                  <div key={prop.id || idx} className="bg-background rounded-lg p-3 border">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <div className="flex-1">
+                        <p className="font-medium">{prop.address_line1}</p>
+                        {prop.address_line2 && <p className="text-sm text-muted-foreground">{prop.address_line2}</p>}
+                        <p className="text-sm text-muted-foreground">
+                          {prop.city}, {prop.state} {prop.postal_code}
+                        </p>
+                        <div className="flex gap-2 mt-2">
+                          <Badge variant="outline">{prop.property_type}</Badge>
+                          {prop.system_type && <Badge variant="secondary">{prop.system_type}</Badge>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div className="bg-muted/50 rounded-lg p-4">
+            <h4 className="font-medium flex items-center gap-2 mb-3">
+              <FileText className="h-4 w-4" />
+              Notes
+            </h4>
+            
+            {formData.notes && (
+              <div className="bg-background rounded-lg p-3 border mb-4 text-sm whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                {formData.notes}
+              </div>
+            )}
+            
+            <div className="flex gap-2">
+              <Textarea
+                placeholder="Add a note..."
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                rows={2}
+                className="flex-1"
+              />
+              <Button onClick={handleAddNote} disabled={loading || !newNote.trim()}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+
+        {/* Add Property Sub-Dialog */}
+        <AddPropertyDialog
+          open={showAddProperty}
+          onOpenChange={setShowAddProperty}
+          customer={customer}
+          onSuccess={() => {
+            setShowAddProperty(false);
+            // Refresh properties
+            propertyAPI.list(customer.id).then(res => setProperties(res.data));
+            toast.success("Property added!");
+          }}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -249,7 +562,6 @@ function CreateCustomerDialog({ open, onOpenChange, onSuccess }) {
                   value={formData.first_name}
                   onChange={(e) => setFormData({...formData, first_name: e.target.value})}
                   required
-                  data-testid="customer-first-name"
                 />
               </div>
               <div className="space-y-2">
@@ -259,7 +571,6 @@ function CreateCustomerDialog({ open, onOpenChange, onSuccess }) {
                   value={formData.last_name}
                   onChange={(e) => setFormData({...formData, last_name: e.target.value})}
                   required
-                  data-testid="customer-last-name"
                 />
               </div>
             </div>
@@ -273,7 +584,6 @@ function CreateCustomerDialog({ open, onOpenChange, onSuccess }) {
                 value={formData.phone}
                 onChange={(e) => setFormData({...formData, phone: e.target.value})}
                 required
-                data-testid="customer-phone"
               />
             </div>
             
@@ -284,7 +594,6 @@ function CreateCustomerDialog({ open, onOpenChange, onSuccess }) {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({...formData, email: e.target.value})}
-                data-testid="customer-email"
               />
             </div>
             
@@ -309,7 +618,7 @@ function CreateCustomerDialog({ open, onOpenChange, onSuccess }) {
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} data-testid="submit-customer">
+            <Button type="submit" disabled={loading}>
               {loading ? "Creating..." : "Add Customer"}
             </Button>
           </DialogFooter>
@@ -337,7 +646,6 @@ function AddPropertyDialog({ open, onOpenChange, customer, onSuccess }) {
     if (!customer) return;
     
     setLoading(true);
-
     try {
       await propertyAPI.create({
         customer_id: customer.id,
@@ -364,9 +672,9 @@ function AddPropertyDialog({ open, onOpenChange, customer, onSuccess }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="add-property-dialog">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle className="font-heading">Add Property</DialogTitle>
+          <DialogTitle>Add Property</DialogTitle>
           <DialogDescription>
             Add a service location for {customer?.first_name} {customer?.last_name}
           </DialogDescription>
@@ -374,21 +682,18 @@ function AddPropertyDialog({ open, onOpenChange, customer, onSuccess }) {
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="address_line1">Address Line 1 *</Label>
+              <Label>Address Line 1 *</Label>
               <Input
-                id="address_line1"
                 placeholder="123 Main St"
                 value={formData.address_line1}
                 onChange={(e) => setFormData({...formData, address_line1: e.target.value})}
                 required
-                data-testid="property-address"
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="address_line2">Address Line 2</Label>
+              <Label>Address Line 2</Label>
               <Input
-                id="address_line2"
                 placeholder="Apt 4B"
                 value={formData.address_line2}
                 onChange={(e) => setFormData({...formData, address_line2: e.target.value})}
@@ -397,33 +702,27 @@ function AddPropertyDialog({ open, onOpenChange, customer, onSuccess }) {
             
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="city">City *</Label>
+                <Label>City *</Label>
                 <Input
-                  id="city"
                   value={formData.city}
                   onChange={(e) => setFormData({...formData, city: e.target.value})}
                   required
-                  data-testid="property-city"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="state">State *</Label>
+                <Label>State *</Label>
                 <Input
-                  id="state"
                   value={formData.state}
                   onChange={(e) => setFormData({...formData, state: e.target.value})}
                   required
-                  data-testid="property-state"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="postal_code">ZIP *</Label>
+                <Label>ZIP *</Label>
                 <Input
-                  id="postal_code"
                   value={formData.postal_code}
                   onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
                   required
-                  data-testid="property-zip"
                 />
               </div>
             </div>
@@ -445,9 +744,8 @@ function AddPropertyDialog({ open, onOpenChange, customer, onSuccess }) {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="system_type">System Type</Label>
+                <Label>System Type</Label>
                 <Input
-                  id="system_type"
                   placeholder="e.g., Gas Furnace + AC"
                   value={formData.system_type}
                   onChange={(e) => setFormData({...formData, system_type: e.target.value})}
@@ -459,7 +757,7 @@ function AddPropertyDialog({ open, onOpenChange, customer, onSuccess }) {
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} data-testid="submit-property">
+            <Button type="submit" disabled={loading}>
               {loading ? "Adding..." : "Add Property"}
             </Button>
           </DialogFooter>
