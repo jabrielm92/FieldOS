@@ -13,7 +13,8 @@ import {
   LogOut,
   ChevronLeft,
   Truck,
-  BarChart3
+  BarChart3,
+  Calendar
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
