@@ -108,6 +108,12 @@ export const campaignAPI = {
   update: (id, data) => api.put(`/campaigns/${id}`, data),
 };
 
+// Dispatch APIs
+export const dispatchAPI = {
+  getBoard: (date) => api.get('/dispatch/board', { params: { date } }),
+  assignJob: (jobId, technicianId) => api.post('/dispatch/assign', { job_id: jobId, technician_id: technicianId }),
+};
+
 // Dashboard & Reports APIs
 export const dashboardAPI = {
   get: () => api.get('/dashboard'),
