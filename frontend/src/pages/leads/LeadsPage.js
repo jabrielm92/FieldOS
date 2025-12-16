@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
+import { Separator } from "../../components/ui/separator";
 import { 
   Select,
   SelectContent,
@@ -22,10 +23,12 @@ import {
 } from "../../components/ui/dialog";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
-import { leadAPI } from "../../lib/api";
+import { leadAPI, jobAPI, customerAPI, propertyAPI, conversationAPI } from "../../lib/api";
 import { toast } from "sonner";
-import { Plus, Search, Filter, Phone, Mail, Clock, AlertTriangle } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { 
+  Plus, Search, Phone, Mail, Clock, AlertTriangle, User, MapPin,
+  Briefcase, MessageSquare, Edit, X, ChevronRight, Calendar
+} from "lucide-react";
 
 const statusColors = {
   NEW: "bg-blue-100 text-blue-800 border-blue-200",
@@ -49,10 +52,14 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const navigate = useNavigate();
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [showLeadModal, setShowLeadModal] = useState(false);
 
   useEffect(() => {
     fetchLeads();
+    // Polling for real-time updates every 30 seconds
+    const interval = setInterval(fetchLeads, 30000);
+    return () => clearInterval(interval);
   }, [statusFilter, sourceFilter]);
 
   const fetchLeads = async () => {
@@ -70,13 +77,21 @@ export default function LeadsPage() {
     }
   };
 
+  const handleLeadClick = (lead) => {
+    setSelectedLead(lead);
+    setShowLeadModal(true);
+  };
+
   const filteredLeads = leads.filter((lead) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
     return (
       lead.issue_type?.toLowerCase().includes(searchLower) ||
       lead.description?.toLowerCase().includes(searchLower) ||
-      lead.source?.toLowerCase().includes(searchLower)
+      lead.source?.toLowerCase().includes(searchLower) ||
+      lead.customer?.first_name?.toLowerCase().includes(searchLower) ||
+      lead.customer?.last_name?.toLowerCase().includes(searchLower) ||
+      lead.customer?.phone?.includes(search)
     );
   });
 
@@ -97,7 +112,7 @@ export default function LeadsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search leads..."
+            placeholder="Search leads by issue, customer, phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -167,11 +182,19 @@ export default function LeadsPage() {
               key={lead.id} 
               lead={lead} 
               formatDate={formatDate}
-              onClick={() => navigate(`/leads/${lead.id}`)}
+              onClick={() => handleLeadClick(lead)}
             />
           ))}
         </div>
       )}
+
+      {/* Lead Detail Modal */}
+      <LeadDetailModal
+        lead={selectedLead}
+        open={showLeadModal}
+        onOpenChange={setShowLeadModal}
+        onUpdate={fetchLeads}
+      />
     </Layout>
   );
 }
@@ -179,7 +202,7 @@ export default function LeadsPage() {
 function LeadCard({ lead, formatDate, onClick }) {
   return (
     <Card 
-      className="card-industrial cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden"
+      className="card-industrial cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden group"
       onClick={onClick}
       data-testid={`lead-card-${lead.id}`}
     >
@@ -203,6 +226,14 @@ function LeadCard({ lead, formatDate, onClick }) {
           </Badge>
         </div>
         
+        {/* Customer Info */}
+        {lead.customer && (
+          <div className="flex items-center gap-2 mb-2 text-sm">
+            <User className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>{lead.customer.first_name} {lead.customer.last_name}</span>
+          </div>
+        )}
+        
         <p className="text-sm text-muted-foreground line-clamp-2 mb-4 min-h-[2.5rem]">
           {lead.description || "No description provided"}
         </p>
@@ -216,8 +247,482 @@ function LeadCard({ lead, formatDate, onClick }) {
             {formatDate(lead.created_at)}
           </span>
         </div>
+
+        {/* Hover indicator */}
+        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+function LeadDetailModal({ lead, open, onOpenChange, onUpdate }) {
+  const [showCreateJob, setShowCreateJob] = useState(false);
+  const [showEditLead, setShowEditLead] = useState(false);
+  const [properties, setProperties] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    if (lead?.customer_id) {
+      fetchProperties();
+      fetchConversations();
+    }
+  }, [lead]);
+
+  const fetchProperties = async () => {
+    if (!lead?.customer_id) return;
+    try {
+      const response = await propertyAPI.list(lead.customer_id);
+      setProperties(response.data);
+    } catch (error) {
+      console.error("Failed to fetch properties");
+    }
+  };
+
+  const fetchConversations = async () => {
+    try {
+      const response = await conversationAPI.list();
+      const customerConvs = response.data.filter(c => c.customer_id === lead?.customer_id);
+      setConversations(customerConvs);
+    } catch (error) {
+      console.error("Failed to fetch conversations");
+    }
+  };
+
+  const handleStatusUpdate = async (newStatus) => {
+    if (!lead) return;
+    setUpdating(true);
+    try {
+      await leadAPI.update(lead.id, { ...lead, status: newStatus });
+      toast.success(`Lead marked as ${newStatus.replace('_', ' ')}`);
+      onUpdate();
+      onOpenChange(false);
+    } catch (error) {
+      toast.error("Failed to update lead status");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (!lead) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <DialogTitle className="font-heading text-xl">
+                {lead.issue_type || "New Lead"}
+              </DialogTitle>
+              <DialogDescription className="flex items-center gap-2 mt-1">
+                <Badge className={statusColors[lead.status]} variant="outline">
+                  {lead.status?.replace('_', ' ')}
+                </Badge>
+                <Badge className={urgencyColors[lead.urgency]}>
+                  {lead.urgency}
+                </Badge>
+                <span className="text-muted-foreground">
+                  via {lead.source?.replace('_', ' ')}
+                </span>
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          {/* Customer Info */}
+          {lead.customer && (
+            <div className="bg-muted/50 rounded-lg p-4">
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Customer Information
+              </h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Name:</span>
+                  <p className="font-medium">{lead.customer.first_name} {lead.customer.last_name}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Phone:</span>
+                  <p className="font-medium flex items-center gap-1">
+                    <Phone className="h-3 w-3" />
+                    {lead.customer.phone}
+                  </p>
+                </div>
+                {lead.customer.email && (
+                  <div>
+                    <span className="text-muted-foreground">Email:</span>
+                    <p className="font-medium flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      {lead.customer.email}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Property Info */}
+          {properties.length > 0 && (
+            <div className="bg-muted/50 rounded-lg p-4">
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Property
+              </h4>
+              {properties.map(prop => (
+                <div key={prop.id} className="text-sm">
+                  <p className="font-medium">{prop.address_line1}</p>
+                  <p className="text-muted-foreground">{prop.city}, {prop.state} {prop.postal_code}</p>
+                  {prop.system_type && (
+                    <Badge variant="outline" className="mt-2">{prop.system_type}</Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Issue Description */}
+          <div>
+            <h4 className="font-medium mb-2">Issue Description</h4>
+            <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4">
+              {lead.description || "No description provided"}
+            </p>
+          </div>
+
+          {/* Recent Messages */}
+          {conversations.length > 0 && (
+            <div>
+              <h4 className="font-medium mb-2 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Recent Messages
+              </h4>
+              <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4">
+                <p>{conversations.length} conversation(s) with this customer</p>
+              </div>
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Quick Actions */}
+          <div>
+            <h4 className="font-medium mb-3">Quick Actions</h4>
+            <div className="flex flex-wrap gap-2">
+              {lead.status !== "JOB_BOOKED" && (
+                <Button 
+                  onClick={() => setShowCreateJob(true)}
+                  className="btn-industrial"
+                >
+                  <Briefcase className="h-4 w-4 mr-2" />
+                  Create Job
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setShowEditLead(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Lead
+              </Button>
+            </div>
+          </div>
+
+          {/* Status Update */}
+          <div>
+            <h4 className="font-medium mb-3">Update Status</h4>
+            <div className="flex flex-wrap gap-2">
+              {["NEW", "CONTACTED", "QUALIFIED", "NO_RESPONSE", "LOST"].map(status => (
+                <Button
+                  key={status}
+                  variant={lead.status === status ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleStatusUpdate(status)}
+                  disabled={updating || lead.status === status}
+                >
+                  {status.replace('_', ' ')}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+
+        {/* Create Job Sub-Dialog */}
+        <CreateJobFromLeadDialog
+          lead={lead}
+          properties={properties}
+          open={showCreateJob}
+          onOpenChange={setShowCreateJob}
+          onSuccess={() => {
+            handleStatusUpdate("JOB_BOOKED");
+            setShowCreateJob(false);
+          }}
+        />
+
+        {/* Edit Lead Sub-Dialog */}
+        <EditLeadDialog
+          lead={lead}
+          open={showEditLead}
+          onOpenChange={setShowEditLead}
+          onSuccess={() => {
+            onUpdate();
+            setShowEditLead(false);
+          }}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreateJobFromLeadDialog({ lead, properties, open, onOpenChange, onSuccess }) {
+  const [formData, setFormData] = useState({
+    property_id: "",
+    job_type: "DIAGNOSTIC",
+    priority: lead?.urgency === "EMERGENCY" ? "EMERGENCY" : lead?.urgency === "URGENT" ? "HIGH" : "NORMAL",
+    service_window_start: "",
+    service_window_end: "",
+    notes: lead?.description || "",
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (properties.length === 1) {
+      setFormData(prev => ({ ...prev, property_id: properties[0].id }));
+    }
+  }, [properties]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!lead?.customer_id) return;
+    
+    setLoading(true);
+    try {
+      await jobAPI.create({
+        customer_id: lead.customer_id,
+        lead_id: lead.id,
+        ...formData,
+        service_window_start: new Date(formData.service_window_start).toISOString(),
+        service_window_end: new Date(formData.service_window_end).toISOString(),
+      });
+      toast.success("Job created from lead!");
+      onSuccess();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create job");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create Job from Lead</DialogTitle>
+          <DialogDescription>
+            Schedule a service appointment for this lead
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
+          <div className="grid gap-4 py-4">
+            {properties.length > 1 && (
+              <div className="space-y-2">
+                <Label>Property</Label>
+                <Select 
+                  value={formData.property_id} 
+                  onValueChange={(v) => setFormData({...formData, property_id: v})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select property" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {properties.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.address_line1}, {p.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Job Type</Label>
+                <Select 
+                  value={formData.job_type} 
+                  onValueChange={(v) => setFormData({...formData, job_type: v})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DIAGNOSTIC">Diagnostic</SelectItem>
+                    <SelectItem value="REPAIR">Repair</SelectItem>
+                    <SelectItem value="INSTALL">Install</SelectItem>
+                    <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                    <SelectItem value="INSPECTION">Inspection</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select 
+                  value={formData.priority} 
+                  onValueChange={(v) => setFormData({...formData, priority: v})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NORMAL">Normal</SelectItem>
+                    <SelectItem value="HIGH">High</SelectItem>
+                    <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Time *</Label>
+                <Input
+                  type="datetime-local"
+                  value={formData.service_window_start}
+                  onChange={(e) => setFormData({...formData, service_window_start: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>End Time *</Label>
+                <Input
+                  type="datetime-local"
+                  value={formData.service_window_end}
+                  onChange={(e) => setFormData({...formData, service_window_end: e.target.value})}
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={loading || (!formData.property_id && properties.length > 0)}
+            >
+              {loading ? "Creating..." : "Create Job"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditLeadDialog({ lead, open, onOpenChange, onSuccess }) {
+  const [formData, setFormData] = useState({
+    issue_type: lead?.issue_type || "",
+    urgency: lead?.urgency || "ROUTINE",
+    description: lead?.description || "",
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (lead) {
+      setFormData({
+        issue_type: lead.issue_type || "",
+        urgency: lead.urgency || "ROUTINE",
+        description: lead.description || "",
+      });
+    }
+  }, [lead]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!lead) return;
+    
+    setLoading(true);
+    try {
+      await leadAPI.update(lead.id, { ...lead, ...formData });
+      toast.success("Lead updated!");
+      onSuccess();
+    } catch (error) {
+      toast.error("Failed to update lead");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Lead</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Issue Type</Label>
+              <Input
+                value={formData.issue_type}
+                onChange={(e) => setFormData({...formData, issue_type: e.target.value})}
+                placeholder="e.g., AC Not Cooling"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Urgency</Label>
+              <Select 
+                value={formData.urgency} 
+                onValueChange={(v) => setFormData({...formData, urgency: v})}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ROUTINE">Routine</SelectItem>
+                  <SelectItem value="URGENT">Urgent</SelectItem>
+                  <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
