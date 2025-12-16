@@ -3,38 +3,40 @@ import { Layout } from "../../components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
-import { Input } from "../../components/ui/input";
-import { Calendar } from "../../components/ui/calendar";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../components/ui/popover";
-import { ScrollArea } from "../../components/ui/scroll-area";
-import { cn } from "../../lib/utils";
-import { format } from "date-fns";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
+import { dispatchAPI, technicianAPI, jobAPI } from "../../lib/api";
 import { toast } from "sonner";
 import { 
-  CalendarIcon, 
-  Clock, 
-  MapPin, 
-  User, 
-  Wrench,
-  GripVertical,
+  ChevronLeft, 
+  ChevronRight, 
+  Calendar,
+  User,
+  Clock,
+  MapPin,
   AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  Phone,
-  Truck
+  Truck,
+  CheckCircle,
+  Users
 } from "lucide-react";
-import axios from "axios";
-
-const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const priorityColors = {
-  EMERGENCY: "bg-red-500 text-white border-red-600",
-  HIGH: "bg-orange-500 text-white border-orange-600",
-  NORMAL: "bg-blue-500 text-white border-blue-600",
+  EMERGENCY: "border-l-red-500 bg-red-50",
+  HIGH: "border-l-orange-500 bg-orange-50",
+  NORMAL: "border-l-blue-500 bg-blue-50",
 };
 
 const statusColors = {
@@ -45,22 +47,25 @@ const statusColors = {
 };
 
 export default function DispatchBoard() {
-  const [date, setDate] = useState(new Date());
-  const [boardData, setBoardData] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [boardData, setBoardData] = useState({ technicians: [], unassigned_jobs: [] });
+  const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [draggedJob, setDraggedJob] = useState(null);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
-    fetchBoardData();
-  }, [date]);
+    fetchDispatchBoard();
+    fetchTechnicians();
+    // Polling for real-time updates
+    const interval = setInterval(fetchDispatchBoard, 30000);
+    return () => clearInterval(interval);
+  }, [selectedDate]);
 
-  const fetchBoardData = async () => {
+  const fetchDispatchBoard = async () => {
     try {
-      const token = localStorage.getItem("fieldos_token");
-      const dateStr = format(date, "yyyy-MM-dd");
-      const response = await axios.get(`${API_URL}/api/v1/dispatch/board?date=${dateStr}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await dispatchAPI.getBoard(selectedDate);
       setBoardData(response.data);
     } catch (error) {
       toast.error("Failed to load dispatch board");
@@ -69,41 +74,55 @@ export default function DispatchBoard() {
     }
   };
 
-  const handleAssignJob = async (jobId, technicianId) => {
+  const fetchTechnicians = async () => {
     try {
-      const token = localStorage.getItem("fieldos_token");
-      await axios.post(`${API_URL}/api/v1/dispatch/assign?job_id=${jobId}&technician_id=${technicianId || ''}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success(technicianId ? "Job assigned" : "Job unassigned");
-      fetchBoardData();
+      const response = await technicianAPI.list();
+      setTechnicians(response.data);
+    } catch (error) {
+      console.error("Failed to load technicians");
+    }
+  };
+
+  const handleAssignJob = async (technicianId) => {
+    if (!selectedJob) return;
+    
+    setAssigning(true);
+    try {
+      await dispatchAPI.assignJob(selectedJob.id, technicianId);
+      toast.success("Job assigned successfully!");
+      setShowAssignDialog(false);
+      setSelectedJob(null);
+      fetchDispatchBoard();
     } catch (error) {
       toast.error("Failed to assign job");
+    } finally {
+      setAssigning(false);
     }
   };
 
-  const handleDragStart = (e, job) => {
-    setDraggedJob(job);
-    e.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
-
-  const handleDrop = (e, technicianId) => {
-    e.preventDefault();
-    if (draggedJob) {
-      handleAssignJob(draggedJob.id, technicianId);
-      setDraggedJob(null);
+  const handleUnassignJob = async (jobId) => {
+    try {
+      await dispatchAPI.assignJob(jobId, null);
+      toast.success("Job unassigned");
+      fetchDispatchBoard();
+    } catch (error) {
+      toast.error("Failed to unassign job");
     }
   };
 
-  const navigateDay = (direction) => {
-    const newDate = new Date(date);
-    newDate.setDate(newDate.getDate() + direction);
-    setDate(newDate);
+  const navigateDate = (direction) => {
+    const date = new Date(selectedDate);
+    date.setDate(date.getDate() + direction);
+    setSelectedDate(date.toISOString().split('T')[0]);
+  };
+
+  const formatDate = (dateStr) => {
+    return new Date(dateStr).toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
   const formatTime = (dateStr) => {
@@ -111,236 +130,259 @@ export default function DispatchBoard() {
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  if (loading) {
-    return (
-      <Layout title="Dispatch Board">
+  // Calculate stats
+  const totalJobs = boardData.unassigned_jobs.length + 
+    boardData.technicians.reduce((acc, tech) => acc + (tech.jobs?.length || 0), 0);
+  const assignedJobs = boardData.technicians.reduce((acc, tech) => acc + (tech.jobs?.length || 0), 0);
+  const unassignedJobs = boardData.unassigned_jobs.length;
+
+  return (
+    <Layout title="Dispatch Board" subtitle="Assign and manage technician schedules">
+      {/* Date Navigation & Stats */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => navigateDate(-1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-2 px-4 py-2 bg-muted rounded-md">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">{formatDate(selectedDate)}</span>
+          </div>
+          <Button variant="outline" size="icon" onClick={() => navigateDate(1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+          >
+            Today
+          </Button>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-3 py-2 border rounded-md text-sm"
+          />
+        </div>
+
+        {/* Stats Summary */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md">
+            <Truck className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">{totalJobs} Total Jobs</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 rounded-md">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <span className="text-sm font-medium text-green-700">{assignedJobs} Assigned</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 rounded-md">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <span className="text-sm font-medium text-amber-700">{unassignedJobs} Unassigned</span>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
-      </Layout>
-    );
-  }
-
-  const technicians = boardData?.technicians || [];
-  const unassignedJobs = boardData?.unassigned_jobs || [];
-  const assignedJobs = boardData?.assigned_jobs || {};
-
-  return (
-    <Layout title="Dispatch Board" subtitle={`Manage technician assignments for ${format(date, "EEEE, MMMM d, yyyy")}`}>
-      {/* Date Navigation */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => navigateDay(-1)} data-testid="prev-day">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="min-w-[200px]" data-testid="date-picker">
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {format(date, "MMM d, yyyy")}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={(d) => d && setDate(d)}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-          
-          <Button variant="outline" size="icon" onClick={() => navigateDay(1)} data-testid="next-day">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          
-          <Button variant="ghost" onClick={() => setDate(new Date())}>
-            Today
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-muted-foreground">
-            {boardData?.summary?.total_jobs || 0} total jobs
-          </span>
-          <Badge variant="outline" className="bg-yellow-50">
-            {boardData?.summary?.unassigned || 0} unassigned
-          </Badge>
-          <Badge variant="outline" className="bg-green-50">
-            {boardData?.summary?.assigned || 0} assigned
-          </Badge>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Unassigned Jobs Column */}
-        <Card 
-          className="lg:col-span-1"
-          onDragOver={handleDragOver}
-          onDrop={(e) => handleDrop(e, null)}
-        >
-          <CardHeader className="pb-3 bg-yellow-50 rounded-t-lg">
-            <CardTitle className="text-base font-heading flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-yellow-600" />
-              Unassigned ({unassignedJobs.length})
-            </CardTitle>
-          </CardHeader>
-          <ScrollArea className="h-[calc(100vh-320px)]">
-            <CardContent className="p-3 space-y-2">
-              {unassignedJobs.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  All jobs assigned! 🎉
-                </p>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Unassigned Jobs Column */}
+          <Card className="lg:col-span-1 border-amber-200 bg-amber-50/30">
+            <CardHeader className="pb-3 bg-amber-100/50 rounded-t-lg">
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                Unassigned Jobs
+              </CardTitle>
+              <p className="text-sm text-amber-700 font-medium">
+                {unassignedJobs} job{unassignedJobs !== 1 ? 's' : ''} need assignment
+              </p>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {boardData.unassigned_jobs.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                  <p className="text-sm">All jobs assigned!</p>
+                </div>
               ) : (
-                unassignedJobs.map((job) => (
-                  <JobCard 
-                    key={job.id} 
-                    job={job} 
-                    formatTime={formatTime}
-                    onDragStart={handleDragStart}
-                    draggable
-                  />
-                ))
+                <div className="space-y-3">
+                  {boardData.unassigned_jobs.map((job) => (
+                    <JobCard 
+                      key={job.id} 
+                      job={job} 
+                      formatTime={formatTime}
+                      onAssign={() => {
+                        setSelectedJob(job);
+                        setShowAssignDialog(true);
+                      }}
+                    />
+                  ))}
+                </div>
               )}
             </CardContent>
-          </ScrollArea>
-        </Card>
+          </Card>
 
-        {/* Technician Columns */}
-        <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {technicians.length === 0 ? (
-            <Card className="col-span-full">
-              <CardContent className="py-12 text-center">
-                <Wrench className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">No technicians available</p>
-                <p className="text-sm text-muted-foreground mt-1">Add technicians in the Technicians page</p>
-              </CardContent>
-            </Card>
-          ) : (
-            technicians.map((tech) => (
-              <TechnicianColumn
-                key={tech.id}
-                technician={tech}
-                jobs={assignedJobs[tech.id] || []}
-                formatTime={formatTime}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, tech.id)}
-                onDragStart={handleDragStart}
-              />
-            ))
-          )}
+          {/* Technician Columns */}
+          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {boardData.technicians.map((tech) => (
+              <Card key={tech.id} className="border-primary/20">
+                <CardHeader className="pb-3 bg-primary/5 rounded-t-lg">
+                  <CardTitle className="font-heading text-base flex items-center gap-2">
+                    <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
+                      <User className="h-4 w-4 text-primary" />
+                    </div>
+                    {tech.name}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {tech.jobs?.length || 0} job{(tech.jobs?.length || 0) !== 1 ? 's' : ''} scheduled
+                  </p>
+                </CardHeader>
+                <CardContent className="pt-4 min-h-[200px]">
+                  {(tech.jobs?.length || 0) === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                      <Users className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No jobs assigned</p>
+                      <p className="text-xs">Drag a job here or click assign</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {tech.jobs.map((job) => (
+                        <JobCard 
+                          key={job.id} 
+                          job={job} 
+                          formatTime={formatTime}
+                          assigned
+                          onUnassign={() => handleUnassignJob(job.id)}
+                          onReassign={() => {
+                            setSelectedJob(job);
+                            setShowAssignDialog(true);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+
+            {boardData.technicians.length === 0 && (
+              <Card className="col-span-full">
+                <CardContent className="py-12 text-center">
+                  <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">No technicians found</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Add technicians in the Technicians page
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Assign Job Dialog */}
+      <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Job to Technician</DialogTitle>
+            <DialogDescription>
+              {selectedJob && (
+                <span>
+                  {selectedJob.job_type} - {selectedJob.customer?.first_name} {selectedJob.customer?.last_name}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm font-medium mb-3">Select Technician:</p>
+            <div className="space-y-2">
+              {technicians.filter(t => t.active !== false).map((tech) => (
+                <Button
+                  key={tech.id}
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => handleAssignJob(tech.id)}
+                  disabled={assigning}
+                >
+                  <User className="h-4 w-4 mr-2" />
+                  {tech.name}
+                  {tech.skills && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {Array.isArray(tech.skills) ? tech.skills.join(', ') : tech.skills}
+                    </span>
+                  )}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAssignDialog(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
 
-function TechnicianColumn({ technician, jobs, formatTime, onDragOver, onDrop, onDragStart }) {
+function JobCard({ job, formatTime, assigned, onAssign, onUnassign, onReassign }) {
   return (
-    <Card 
-      className="flex flex-col"
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      data-testid={`tech-column-${technician.id}`}
+    <div 
+      className={`p-3 rounded-lg border-l-4 ${priorityColors[job.priority] || priorityColors.NORMAL} 
+        shadow-sm hover:shadow-md transition-shadow cursor-pointer`}
+      data-testid={`dispatch-job-${job.id}`}
     >
-      <CardHeader className="pb-3 bg-primary/5 rounded-t-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-accent/20 rounded-full flex items-center justify-center">
-            <Wrench className="h-5 w-5 text-accent" />
-          </div>
-          <div className="flex-1">
-            <CardTitle className="text-base font-heading">{technician.name}</CardTitle>
-            <p className="text-xs text-muted-foreground font-mono">{technician.phone}</p>
-          </div>
-          <Badge variant="outline">{jobs.length} jobs</Badge>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <p className="font-medium text-sm">
+            {job.customer?.first_name} {job.customer?.last_name}
+          </p>
+          <p className="text-xs text-muted-foreground">{job.job_type}</p>
         </div>
-      </CardHeader>
-      <ScrollArea className="flex-1 h-[calc(100vh-380px)]">
-        <CardContent className="p-3 space-y-2">
-          {jobs.length === 0 ? (
-            <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Drag jobs here to assign
-              </p>
-            </div>
-          ) : (
-            jobs.map((job) => (
-              <JobCard 
-                key={job.id} 
-                job={job} 
-                formatTime={formatTime}
-                onDragStart={onDragStart}
-                draggable
-                showTech={false}
-              />
-            ))
-          )}
-        </CardContent>
-      </ScrollArea>
-    </Card>
-  );
-}
+        <Badge className={statusColors[job.status] || "bg-gray-100"} variant="outline">
+          {job.status}
+        </Badge>
+      </div>
 
-function JobCard({ job, formatTime, onDragStart, draggable, showTech = true }) {
-  return (
-    <div
-      className={cn(
-        "p-3 bg-card border rounded-lg cursor-grab active:cursor-grabbing transition-all hover:shadow-md",
-        "relative overflow-hidden"
-      )}
-      draggable={draggable}
-      onDragStart={(e) => onDragStart && onDragStart(e, job)}
-      data-testid={`job-card-${job.id}`}
-    >
-      {/* Priority indicator */}
-      <div className={cn(
-        "absolute left-0 top-0 bottom-0 w-1",
-        job.priority === "EMERGENCY" ? "bg-red-500" : 
-        job.priority === "HIGH" ? "bg-orange-500" : "bg-blue-500"
-      )} />
-      
-      <div className="pl-2">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <p className="font-medium text-sm">
-                {job.customer?.first_name} {job.customer?.last_name}
-              </p>
-              <Badge className={priorityColors[job.priority]} variant="outline">
-                {job.priority}
-              </Badge>
-            </div>
-          </div>
-          <Badge className={statusColors[job.status]}>
-            {job.status}
-          </Badge>
+      <div className="space-y-1 text-xs text-muted-foreground mb-3">
+        <div className="flex items-center gap-1">
+          <Clock className="h-3 w-3" />
+          <span>{formatTime(job.service_window_start)} - {formatTime(job.service_window_end)}</span>
         </div>
-
-        {/* Job Type */}
-        <p className="text-sm font-medium text-primary mb-2">{job.job_type}</p>
-
-        {/* Details */}
-        <div className="space-y-1 text-xs text-muted-foreground">
+        {job.property && (
           <div className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            <span>{formatTime(job.service_window_start)} - {formatTime(job.service_window_end)}</span>
+            <MapPin className="h-3 w-3" />
+            <span className="truncate">{job.property.address_line1}, {job.property.city}</span>
           </div>
-          {job.property && (
-            <div className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              <span className="truncate">{job.property.address_line1}, {job.property.city}</span>
-            </div>
-          )}
-          {job.customer?.phone && (
-            <div className="flex items-center gap-1">
-              <Phone className="h-3 w-3" />
-              <span className="font-mono">{job.customer.phone}</span>
-            </div>
-          )}
+        )}
+      </div>
+
+      {job.priority === "EMERGENCY" && (
+        <div className="flex items-center gap-1 text-xs text-red-600 mb-2">
+          <AlertTriangle className="h-3 w-3" />
+          <span className="font-medium">EMERGENCY</span>
         </div>
+      )}
+
+      <div className="flex gap-2">
+        {!assigned && onAssign && (
+          <Button size="sm" className="w-full text-xs" onClick={onAssign}>
+            Assign Tech
+          </Button>
+        )}
+        {assigned && (
+          <>
+            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onReassign}>
+              Reassign
+            </Button>
+            <Button size="sm" variant="ghost" className="text-xs text-red-600 hover:text-red-700" onClick={onUnassign}>
+              Remove
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
