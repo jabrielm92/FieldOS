@@ -4,7 +4,6 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
-import { Separator } from "../../components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -13,7 +12,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { toast } from "sonner";
-import { Building2, Phone, MessageSquare, Clock, Shield } from "lucide-react";
+import { Building2, MessageSquare, Clock, Users } from "lucide-react";
 
 export default function SettingsPage() {
   const handleSave = () => {
@@ -56,6 +55,24 @@ export default function SettingsPage() {
               </div>
             </div>
             
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="primary_phone">Primary Phone</Label>
+                <Input 
+                  id="primary_phone" 
+                  placeholder="+1 (555) 123-4567"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="primary_email">Primary Email</Label>
+                <Input 
+                  id="primary_email" 
+                  type="email"
+                  placeholder="contact@yourcompany.com"
+                />
+              </div>
+            </div>
+            
             <div className="space-y-2">
               <Label htmlFor="service_area">Service Area</Label>
               <Textarea 
@@ -63,32 +80,6 @@ export default function SettingsPage() {
                 placeholder="Describe your service area (cities, zip codes, etc.)"
                 rows={2}
               />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* SMS & Twilio */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-heading flex items-center gap-2">
-              <Phone className="h-5 w-5" />
-              SMS Configuration
-            </CardTitle>
-            <CardDescription>
-              Twilio settings for SMS messaging
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="twilio_phone">Twilio Phone Number</Label>
-              <Input 
-                id="twilio_phone" 
-                placeholder="+1 (555) 123-4567"
-                data-testid="settings-twilio-phone"
-              />
-              <p className="text-xs text-muted-foreground">
-                This number will be used for all outbound SMS
-              </p>
             </div>
           </CardContent>
         </Card>
@@ -160,6 +151,25 @@ export default function SettingsPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Morning Window</Label>
+                <div className="flex gap-2">
+                  <Input type="time" defaultValue="08:00" className="flex-1" />
+                  <span className="flex items-center text-muted-foreground">to</span>
+                  <Input type="time" defaultValue="12:00" className="flex-1" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Afternoon Window</Label>
+                <div className="flex gap-2">
+                  <Input type="time" defaultValue="12:00" className="flex-1" />
+                  <span className="flex items-center text-muted-foreground">to</span>
+                  <Input type="time" defaultValue="17:00" className="flex-1" />
+                </div>
+              </div>
+            </div>
             
             <div className="space-y-2">
               <Label htmlFor="emergency_rules">Emergency Rules</Label>
@@ -168,48 +178,52 @@ export default function SettingsPage() {
                 placeholder="Describe how emergencies should be handled..."
                 rows={3}
               />
+              <p className="text-xs text-muted-foreground">
+                Instructions for handling emergency service requests
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Vapi Integration */}
+        {/* Team */}
         <Card>
           <CardHeader>
             <CardTitle className="font-heading flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Vapi Integration
+              <Users className="h-5 w-5" />
+              Team & Notifications
             </CardTitle>
             <CardDescription>
-              Configure Vapi voice assistant integration
+              Configure team notifications and alerts
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-muted rounded-md">
-              <h4 className="font-medium mb-2">Webhook Endpoints</h4>
-              <p className="text-sm text-muted-foreground mb-4">
-                Configure these URLs in your Vapi assistant:
+            <div className="space-y-2">
+              <Label htmlFor="alert_email">Alert Email</Label>
+              <Input 
+                id="alert_email" 
+                type="email"
+                placeholder="alerts@yourcompany.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Receive notifications for new leads, emergencies, and system alerts
               </p>
-              <div className="space-y-2 font-mono text-xs">
-                <div className="flex items-center justify-between p-2 bg-background rounded">
-                  <span>Create Lead:</span>
-                  <code className="text-primary">/api/v1/vapi/create-lead</code>
-                </div>
-                <div className="flex items-center justify-between p-2 bg-background rounded">
-                  <span>Check Availability:</span>
-                  <code className="text-primary">/api/v1/vapi/check-availability</code>
-                </div>
-                <div className="flex items-center justify-between p-2 bg-background rounded">
-                  <span>Book Job:</span>
-                  <code className="text-primary">/api/v1/vapi/book-job</code>
-                </div>
-                <div className="flex items-center justify-between p-2 bg-background rounded">
-                  <span>Send SMS:</span>
-                  <code className="text-primary">/api/v1/vapi/send-sms</code>
-                </div>
-                <div className="flex items-center justify-between p-2 bg-background rounded">
-                  <span>Call Summary:</span>
-                  <code className="text-primary">/api/v1/vapi/call-summary</code>
-                </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Reminder Notifications</Label>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" defaultChecked className="rounded" />
+                  <span className="text-sm">Day before reminders</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" defaultChecked className="rounded" />
+                  <span className="text-sm">Morning of reminders</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" defaultChecked className="rounded" />
+                  <span className="text-sm">En-route alerts</span>
+                </label>
               </div>
             </div>
           </CardContent>
