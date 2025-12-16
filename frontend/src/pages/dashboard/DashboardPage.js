@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Layout } from "../../components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import { dashboardAPI } from "../../lib/api";
 import { toast } from "sonner";
 import { 
@@ -12,7 +14,11 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Clock,
-  MapPin
+  MapPin,
+  ChevronRight,
+  Calendar,
+  MessageSquare,
+  Phone
 } from "lucide-react";
 
 const statusColors = {
@@ -27,9 +33,13 @@ const statusColors = {
 export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboard();
+    // Polling for real-time updates every 30 seconds
+    const interval = setInterval(fetchDashboard, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchDashboard = async () => {
@@ -61,7 +71,7 @@ export default function DashboardPage() {
 
   return (
     <Layout title="Dashboard" subtitle="Your field service operations at a glance">
-      {/* Metrics Grid */}
+      {/* Metrics Grid - All Clickable */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <MetricCard
           title="Leads This Week"
@@ -69,6 +79,7 @@ export default function DashboardPage() {
           icon={TrendingUp}
           trend="+12%"
           trendUp
+          onClick={() => navigate('/leads')}
         />
         <MetricCard
           title="Leads This Month"
@@ -76,6 +87,7 @@ export default function DashboardPage() {
           icon={Users}
           trend="+8%"
           trendUp
+          onClick={() => navigate('/leads')}
         />
         <MetricCard
           title="Jobs This Week"
@@ -83,6 +95,7 @@ export default function DashboardPage() {
           icon={Briefcase}
           trend="+5%"
           trendUp
+          onClick={() => navigate('/jobs')}
         />
         <MetricCard
           title="Quote Conversion"
@@ -90,19 +103,29 @@ export default function DashboardPage() {
           icon={FileText}
           trend="-2%"
           trendUp={false}
+          onClick={() => navigate('/quotes')}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Jobs Today */}
-        <Card className="lg:col-span-2" data-testid="jobs-today-card">
+        {/* Jobs Today - Clickable */}
+        <Card 
+          className="lg:col-span-2 cursor-pointer hover:shadow-md transition-shadow" 
+          data-testid="jobs-today-card"
+          onClick={() => navigate('/calendar')}
+        >
           <CardHeader className="pb-3">
-            <CardTitle className="font-heading text-lg flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              Today's Schedule
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                Today's Schedule
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-primary">
+                View Calendar <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent onClick={(e) => e.stopPropagation()}>
             {jobsToday.length === 0 ? (
               <p className="text-muted-foreground text-sm py-8 text-center">
                 No jobs scheduled for today
@@ -110,22 +133,35 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {jobsToday.map((job) => (
-                  <JobCard key={job.id} job={job} />
+                  <JobCard 
+                    key={job.id} 
+                    job={job} 
+                    onClick={() => navigate('/jobs')}
+                  />
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Recent Leads */}
-        <Card data-testid="recent-leads-card">
+        {/* Recent Leads - Clickable */}
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-shadow" 
+          data-testid="recent-leads-card"
+          onClick={() => navigate('/leads')}
+        >
           <CardHeader className="pb-3">
-            <CardTitle className="font-heading text-lg flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-accent" />
-              Recent Leads
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-accent" />
+                Recent Leads
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-primary">
+                View All <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent onClick={(e) => e.stopPropagation()}>
             {recentLeads.length === 0 ? (
               <p className="text-muted-foreground text-sm py-8 text-center">
                 No recent leads
@@ -133,7 +169,11 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {recentLeads.map((lead) => (
-                  <LeadCard key={lead.id} lead={lead} />
+                  <LeadCard 
+                    key={lead.id} 
+                    lead={lead} 
+                    onClick={() => navigate('/leads')}
+                  />
                 ))}
               </div>
             )}
@@ -141,25 +181,81 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Tomorrow's Jobs */}
-      {jobsTomorrow.length > 0 && (
-        <Card className="mt-6" data-testid="jobs-tomorrow-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="font-heading text-lg">Tomorrow's Schedule</CardTitle>
-          </CardHeader>
-          <CardContent>
+      {/* Tomorrow's Jobs - Clickable */}
+      <Card 
+        className="mt-6 cursor-pointer hover:shadow-md transition-shadow" 
+        data-testid="jobs-tomorrow-card"
+        onClick={() => navigate('/calendar')}
+      >
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="font-heading text-lg flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Tomorrow's Schedule
+            </CardTitle>
+            <Button variant="ghost" size="sm" className="text-primary">
+              View Calendar <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent onClick={(e) => e.stopPropagation()}>
+          {jobsTomorrow.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-8 text-center">
+              No jobs scheduled for tomorrow
+            </p>
+          ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {jobsTomorrow.map((job) => (
-                <JobCard key={job.id} job={job} compact />
+                <JobCard key={job.id} job={job} compact onClick={() => navigate('/jobs')} />
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Charts Section */}
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+        <Button 
+          variant="outline" 
+          className="h-auto py-4 flex flex-col items-center gap-2"
+          onClick={() => navigate('/dispatch')}
+        >
+          <Briefcase className="h-5 w-5" />
+          <span>Dispatch Board</span>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="h-auto py-4 flex flex-col items-center gap-2"
+          onClick={() => navigate('/conversations')}
+        >
+          <MessageSquare className="h-5 w-5" />
+          <span>Inbox</span>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="h-auto py-4 flex flex-col items-center gap-2"
+          onClick={() => navigate('/customers')}
+        >
+          <Users className="h-5 w-5" />
+          <span>Customers</span>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="h-auto py-4 flex flex-col items-center gap-2"
+          onClick={() => navigate('/reports')}
+        >
+          <TrendingUp className="h-5 w-5" />
+          <span>Reports</span>
+        </Button>
+      </div>
+
+      {/* Charts Section - Clickable */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-        <Card data-testid="leads-by-source-card">
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-shadow" 
+          data-testid="leads-by-source-card"
+          onClick={() => navigate('/leads')}
+        >
           <CardHeader className="pb-3">
             <CardTitle className="font-heading text-lg">Leads by Source</CardTitle>
           </CardHeader>
@@ -186,7 +282,11 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card data-testid="jobs-by-status-card">
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-shadow" 
+          data-testid="jobs-by-status-card"
+          onClick={() => navigate('/jobs')}
+        >
           <CardHeader className="pb-3">
             <CardTitle className="font-heading text-lg">Jobs by Status</CardTitle>
           </CardHeader>
@@ -211,9 +311,13 @@ export default function DashboardPage() {
   );
 }
 
-function MetricCard({ title, value, icon: Icon, trend, trendUp }) {
+function MetricCard({ title, value, icon: Icon, trend, trendUp, onClick }) {
   return (
-    <Card className="card-industrial" data-testid={`metric-${title.toLowerCase().replace(/\s/g, '-')}`}>
+    <Card 
+      className="card-industrial cursor-pointer hover:shadow-md transition-shadow" 
+      data-testid={`metric-${title.toLowerCase().replace(/\s/g, '-')}`}
+      onClick={onClick}
+    >
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div>
@@ -230,12 +334,15 @@ function MetricCard({ title, value, icon: Icon, trend, trendUp }) {
             <span>{trend} from last period</span>
           </div>
         )}
+        <div className="flex items-center justify-end mt-2">
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function JobCard({ job, compact }) {
+function JobCard({ job, compact, onClick }) {
   const formatTime = (dateStr) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
@@ -243,7 +350,10 @@ function JobCard({ job, compact }) {
   };
 
   return (
-    <div className={`relative p-4 bg-muted/50 rounded-md border border-border hover:border-primary/30 transition-colors ${compact ? '' : ''}`}>
+    <div 
+      className={`relative p-4 bg-muted/50 rounded-md border border-border hover:border-primary/30 transition-colors cursor-pointer ${compact ? '' : ''}`}
+      onClick={onClick}
+    >
       <div className={`status-bar status-bar-${job.status?.toLowerCase()}`} />
       <div className="pl-3">
         <div className="flex items-start justify-between mb-2">
@@ -274,7 +384,7 @@ function JobCard({ job, compact }) {
   );
 }
 
-function LeadCard({ lead }) {
+function LeadCard({ lead, onClick }) {
   const urgencyColors = {
     EMERGENCY: "bg-red-100 text-red-800",
     URGENT: "bg-orange-100 text-orange-800",
@@ -282,13 +392,22 @@ function LeadCard({ lead }) {
   };
 
   return (
-    <div className="p-3 bg-muted/50 rounded-md border border-border hover:border-primary/30 transition-colors">
+    <div 
+      className="p-3 bg-muted/50 rounded-md border border-border hover:border-primary/30 transition-colors cursor-pointer"
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between mb-1">
         <p className="font-medium text-sm">{lead.issue_type || "New Lead"}</p>
         <Badge className={urgencyColors[lead.urgency] || "bg-gray-100"} variant="outline">
           {lead.urgency}
         </Badge>
       </div>
+      {lead.customer && (
+        <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+          <Phone className="h-3 w-3" />
+          {lead.customer.first_name} {lead.customer.last_name}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
         {lead.description || "No description"}
       </p>
