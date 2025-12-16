@@ -17,6 +17,7 @@ import AdminTenantsPage from "./pages/admin/AdminTenantsPage";
 import DispatchBoard from "./pages/dispatch/DispatchBoard";
 import ReportsPage from "./pages/reports/ReportsPage";
 import CustomerPortal from "./pages/portal/CustomerPortal";
+import CalendarPage from "./pages/calendar/CalendarPage";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireSuperAdmin = false }) {
