@@ -30,9 +30,9 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
-import { jobAPI, customerAPI, propertyAPI, technicianAPI } from "../../lib/api";
+import { jobAPI, customerAPI, propertyAPI, technicianAPI, dispatchAPI } from "../../lib/api";
 import { toast } from "sonner";
-import { Plus, Search, Clock, MapPin, User, Truck, Calendar } from "lucide-react";
+import { Plus, Search, Clock, MapPin, User, Truck, Calendar, UserPlus, Edit } from "lucide-react";
 
 const statusColors = {
   BOOKED: "bg-yellow-100 text-yellow-800",
@@ -51,13 +51,21 @@ const priorityColors = {
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
+  const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [showJobDetailDialog, setShowJobDetailDialog] = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null);
 
   useEffect(() => {
     fetchJobs();
+    fetchTechnicians();
+    // Polling for real-time updates
+    const interval = setInterval(fetchJobs, 30000);
+    return () => clearInterval(interval);
   }, [statusFilter]);
 
   const fetchJobs = async () => {
@@ -71,6 +79,15 @@ export default function JobsPage() {
       toast.error("Failed to load jobs");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTechnicians = async () => {
+    try {
+      const response = await technicianAPI.list();
+      setTechnicians(response.data);
+    } catch (error) {
+      console.error("Failed to load technicians");
     }
   };
 
@@ -100,6 +117,24 @@ export default function JobsPage() {
     }
   };
 
+  const handleAssignTech = async (techId) => {
+    if (!selectedJob) return;
+    try {
+      await dispatchAPI.assignJob(selectedJob.id, techId);
+      toast.success("Technician assigned!");
+      setShowAssignDialog(false);
+      setSelectedJob(null);
+      fetchJobs();
+    } catch (error) {
+      toast.error("Failed to assign technician");
+    }
+  };
+
+  const handleJobClick = (job) => {
+    setSelectedJob(job);
+    setShowJobDetailDialog(true);
+  };
+
   const filteredJobs = jobs.filter((job) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
@@ -107,7 +142,8 @@ export default function JobsPage() {
       job.customer?.first_name?.toLowerCase().includes(searchLower) ||
       job.customer?.last_name?.toLowerCase().includes(searchLower) ||
       job.property?.city?.toLowerCase().includes(searchLower) ||
-      job.job_type?.toLowerCase().includes(searchLower)
+      job.job_type?.toLowerCase().includes(searchLower) ||
+      job.technician?.name?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -134,7 +170,7 @@ export default function JobsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search jobs..."
+            placeholder="Search jobs by customer, location, tech..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -198,7 +234,12 @@ export default function JobsPage() {
             </TableHeader>
             <TableBody>
               {filteredJobs.map((job) => (
-                <TableRow key={job.id} className="table-industrial" data-testid={`job-row-${job.id}`}>
+                <TableRow 
+                  key={job.id} 
+                  className="table-industrial cursor-pointer hover:bg-muted/50" 
+                  data-testid={`job-row-${job.id}`}
+                  onClick={() => handleJobClick(job)}
+                >
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
@@ -242,16 +283,36 @@ export default function JobsPage() {
                       <span className="text-muted-foreground">-</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     {job.technician ? (
-                      <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex items-center gap-2 h-auto py-1"
+                        onClick={() => {
+                          setSelectedJob(job);
+                          setShowAssignDialog(true);
+                        }}
+                      >
                         <div className="w-6 h-6 bg-accent/10 rounded-full flex items-center justify-center">
                           <User className="h-3 w-3 text-accent" />
                         </div>
                         <span className="text-sm">{job.technician.name}</span>
-                      </div>
+                        <Edit className="h-3 w-3 text-muted-foreground" />
+                      </Button>
                     ) : (
-                      <span className="text-muted-foreground text-sm">Unassigned</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                        onClick={() => {
+                          setSelectedJob(job);
+                          setShowAssignDialog(true);
+                        }}
+                      >
+                        <UserPlus className="h-3 w-3 mr-1" />
+                        Assign
+                      </Button>
                     )}
                   </TableCell>
                   <TableCell>
@@ -259,7 +320,7 @@ export default function JobsPage() {
                       {job.status?.replace('_', ' ')}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
                       {job.status === "BOOKED" && (
                         <Button 
@@ -298,6 +359,127 @@ export default function JobsPage() {
           </Table>
         </Card>
       )}
+
+      {/* Assign Technician Dialog */}
+      <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Technician</DialogTitle>
+            <DialogDescription>
+              {selectedJob && `${selectedJob.job_type} for ${selectedJob.customer?.first_name} ${selectedJob.customer?.last_name}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            {technicians.filter(t => t.active !== false).map((tech) => (
+              <Button
+                key={tech.id}
+                variant={selectedJob?.assigned_technician_id === tech.id ? "default" : "outline"}
+                className="w-full justify-start"
+                onClick={() => handleAssignTech(tech.id)}
+              >
+                <User className="h-4 w-4 mr-2" />
+                {tech.name}
+                {tech.phone && <span className="ml-auto text-xs text-muted-foreground">{tech.phone}</span>}
+              </Button>
+            ))}
+            {selectedJob?.assigned_technician_id && (
+              <Button
+                variant="ghost"
+                className="w-full text-red-600"
+                onClick={() => handleAssignTech(null)}
+              >
+                Remove Assignment
+              </Button>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAssignDialog(false)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Job Detail Dialog */}
+      <Dialog open={showJobDetailDialog} onOpenChange={setShowJobDetailDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Job Details</DialogTitle>
+          </DialogHeader>
+          {selectedJob && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium">{selectedJob.customer?.first_name} {selectedJob.customer?.last_name}</h3>
+                  <p className="text-sm text-muted-foreground">{selectedJob.job_type}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Badge className={priorityColors[selectedJob.priority]}>{selectedJob.priority}</Badge>
+                  <Badge className={statusColors[selectedJob.status]}>{selectedJob.status}</Badge>
+                </div>
+              </div>
+              
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span>{formatDateTime(selectedJob.service_window_start)} - {formatTime(selectedJob.service_window_end)}</span>
+                </div>
+                {selectedJob.property && (
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div>
+                      <p>{selectedJob.property.address_line1}</p>
+                      <p className="text-muted-foreground">{selectedJob.property.city}, {selectedJob.property.state} {selectedJob.property.postal_code}</p>
+                    </div>
+                  </div>
+                )}
+                {selectedJob.technician && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span>Tech: {selectedJob.technician.name}</span>
+                  </div>
+                )}
+              </div>
+
+              {selectedJob.notes && (
+                <div>
+                  <p className="text-sm font-medium mb-1">Notes:</p>
+                  <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">{selectedJob.notes}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                {!selectedJob.technician && (
+                  <Button 
+                    className="flex-1"
+                    onClick={() => {
+                      setShowJobDetailDialog(false);
+                      setShowAssignDialog(true);
+                    }}
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Assign Tech
+                  </Button>
+                )}
+                {selectedJob.status === "BOOKED" && (
+                  <Button 
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      handleMarkEnRoute(selectedJob.id);
+                      setShowJobDetailDialog(false);
+                    }}
+                  >
+                    <Truck className="h-4 w-4 mr-2" />
+                    Mark En Route
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowJobDetailDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
