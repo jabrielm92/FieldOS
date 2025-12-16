@@ -48,34 +48,6 @@
 ##   blocked_features: ["List of features that can't be tested yet"]
 ##   test_all: false
 ##
-# Usage Guidelines:
-# 1. Main Agent Updates:
-#    - Update this file before calling the testing agent
-#    - Set `needs_retesting: true` for tasks that need verification
-#    - Add detailed comments in status_history
-#
-# 2. Testing Agent Updates:
-#    - Record test results in status_history
-#    - Update `working` status based on test outcomes
-#    - Increment stuck_count if the same issue persists
-# 
-# 3. Track Stuck Tasks:
-#    - Monitor which tasks have high stuck_count values or where you are fixing same issue again and again, analyze that when you read task_result.md
-#    - For persistent issues, use websearch tool to find solutions
-#    - Pay special attention to tasks in the stuck_tasks list
-#    - When you fix an issue with a stuck task, don't reset the stuck_count until the testing agent confirms it's working
-#
-# 4. Provide Context to Testing Agent:
-#    - When calling the testing agent, provide clear instructions about:
-#      - Which tasks need testing (reference the test_plan)
-#      - Any authentication details or configuration needed
-#      - Specific test scenarios to focus on
-#      - Any known issues or edge cases to verify
-#
-# 5. Call the testing agent with specific instructions referring to test_result.md
-#
-# IMPORTANT: Main agent must ALWAYS update test_result.md BEFORE calling the testing agent, as it relies on this file to understand what to test next.
-
 #====================================================================================================
 # END - Testing Protocol - DO NOT EDIT OR REMOVE THIS SECTION
 #====================================================================================================
@@ -88,130 +60,158 @@
 
 user_problem_statement: >
   FieldOS - Multi-tenant Revenue & Operations OS for field service companies.
-  Four new features being implemented:
-  1. Background Job Reminders (day-before & morning-of SMS notifications)
-  2. Tech Dispatch Board (visual job assignment UI with drag-and-drop)
-  3. Reports/Analytics page (metrics and insights)
-  4. Customer Self-Service Portal (view jobs, pay invoices, leave reviews/notes)
+  Major UI enhancements implemented:
+  1. Leads page - Click opens modal with customer info, property, create job, edit lead, status update
+  2. Jobs page - Click to assign/reassign technician, status updates
+  3. Dispatch Board - Proper labels (X Total Jobs, X Assigned, X Unassigned)
+  4. Calendar page - Full monthly calendar view showing jobs
+  5. Dashboard - All elements clickable (leads → leads page, schedule → calendar)
+  6. Customers page - Shows property address, edit all fields, add notes
+  7. Settings page - Removed Vapi/Twilio config (admin-only)
+  8. Real-time updates - 30-second polling on all pages
 
 backend:
-  - task: "Background Job Scheduler"
+  - task: "Dispatch Board API with proper data"
     implemented: true
-    working: "NA"
-    file: "/app/backend/scheduler.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Scheduler with day-before (4 PM), morning-of (7 AM) reminders implemented. Uses APScheduler with Twilio SMS."
-
-  - task: "Dispatch Board API"
-    implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
-        comment: "GET /api/v1/dispatch/board and POST /api/v1/dispatch/assign endpoints implemented"
-
-  - task: "Analytics/Reports API"
-    implemented: true
-    working: "NA"
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "GET /api/v1/analytics/overview endpoint with summary, conversion rates, daily trends, tech performance"
-
-  - task: "Customer Portal API"
-    implemented: true
-    working: "NA"
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Portal endpoints: GET /portal/{token}, POST /portal/{token}/quote/respond, POST /portal/{token}/reschedule-request, POST /portal/{token}/review, POST /portal/{token}/add-note"
+        comment: "GET /api/v1/dispatch/board returns technicians with jobs and unassigned jobs"
 
   - task: "Invoice CRUD API"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
-        comment: "Full CRUD for invoices: GET/POST /api/v1/invoices, GET/PUT /api/v1/invoices/{id}, POST /api/v1/invoices/{id}/mark-paid"
+        comment: "Full CRUD for invoices implemented"
+
+  - task: "Customer Portal Review & Notes API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "POST /portal/{token}/review and POST /portal/{token}/add-note endpoints"
 
 frontend:
-  - task: "Dispatch Board UI"
+  - task: "Leads Page Modal"
     implemented: true
-    working: "NA"
+    working: true
+    file: "/app/frontend/src/pages/leads/LeadsPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Click lead opens modal with customer info, property, messages, Create Job button, Edit Lead button, status update buttons"
+
+  - task: "Jobs Page with Tech Assignment"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/jobs/JobsPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Tech column shows assigned tech with edit icon, clicking opens assign dialog. Unassigned shows Assign button"
+
+  - task: "Dispatch Board Labels"
+    implemented: true
+    working: true
     file: "/app/frontend/src/pages/dispatch/DispatchBoard.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
-        comment: "Drag-and-drop dispatch board with technician columns, date picker, job cards with priority indicators"
+        comment: "Stats header shows Total Jobs, Assigned, Unassigned with proper counts and icons"
 
-  - task: "Reports/Analytics UI"
-    implemented: true
-    working: "NA"
-    file: "/app/frontend/src/pages/reports/ReportsPage.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Full analytics page with KPI cards, conversion rates, line/bar/pie charts using Recharts"
-
-  - task: "Customer Portal UI"
-    implemented: true
-    working: "NA"
-    file: "/app/frontend/src/pages/portal/CustomerPortal.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Portal page with upcoming/past appointments, pending invoices, quotes, reviews (star rating), send message/note feature"
-
-  - task: "Route and Navigation Updates"
+  - task: "Calendar Page"
     implemented: true
     working: true
-    file: "/app/frontend/src/App.js, /app/frontend/src/components/layout/Sidebar.js"
+    file: "/app/frontend/src/pages/calendar/CalendarPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Full monthly calendar with jobs displayed as colored blocks, clickable for details"
+
+  - task: "Dashboard Clickable Elements"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/dashboard/DashboardPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "All metric cards clickable, Today's Schedule → Calendar, Recent Leads → Leads page, Quick Actions"
+
+  - task: "Customers Page with Edit & Notes"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/customers/CustomersPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Click customer opens modal with edit contact info, properties list, add property, notes section"
+
+  - task: "Settings Page (Simplified)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/settings/SettingsPage.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
       - working: true
         agent: "main"
-        comment: "Routes added for /dispatch, /reports, /portal/:token. Sidebar updated with Dispatch and Reports links. Verified via screenshots."
+        comment: "Removed Vapi/Twilio sections, kept Company Info, Messaging Style, Scheduling, Team settings"
+
+  - task: "Route and Navigation Updates"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Calendar route added, all routes working"
 
 metadata:
   created_by: "main_agent"
-  version: "2.0"
-  test_sequence: 3
+  version: "3.0"
+  test_sequence: 4
   run_ui: true
 
 test_plan:
-  current_focus: "Test all 4 new features: Dispatch Board, Reports, Customer Portal, and Background Reminders"
+  current_focus: "Test all UI enhancements: Leads modal, Jobs tech assignment, Dispatch labels, Calendar, Dashboard clicks, Customer edit/notes"
   blocked_features: []
   test_all: true
 
