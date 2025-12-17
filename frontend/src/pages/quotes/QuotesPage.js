@@ -799,6 +799,35 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
+            {/* Import from Lead */}
+            {leads.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Import from Lead/Vapi Call (optional)
+                </Label>
+                <Select value={formData.lead_id || "none"} onValueChange={(v) => setFormData({...formData, lead_id: v === "none" ? "" : v})}>
+                  <SelectTrigger><SelectValue placeholder="Select lead to import" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Don't import</SelectItem>
+                    {leads.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.source === "VAPI_CALL" ? "📞 " : "📝 "}
+                        {l.customer?.first_name || l.caller_name || "Unknown"} - {l.issue_type || l.description?.substring(0, 30)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedLeadData && (
+                  <p className="text-xs text-muted-foreground">
+                    ✓ Lead data imported. Customer and description auto-filled.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <Separator />
+
             <div className="space-y-2">
               <Label>Customer *</Label>
               <Select value={formData.customer_id} onValueChange={(v) => setFormData({...formData, customer_id: v, property_id: ""})}>
