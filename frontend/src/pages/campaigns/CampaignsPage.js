@@ -638,7 +638,7 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
     name: "",
     type: "REACTIVATION",
     message_template: "",
-    segment_definition: "",
+    segment_definition: null,
     status: "DRAFT",
   });
   const [loading, setLoading] = useState(false);
@@ -651,9 +651,9 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
   };
 
   const segmentPresets = {
-    REACTIVATION: '{"lastServiceDaysAgo": ">180", "hasActiveService": false}',
-    TUNEUP: '{"lastMaintenanceDaysAgo": ">300", "propertyType": "RESIDENTIAL"}',
-    SPECIAL_OFFER: '{"totalJobsCompleted": ">0", "status": "active"}',
+    REACTIVATION: { lastServiceDaysAgo: ">180", hasActiveService: false },
+    TUNEUP: { lastMaintenanceDaysAgo: ">300", propertyType: "RESIDENTIAL" },
+    SPECIAL_OFFER: { totalJobsCompleted: ">0", status: "active" },
   };
 
   const handleTypeChange = (type) => {
@@ -670,14 +670,22 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
     setLoading(true);
 
     try {
-      await campaignAPI.create(formData);
+      // Ensure segment_definition is sent as an object, not a string
+      const payload = {
+        ...formData,
+        segment_definition: typeof formData.segment_definition === 'string' 
+          ? (formData.segment_definition ? JSON.parse(formData.segment_definition) : null)
+          : formData.segment_definition || null,
+      };
+      await campaignAPI.create(payload);
       toast.success("Campaign created successfully");
       onOpenChange(false);
-      setFormData({ name: "", type: "REACTIVATION", message_template: "", segment_definition: "", status: "DRAFT" });
+      setFormData({ name: "", type: "REACTIVATION", message_template: "", segment_definition: null, status: "DRAFT" });
       setStep(1);
       onSuccess();
     } catch (error) {
-      toast.error("Failed to create campaign");
+      console.error("Campaign creation error:", error);
+      toast.error(error.response?.data?.detail || "Failed to create campaign");
     } finally {
       setLoading(false);
     }
