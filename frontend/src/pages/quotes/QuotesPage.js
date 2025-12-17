@@ -652,6 +652,7 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
     customer_id: "",
     property_id: "",
     job_id: "",
+    lead_id: "",
     amount: "",
     description: "",
     status: "DRAFT",
@@ -659,12 +660,15 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
   const [customers, setCustomers] = useState([]);
   const [properties, setProperties] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [selectedLeadData, setSelectedLeadData] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
       fetchCustomers();
       fetchJobs();
+      fetchLeads();
     }
   }, [open]);
 
@@ -673,6 +677,14 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
       fetchProperties(formData.customer_id);
     }
   }, [formData.customer_id]);
+
+  useEffect(() => {
+    if (formData.lead_id) {
+      fetchLeadDetails(formData.lead_id);
+    } else {
+      setSelectedLeadData(null);
+    }
+  }, [formData.lead_id]);
 
   const fetchCustomers = async () => {
     try {
@@ -698,6 +710,58 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
       setJobs(response.data);
     } catch (error) {
       console.error("Failed to load jobs");
+    }
+  };
+
+  const fetchLeads = async () => {
+    try {
+      const response = await leadAPI.list();
+      // Filter to leads that have booked jobs or are qualified
+      setLeads(response.data.filter(l => l.status === "JOB_BOOKED" || l.status === "QUALIFIED"));
+    } catch (error) {
+      console.error("Failed to load leads");
+    }
+  };
+
+  const fetchLeadDetails = async (leadId) => {
+    try {
+      const response = await leadAPI.getWithConversation(leadId);
+      setSelectedLeadData(response.data);
+      
+      // Auto-fill customer if linked
+      if (response.data.customer_id) {
+        setFormData(prev => ({
+          ...prev,
+          customer_id: response.data.customer_id,
+        }));
+      }
+      
+      // Build description from lead data and conversation
+      let desc = "";
+      if (response.data.issue_type) {
+        desc += `Issue: ${response.data.issue_type}\n`;
+      }
+      if (response.data.description) {
+        desc += `Description: ${response.data.description}\n`;
+      }
+      if (response.data.urgency) {
+        desc += `Urgency: ${response.data.urgency}\n`;
+      }
+      
+      // Add Vapi call summary if available
+      const callSummary = response.data.messages?.find(m => m.is_call_summary);
+      if (callSummary) {
+        desc += `\n--- Vapi Call Summary ---\n${callSummary.content}`;
+      }
+      
+      if (desc) {
+        setFormData(prev => ({
+          ...prev,
+          description: desc.trim(),
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to load lead details");
     }
   };
 
