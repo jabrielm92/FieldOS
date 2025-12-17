@@ -316,9 +316,17 @@ export default function ReportsPage() {
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={techPerformance}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="technician_name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
+                  <XAxis 
+                    dataKey="technician_name" 
+                    tick={{ fontSize: 12 }} 
+                    label={{ value: 'Technician', position: 'insideBottom', offset: -5, fontSize: 11, fill: '#6b7280' }}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }} 
+                    label={{ value: 'Jobs Completed', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#6b7280' }}
+                  />
+                  <Tooltip formatter={(value) => [`${value} jobs`, 'Completed']} />
+                  <Legend wrapperStyle={{ paddingTop: '10px' }} />
                   <Bar dataKey="completed_jobs" fill="#22C55E" radius={[4, 4, 0, 0]} name="Completed Jobs" />
                 </BarChart>
               </ResponsiveContainer>
