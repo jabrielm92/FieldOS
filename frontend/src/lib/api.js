@@ -75,6 +75,7 @@ export const leadAPI = {
   get: (id) => api.get(`/leads/${id}`),
   create: (data) => api.post('/leads', data),
   update: (id, data) => api.put(`/leads/${id}`, data),
+  delete: (id) => api.delete(`/leads/${id}`),
 };
 
 // Job APIs
