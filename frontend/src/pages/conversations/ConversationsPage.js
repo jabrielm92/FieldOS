@@ -134,12 +134,36 @@ export default function ConversationsPage() {
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
+  const handleStartNewConversation = async (customerId) => {
+    // Check if conversation already exists for this customer
+    const existing = conversations.find(c => c.customer_id === customerId);
+    if (existing) {
+      setSelectedConv(existing);
+      setShowNewConvDialog(false);
+      return;
+    }
+    
+    // For now, we'll just show a toast since we need to send the first message
+    // to create the conversation
+    const customer = customers.find(c => c.id === customerId);
+    if (customer) {
+      toast.info(`Select "${customer.first_name} ${customer.last_name}" and send a message to start a conversation`);
+    }
+    setShowNewConvDialog(false);
+  };
+
   return (
     <Layout title="Inbox" subtitle="SMS conversations with customers">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-12rem)]">
         {/* Conversations List */}
         <Card className="lg:col-span-1 flex flex-col">
-          <CardHeader className="pb-3 border-b">
+          <CardHeader className="pb-3 border-b space-y-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-heading">Conversations</CardTitle>
+              <Button size="sm" variant="outline" onClick={() => fetchConversations()}>
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
