@@ -1459,15 +1459,17 @@ async def vapi_create_lead(
     conv_dict["updated_at"] = conv_dict["updated_at"].isoformat()
     await db.conversations.insert_one(conv_dict)
     
-    # Return clear response for Vapi
+    # Return clear response for Vapi - structured for AI to understand
     first_name = customer.get("first_name", "there")
     return {
-        "success": True,
+        "result": "success",
+        "status": "lead_created",
         "lead_id": lead.id,
         "customer_id": customer["id"],
         "property_id": property_id,
         "conversation_id": conv.id,
-        "message": f"Lead created successfully for {first_name}. Customer ID is {customer['id']}, property ID is {property_id or 'not provided'}, and lead ID is {lead.id}. You can now check availability and book a job using these IDs."
+        "customer_name": first_name,
+        "instructions": f"IMPORTANT: The lead has been successfully created in the system. The customer {first_name} is now registered. Their customer ID is {customer['id']}. You should now ask the customer what date they would like to schedule their service appointment, then call the check-availability tool with that date."
     }
 
 
