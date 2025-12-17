@@ -653,6 +653,19 @@ async def update_lead(
     return serialize_doc(lead)
 
 
+@v1_router.delete("/leads/{lead_id}")
+async def delete_lead(
+    lead_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a lead"""
+    result = await db.leads.delete_one({"id": lead_id, "tenant_id": tenant_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"success": True, "message": "Lead deleted"}
+
+
 # ============= JOBS ENDPOINTS =============
 
 @v1_router.get("/jobs")
