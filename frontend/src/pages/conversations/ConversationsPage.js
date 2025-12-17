@@ -5,10 +5,26 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import { ScrollArea } from "../../components/ui/scroll-area";
-import { conversationAPI } from "../../lib/api";
+import { conversationAPI, customerAPI } from "../../lib/api";
 import { toast } from "sonner";
-import { Search, Send, Phone, MessageSquare, User, Bot, Clock } from "lucide-react";
+import { Search, Send, Phone, MessageSquare, User, Bot, Clock, PhoneIncoming, PhoneOutgoing, RefreshCw, Plus } from "lucide-react";
 import { cn } from "../../lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
+import { Label } from "../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState([]);
