@@ -256,12 +256,20 @@ function LeadCard({ lead, formatDate, onClick }) {
         </div>
         
         {/* Customer Info */}
-        {lead.customer && (
-          <div className="flex items-center gap-2 mb-2 text-sm">
-            <User className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>{lead.customer.first_name} {lead.customer.last_name}</span>
-          </div>
-        )}
+        <div className="space-y-1 mb-2">
+          {(lead.caller_name || lead.customer) && (
+            <div className="flex items-center gap-2 text-sm">
+              <User className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{lead.caller_name || (lead.customer ? `${lead.customer.first_name} ${lead.customer.last_name}` : "Unknown")}</span>
+            </div>
+          )}
+          {(lead.caller_phone || lead.customer?.phone) && (
+            <div className="flex items-center gap-2 text-sm">
+              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{lead.caller_phone || lead.customer?.phone}</span>
+            </div>
+          )}
+        </div>
         
         <p className="text-sm text-muted-foreground line-clamp-2 mb-4 min-h-[2.5rem]">
           {lead.description || "No description provided"}
