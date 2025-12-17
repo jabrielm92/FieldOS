@@ -90,11 +90,20 @@ export default function CampaignsPage() {
 
   const handleStatusChange = async (campaign, newStatus) => {
     try {
-      await campaignAPI.update(campaign.id, { ...campaign, status: newStatus });
+      // Only send fields that are in CampaignCreate model
+      const payload = {
+        name: campaign.name,
+        type: campaign.type,
+        status: newStatus,
+        message_template: campaign.message_template || null,
+        segment_definition: campaign.segment_definition || null,
+      };
+      await campaignAPI.update(campaign.id, payload);
       toast.success(`Campaign ${newStatus === "RUNNING" ? "started" : newStatus.toLowerCase()}`);
       fetchCampaigns();
     } catch (error) {
-      toast.error("Failed to update campaign");
+      console.error("Campaign update error:", error);
+      toast.error(error.response?.data?.detail || "Failed to update campaign");
     }
   };
 
