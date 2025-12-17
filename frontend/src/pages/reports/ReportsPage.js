@@ -199,10 +199,14 @@ export default function ReportsPage() {
                     const d = new Date(val);
                     return `${d.getMonth()+1}/${d.getDate()}`;
                   }}
+                  label={{ value: 'Date', position: 'insideBottom', offset: -5, fontSize: 11, fill: '#6b7280' }}
                 />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Legend />
+                <YAxis 
+                  tick={{ fontSize: 12 }} 
+                  label={{ value: 'Count', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#6b7280' }}
+                />
+                <Tooltip formatter={(value, name) => [value, name]} />
+                <Legend wrapperStyle={{ paddingTop: '10px' }} />
                 <Line 
                   type="monotone" 
                   dataKey="leads" 
