@@ -1399,86 +1399,86 @@ async def vapi_create_lead(
         customer = await db.customers.find_one(
             {"phone": phone, "tenant_id": tenant_id}, {"_id": 0}
         )
-    
-    if not customer:
-        # Parse name
-        first_name = "Unknown"
-        last_name = ""
-        if name:
-            parts = name.split(" ", 1)
-            first_name = parts[0]
-            last_name = parts[1] if len(parts) > 1 else ""
         
-        customer = Customer(
-            tenant_id=tenant_id,
-            first_name=first_name,
-            last_name=last_name,
-            phone=phone,
-            email=data.captured_email
-        )
-        customer_dict = customer.model_dump()
-        customer_dict["created_at"] = customer_dict["created_at"].isoformat()
-        customer_dict["updated_at"] = customer_dict["updated_at"].isoformat()
-        await db.customers.insert_one(customer_dict)
-        customer = customer_dict
-    
-    # Create property if address provided
-    property_id = None
-    if address_line1:
-        prop = Property(
+        if not customer:
+            # Parse name
+            first_name = "Unknown"
+            last_name = ""
+            if name:
+                parts = name.split(" ", 1)
+                first_name = parts[0]
+                last_name = parts[1] if len(parts) > 1 else ""
+            
+            customer = Customer(
+                tenant_id=tenant_id,
+                first_name=first_name,
+                last_name=last_name,
+                phone=phone,
+                email=data.captured_email
+            )
+            customer_dict = customer.model_dump()
+            customer_dict["created_at"] = customer_dict["created_at"].isoformat()
+            customer_dict["updated_at"] = customer_dict["updated_at"].isoformat()
+            await db.customers.insert_one(customer_dict)
+            customer = customer_dict
+        
+        # Create property if address provided
+        property_id = None
+        if address_line1:
+            prop = Property(
+                tenant_id=tenant_id,
+                customer_id=customer["id"],
+                address_line1=address_line1,
+                city=city or "",
+                state=state or "",
+                postal_code=postal_code or ""
+            )
+            prop_dict = prop.model_dump()
+            prop_dict["created_at"] = prop_dict["created_at"].isoformat()
+            prop_dict["updated_at"] = prop_dict["updated_at"].isoformat()
+            await db.properties.insert_one(prop_dict)
+            property_id = prop.id
+        
+        # Create lead
+        urgency_value = Urgency.ROUTINE
+        if data.urgency:
+            try:
+                urgency_value = Urgency(data.urgency.upper())
+            except ValueError:
+                pass
+        
+        lead = Lead(
             tenant_id=tenant_id,
             customer_id=customer["id"],
-            address_line1=address_line1,
-            city=city or "",
-            state=state or "",
-            postal_code=postal_code or ""
+            property_id=property_id,
+            source=LeadSource.VAPI_CALL,
+            channel=LeadChannel.VOICE,
+            status=LeadStatus.NEW,
+            issue_type=issue_type,
+            urgency=urgency_value,
+            description=description
         )
-        prop_dict = prop.model_dump()
-        prop_dict["created_at"] = prop_dict["created_at"].isoformat()
-        prop_dict["updated_at"] = prop_dict["updated_at"].isoformat()
-        await db.properties.insert_one(prop_dict)
-        property_id = prop.id
-    
-    # Create lead
-    urgency_value = Urgency.ROUTINE
-    if data.urgency:
-        try:
-            urgency_value = Urgency(data.urgency.upper())
-        except ValueError:
-            pass
-    
-    lead = Lead(
-        tenant_id=tenant_id,
-        customer_id=customer["id"],
-        property_id=property_id,
-        source=LeadSource.VAPI_CALL,
-        channel=LeadChannel.VOICE,
-        status=LeadStatus.NEW,
-        issue_type=issue_type,
-        urgency=urgency_value,
-        description=description
-    )
-    lead_dict = lead.model_dump()
-    lead_dict["caller_name"] = name  # Store caller name directly on lead
-    lead_dict["caller_phone"] = phone  # Store caller phone directly on lead
-    lead_dict["created_at"] = lead_dict["created_at"].isoformat()
-    lead_dict["updated_at"] = lead_dict["updated_at"].isoformat()
-    lead_dict["first_contact_at"] = lead_dict["first_contact_at"].isoformat()
-    lead_dict["last_activity_at"] = lead_dict["last_activity_at"].isoformat()
-    await db.leads.insert_one(lead_dict)
-    
-    # Create conversation
-    conv = Conversation(
-        tenant_id=tenant_id,
-        customer_id=customer["id"],
-        lead_id=lead.id,
-        primary_channel=PreferredChannel.SMS
-    )
-    conv_dict = conv.model_dump()
-    conv_dict["created_at"] = conv_dict["created_at"].isoformat()
-    conv_dict["updated_at"] = conv_dict["updated_at"].isoformat()
-    await db.conversations.insert_one(conv_dict)
-    
+        lead_dict = lead.model_dump()
+        lead_dict["caller_name"] = name  # Store caller name directly on lead
+        lead_dict["caller_phone"] = phone  # Store caller phone directly on lead
+        lead_dict["created_at"] = lead_dict["created_at"].isoformat()
+        lead_dict["updated_at"] = lead_dict["updated_at"].isoformat()
+        lead_dict["first_contact_at"] = lead_dict["first_contact_at"].isoformat()
+        lead_dict["last_activity_at"] = lead_dict["last_activity_at"].isoformat()
+        await db.leads.insert_one(lead_dict)
+        
+        # Create conversation
+        conv = Conversation(
+            tenant_id=tenant_id,
+            customer_id=customer["id"],
+            lead_id=lead.id,
+            primary_channel=PreferredChannel.SMS
+        )
+        conv_dict = conv.model_dump()
+        conv_dict["created_at"] = conv_dict["created_at"].isoformat()
+        conv_dict["updated_at"] = conv_dict["updated_at"].isoformat()
+        await db.conversations.insert_one(conv_dict)
+        
         # Return clear response for Vapi - structured for AI to understand
         first_name = customer.get("first_name", "there")
         return {
