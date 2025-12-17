@@ -286,7 +286,7 @@ function LeadCard({ lead, formatDate, onClick }) {
   );
 }
 
-function LeadDetailModal({ lead, open, onOpenChange, onUpdate }) {
+function LeadDetailModal({ lead, open, onOpenChange, onUpdate, onDelete }) {
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [showEditLead, setShowEditLead] = useState(false);
   const [properties, setProperties] = useState([]);
