@@ -61,7 +61,48 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showJobModal, setShowJobModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [customers, setCustomers] = useState([]);
+  const [technicians, setTechnicians] = useState([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchCustomers();
+    fetchTechnicians();
+  }, []);
+
+  const fetchCustomers = async () => {
+    try {
+      const response = await customerAPI.list();
+      setCustomers(response.data);
+    } catch (error) {
+      console.error("Failed to load customers");
+    }
+  };
+
+  const fetchTechnicians = async () => {
+    try {
+      const response = await technicianAPI.list();
+      setTechnicians(response.data);
+    } catch (error) {
+      console.error("Failed to load technicians");
+    }
+  };
+
+  const handleDayClick = (day) => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    setSelectedDate(new Date(year, month, day));
+    setShowCreateModal(true);
+  };
+
+  const handleEditJob = (job) => {
+    setSelectedJob(job);
+    setShowJobModal(false);
+    setShowEditModal(true);
+  };
 
   useEffect(() => {
     fetchJobs();
