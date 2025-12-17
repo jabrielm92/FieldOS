@@ -64,6 +64,20 @@ export default function LeadsPage() {
     return () => clearInterval(interval);
   }, [statusFilter, sourceFilter]);
 
+  // Check URL param to open specific lead modal
+  useEffect(() => {
+    const openLeadId = searchParams.get('open');
+    if (openLeadId && leads.length > 0) {
+      const lead = leads.find(l => l.id === openLeadId);
+      if (lead) {
+        setSelectedLead(lead);
+        setShowLeadModal(true);
+        // Clear the URL param
+        setSearchParams({});
+      }
+    }
+  }, [leads, searchParams]);
+
   const fetchLeads = async () => {
     try {
       const filters = {};
@@ -82,6 +96,18 @@ export default function LeadsPage() {
   const handleLeadClick = (lead) => {
     setSelectedLead(lead);
     setShowLeadModal(true);
+  };
+
+  const handleDeleteLead = async (leadId) => {
+    if (!window.confirm("Are you sure you want to delete this lead?")) return;
+    try {
+      await leadAPI.delete(leadId);
+      toast.success("Lead deleted");
+      fetchLeads();
+      setShowLeadModal(false);
+    } catch (error) {
+      toast.error("Failed to delete lead");
+    }
   };
 
   const filteredLeads = leads.filter((lead) => {
