@@ -34,11 +34,26 @@ export default function ConversationsPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [search, setSearch] = useState("");
+  const [showNewConvDialog, setShowNewConvDialog] = useState(false);
+  const [customers, setCustomers] = useState([]);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     fetchConversations();
+    fetchCustomers();
+    // Poll for new messages every 15 seconds
+    const interval = setInterval(fetchConversations, 15000);
+    return () => clearInterval(interval);
   }, []);
+
+  const fetchCustomers = async () => {
+    try {
+      const response = await customerAPI.list();
+      setCustomers(response.data);
+    } catch (error) {
+      console.error("Failed to load customers");
+    }
+  };
 
   useEffect(() => {
     if (selectedConv) {
