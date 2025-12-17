@@ -1626,20 +1626,22 @@ async def vapi_book_job(
             from_phone=tenant["twilio_phone_number"]
         )
     
-    # Format confirmation for Vapi
+    # Format confirmation for Vapi - structured for AI to understand
     window_date = window_start.strftime("%A, %B %d")
     window_time_str = f"{window_start.strftime('%I:%M %p')} to {window_end.strftime('%I:%M %p')}"
+    customer_name = customer.get("first_name", "Customer")
     
     return {
-        "success": True,
+        "result": "success",
+        "status": "job_booked",
         "job_id": job.id,
-        "message": f"Great news! The appointment has been successfully booked for {window_date} between {window_time_str}. The customer will receive a confirmation text message. Job ID is {job.id}.",
-        "confirmation": {
+        "booking_details": {
             "date": window_date,
             "time_window": window_time_str,
-            "customer_name": customer.get("first_name", "Customer")
+            "customer_name": customer_name
         },
-        "next_step": "Confirm with the customer that their appointment is booked and let them know they will receive a text confirmation."
+        "sms_sent": True,
+        "instructions": f"IMPORTANT: The appointment has been SUCCESSFULLY BOOKED! Tell {customer_name} the following: Their service appointment is confirmed for {window_date} between {window_time_str}. They will receive a confirmation text message shortly. Ask if there's anything else you can help them with, then thank them for calling and end the call politely."
     }
 
 
