@@ -1739,35 +1739,65 @@ async def vapi_call_summary(
 
 # ============= INBOUND SMS WEBHOOK =============
 
+def normalize_phone(phone: str) -> str:
+    """Normalize phone number to +1XXXXXXXXXX format"""
+    if not phone:
+        return ""
+    # Remove all non-digit characters
+    digits = ''.join(c for c in phone if c.isdigit())
+    # Add country code if missing
+    if len(digits) == 10:
+        digits = '1' + digits
+    # Add + prefix
+    return '+' + digits if digits else ""
+
 @v1_router.post("/sms/inbound")
 async def sms_inbound(request: Request):
     """Handle inbound SMS from Twilio webhook"""
     form_data = await request.form()
     
-    from_phone = form_data.get("From", "")
-    to_phone = form_data.get("To", "")
+    from_phone_raw = form_data.get("From", "")
+    to_phone_raw = form_data.get("To", "")
     body = form_data.get("Body", "")
+    
+    # Normalize phone numbers
+    from_phone = normalize_phone(from_phone_raw)
+    to_phone = normalize_phone(to_phone_raw)
     
     logger.info(f"Inbound SMS from {from_phone} to {to_phone}: {body[:50]}...")
     
-    # Find tenant by Twilio phone number
+    # Find tenant by Twilio phone number (try both normalized and raw)
     tenant = await db.tenants.find_one({"twilio_phone_number": to_phone}, {"_id": 0})
     if not tenant:
-        # Try without formatting
-        cleaned_to = ''.join(c for c in to_phone if c.isdigit())
-        tenant = await db.tenants.find_one({}, {"_id": 0})  # Fallback to first tenant
+        tenant = await db.tenants.find_one({"twilio_phone_number": to_phone_raw}, {"_id": 0})
+    if not tenant:
+        # Fallback to first tenant for this deployment
+        tenant = await db.tenants.find_one({}, {"_id": 0})
         if not tenant:
             logger.error(f"No tenant found for number {to_phone}")
             return {"status": "no_tenant"}
     
     tenant_id = tenant["id"]
     
-    # Find or create customer
+    # Find customer by phone (try multiple formats)
     customer = await db.customers.find_one(
         {"phone": from_phone, "tenant_id": tenant_id}, {"_id": 0}
     )
+    if not customer:
+        # Try with raw phone
+        customer = await db.customers.find_one(
+            {"phone": from_phone_raw, "tenant_id": tenant_id}, {"_id": 0}
+        )
+    if not customer:
+        # Try regex match on last 10 digits
+        phone_digits = ''.join(c for c in from_phone if c.isdigit())[-10:]
+        if phone_digits:
+            customer = await db.customers.find_one(
+                {"phone": {"$regex": phone_digits}, "tenant_id": tenant_id}, {"_id": 0}
+            )
     
     if not customer:
+        # Create new customer with normalized phone
         customer = Customer(
             tenant_id=tenant_id,
             first_name="Unknown",
@@ -1779,6 +1809,7 @@ async def sms_inbound(request: Request):
         customer_dict["updated_at"] = customer_dict["updated_at"].isoformat()
         await db.customers.insert_one(customer_dict)
         customer = customer_dict
+        logger.info(f"Created new customer for phone {from_phone}")
     
     # Find or create conversation
     conv = await db.conversations.find_one(
