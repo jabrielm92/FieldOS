@@ -222,6 +222,7 @@ export default function LeadsPage() {
         open={showLeadModal}
         onOpenChange={setShowLeadModal}
         onUpdate={fetchLeads}
+        onDelete={handleDeleteLead}
       />
     </Layout>
   );
