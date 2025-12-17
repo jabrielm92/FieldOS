@@ -430,22 +430,13 @@ function CustomerDetailDialog({ open, onOpenChange, customer, onUpdate }) {
             ) : (
               <div className="space-y-3">
                 {properties.map((prop, idx) => (
-                  <div key={prop.id || idx} className="bg-background rounded-lg p-3 border">
-                    <div className="flex items-start gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <div className="flex-1">
-                        <p className="font-medium">{prop.address_line1}</p>
-                        {prop.address_line2 && <p className="text-sm text-muted-foreground">{prop.address_line2}</p>}
-                        <p className="text-sm text-muted-foreground">
-                          {prop.city}, {prop.state} {prop.postal_code}
-                        </p>
-                        <div className="flex gap-2 mt-2">
-                          <Badge variant="outline">{prop.property_type}</Badge>
-                          {prop.system_type && <Badge variant="secondary">{prop.system_type}</Badge>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <PropertyCard 
+                    key={prop.id || idx} 
+                    property={prop}
+                    onUpdate={() => {
+                      propertyAPI.list(customer.id).then(res => setProperties(res.data));
+                    }}
+                  />
                 ))}
               </div>
             )}
