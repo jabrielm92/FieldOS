@@ -559,12 +559,12 @@ function CreateJobModal({ open, onOpenChange, selectedDate, customers, technicia
 
           <div className="space-y-2">
             <Label>Assign Technician</Label>
-            <Select value={formData.assigned_technician_id} onValueChange={(v) => setFormData({...formData, assigned_technician_id: v})}>
+            <Select value={formData.assigned_technician_id || "unassigned"} onValueChange={(v) => setFormData({...formData, assigned_technician_id: v === "unassigned" ? "" : v})}>
               <SelectTrigger>
                 <SelectValue placeholder="Unassigned" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Unassigned</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
                 {technicians.filter(t => t.active !== false).map(t => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
@@ -732,12 +732,12 @@ function EditJobModal({ open, onOpenChange, job, technicians, onSuccess }) {
 
           <div className="space-y-2">
             <Label>Assign Technician</Label>
-            <Select value={formData.assigned_technician_id} onValueChange={(v) => setFormData({...formData, assigned_technician_id: v})}>
+            <Select value={formData.assigned_technician_id || "unassigned"} onValueChange={(v) => setFormData({...formData, assigned_technician_id: v === "unassigned" ? "" : v})}>
               <SelectTrigger>
                 <SelectValue placeholder="Unassigned" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Unassigned</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
                 {technicians.filter(t => t.active !== false).map(t => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
