@@ -757,3 +757,151 @@ function AddPropertyDialog({ open, onOpenChange, customer, onSuccess }) {
     </Dialog>
   );
 }
+
+function PropertyCard({ property, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [formData, setFormData] = useState({
+    address_line1: property.address_line1 || "",
+    address_line2: property.address_line2 || "",
+    city: property.city || "",
+    state: property.state || "",
+    postal_code: property.postal_code || "",
+    property_type: property.property_type || "RESIDENTIAL",
+    system_type: property.system_type || "",
+    notes: property.notes || "",
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await propertyAPI.update(property.id, {
+        customer_id: property.customer_id,
+        ...formData,
+      });
+      toast.success("Property updated!");
+      setEditing(false);
+      onUpdate();
+    } catch (error) {
+      toast.error("Failed to update property");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="bg-background rounded-lg p-4 border space-y-3">
+        <div className="flex items-center justify-between">
+          <h5 className="font-medium text-sm">Edit Property</h5>
+          <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Address Line 1</Label>
+            <Input
+              value={formData.address_line1}
+              onChange={(e) => setFormData({...formData, address_line1: e.target.value})}
+              placeholder="123 Main St"
+            />
+          </div>
+          
+          <div className="space-y-1">
+            <Label className="text-xs">Address Line 2</Label>
+            <Input
+              value={formData.address_line2}
+              onChange={(e) => setFormData({...formData, address_line2: e.target.value})}
+              placeholder="Apt 4B"
+            />
+          </div>
+          
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">City</Label>
+              <Input
+                value={formData.city}
+                onChange={(e) => setFormData({...formData, city: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">State</Label>
+              <Input
+                value={formData.state}
+                onChange={(e) => setFormData({...formData, state: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">ZIP</Label>
+              <Input
+                value={formData.postal_code}
+                onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
+              />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Property Type</Label>
+              <Select 
+                value={formData.property_type} 
+                onValueChange={(v) => setFormData({...formData, property_type: v})}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="RESIDENTIAL">Residential</SelectItem>
+                  <SelectItem value="COMMERCIAL">Commercial</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">System Type</Label>
+              <Input
+                value={formData.system_type}
+                onChange={(e) => setFormData({...formData, system_type: e.target.value})}
+                placeholder="e.g., Gas Furnace + AC"
+              />
+            </div>
+          </div>
+          
+          <div className="flex gap-2 pt-2">
+            <Button size="sm" onClick={handleSave} disabled={loading}>
+              <Save className="h-3 w-3 mr-1" />
+              {loading ? "Saving..." : "Save"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-background rounded-lg p-3 border">
+      <div className="flex items-start gap-2">
+        <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+        <div className="flex-1">
+          <p className="font-medium">{property.address_line1}</p>
+          {property.address_line2 && <p className="text-sm text-muted-foreground">{property.address_line2}</p>}
+          <p className="text-sm text-muted-foreground">
+            {property.city}, {property.state} {property.postal_code}
+          </p>
+          <div className="flex gap-2 mt-2">
+            <Badge variant="outline">{property.property_type}</Badge>
+            {property.system_type && <Badge variant="secondary">{property.system_type}</Badge>}
+          </div>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+          <Edit className="h-3 w-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
