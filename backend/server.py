@@ -417,6 +417,33 @@ async def update_customer(
     return serialize_doc(customer)
 
 
+@v1_router.delete("/customers/{customer_id}")
+async def delete_customer(
+    customer_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a customer and their related data"""
+    # Check if customer exists
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": tenant_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Delete related data
+    await db.properties.delete_many({"customer_id": customer_id})
+    await db.leads.delete_many({"customer_id": customer_id})
+    await db.jobs.delete_many({"customer_id": customer_id})
+    await db.conversations.delete_many({"customer_id": customer_id})
+    await db.messages.delete_many({"customer_id": customer_id})
+    await db.quotes.delete_many({"customer_id": customer_id})
+    await db.invoices.delete_many({"customer_id": customer_id})
+    
+    # Delete customer
+    await db.customers.delete_one({"id": customer_id})
+    
+    return {"success": True, "message": "Customer and all related data deleted"}
+
+
 # ============= PROPERTIES ENDPOINTS =============
 
 @v1_router.get("/properties")
