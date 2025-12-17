@@ -1354,15 +1354,19 @@ async def vapi_create_lead(
     _: bool = Depends(verify_vapi_secret)
 ):
     """Create lead from Vapi call"""
-    # Get tenant by slug
-    tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    tenant_id = tenant["id"]
-    
-    # Resolve field aliases (support both old Make.com names and new names)
-    phone = data.caller_phone or data.caller_number
+    try:
+        logger.info(f"Vapi create-lead called with data: {data.model_dump()}")
+        
+        # Get tenant by slug
+        tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
+        if not tenant:
+            logger.error(f"Tenant not found: {data.tenant_slug}")
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        
+        tenant_id = tenant["id"]
+        
+        # Resolve field aliases (support both old Make.com names and new names)
+        phone = data.caller_phone or data.caller_number
     name = data.caller_name or data.captured_name
     description = data.description or data.issue_description
     issue_type = data.issue_type or data.issue_description  # Use issue_description as issue_type if not provided
