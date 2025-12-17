@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Layout } from "../../components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -27,7 +28,7 @@ import { leadAPI, jobAPI, customerAPI, propertyAPI, conversationAPI } from "../.
 import { toast } from "sonner";
 import { 
   Plus, Search, Phone, Mail, Clock, AlertTriangle, User, MapPin,
-  Briefcase, MessageSquare, Edit, X, ChevronRight, Calendar
+  Briefcase, MessageSquare, Edit, X, ChevronRight, Calendar, Trash2
 } from "lucide-react";
 
 const statusColors = {
