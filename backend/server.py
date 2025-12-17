@@ -588,7 +588,21 @@ async def list_leads(
         query["urgency"] = urgency
     
     leads = await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return serialize_docs(leads)
+    
+    # Enrich leads with customer data
+    enriched_leads = []
+    for lead in leads:
+        customer = None
+        if lead.get("customer_id"):
+            customer = await db.customers.find_one({"id": lead["customer_id"]}, {"_id": 0})
+        
+        enriched_leads.append({
+            **serialize_doc(lead),
+            "customer": serialize_doc(customer) if customer else None,
+            "caller_name": lead.get("caller_name") or (f"{customer['first_name']} {customer['last_name']}" if customer else "Unknown")
+        })
+    
+    return enriched_leads
 
 
 @v1_router.get("/leads/{lead_id}")
