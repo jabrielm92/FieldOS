@@ -316,12 +316,32 @@ function MessageBubble({ message, formatTime }) {
   const isAI = message.sender_type === "AI";
   const isSystem = message.sender_type === "SYSTEM";
 
+  // Vapi Call Summary - special display
   if (message.is_call_summary) {
     return (
-      <div className="flex justify-center">
-        <div className="bg-muted px-4 py-2 rounded-full text-sm text-muted-foreground flex items-center gap-2">
-          <Phone className="h-3 w-3" />
-          <span>Call Summary: {message.content.substring(0, 50)}...</span>
+      <div className="flex justify-center my-4">
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4 max-w-[90%]">
+          <div className="flex items-center gap-2 text-blue-600 mb-2">
+            <PhoneIncoming className="h-4 w-4" />
+            <span className="font-medium text-sm">Vapi Call Summary</span>
+            <span className="text-xs text-muted-foreground">{formatTime(message.created_at)}</span>
+          </div>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{message.content}</p>
+          {message.metadata?.vapi_call_id && (
+            <p className="text-xs text-muted-foreground mt-2">Call ID: {message.metadata.vapi_call_id}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // System messages (like en-route notifications)
+  if (isSystem) {
+    return (
+      <div className="flex justify-center my-2">
+        <div className="bg-gray-100 px-4 py-2 rounded-full text-xs text-muted-foreground flex items-center gap-2">
+          <PhoneOutgoing className="h-3 w-3" />
+          <span>{message.content}</span>
         </div>
       </div>
     );
@@ -352,6 +372,9 @@ function MessageBubble({ message, formatTime }) {
         )}>
           <Clock className="h-3 w-3" />
           <span>{formatTime(message.created_at)}</span>
+          {message.metadata?.twilio_sid && (
+            <span className="opacity-50">• Delivered</span>
+          )}
         </div>
       </div>
     </div>
