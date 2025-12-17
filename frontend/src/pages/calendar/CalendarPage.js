@@ -242,11 +242,13 @@ export default function CalendarPage() {
               return (
                 <div
                   key={day}
-                  className={`min-h-[120px] p-2 border-b border-r transition-colors hover:bg-muted/30
+                  className={`min-h-[120px] p-2 border-b border-r transition-colors hover:bg-muted/30 cursor-pointer group
                     ${isToday ? 'bg-primary/5 ring-2 ring-primary ring-inset' : ''}`}
+                  onClick={() => handleDayClick(day)}
                 >
-                  <div className={`text-sm font-medium mb-1 ${isToday ? 'text-primary' : ''}`}>
-                    {day}
+                  <div className={`text-sm font-medium mb-1 flex items-center justify-between ${isToday ? 'text-primary' : ''}`}>
+                    <span>{day}</span>
+                    <Plus className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
                   </div>
                   <div className="space-y-1">
                     {dayJobs.slice(0, 3).map(job => (
