@@ -266,12 +266,18 @@ function CustomerDetailDialog({ open, onOpenChange, customer, onUpdate }) {
     if (!customer) return;
     setLoading(true);
     try {
-      await customerAPI.update(customer.id, formData);
+      // Send null for empty email to pass validation
+      const updateData = {
+        ...formData,
+        email: formData.email?.trim() || null,
+      };
+      await customerAPI.update(customer.id, updateData);
       toast.success("Customer updated!");
       setEditing(false);
       onUpdate();
     } catch (error) {
-      toast.error("Failed to update customer");
+      console.error("Customer update error:", error);
+      toast.error(error.response?.data?.detail?.[0]?.msg || "Failed to update customer");
     } finally {
       setLoading(false);
     }
