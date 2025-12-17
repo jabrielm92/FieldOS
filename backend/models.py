@@ -318,6 +318,8 @@ class LeadBase(BaseModel):
     urgency: Urgency = Urgency.ROUTINE
     description: Optional[str] = None
     tags: List[str] = []
+    caller_name: Optional[str] = None  # Store caller name directly on lead
+    caller_phone: Optional[str] = None  # Store caller phone directly on lead
 
 
 class LeadCreate(LeadBase):
