@@ -123,7 +123,7 @@ export const campaignAPI = {
 // Dispatch APIs
 export const dispatchAPI = {
   getBoard: (date) => api.get('/dispatch/board', { params: { date } }),
-  assignJob: (jobId, technicianId) => api.post('/dispatch/assign', { job_id: jobId, technician_id: technicianId }),
+  assignJob: (jobId, technicianId) => api.post('/dispatch/assign', null, { params: { job_id: jobId, technician_id: technicianId } }),
 };
 
 // Dashboard & Reports APIs
