@@ -47,6 +47,7 @@ const urgencyColors = {
 };
 
 export default function LeadsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
