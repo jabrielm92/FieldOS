@@ -294,12 +294,18 @@ function CustomerDetailDialog({ open, onOpenChange, customer, onUpdate }) {
     
     setLoading(true);
     try {
-      await customerAPI.update(customer.id, { ...formData, notes: updatedNotes });
+      const updateData = {
+        ...formData,
+        notes: updatedNotes,
+        email: formData.email?.trim() || null,
+      };
+      await customerAPI.update(customer.id, updateData);
       setFormData({ ...formData, notes: updatedNotes });
       setNewNote("");
       toast.success("Note added!");
       onUpdate();
     } catch (error) {
+      console.error("Note add error:", error);
       toast.error("Failed to add note");
     } finally {
       setLoading(false);
