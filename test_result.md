@@ -7,82 +7,68 @@
 
 user_problem_statement: >
   FieldOS - Multi-tenant Revenue & Operations OS for field service companies.
-  Bug fixes and enhancements needed:
-  1. Campaign creation failure - Fixed by sending segment_definition as object instead of string
-  2. Property edit functionality - Added edit button and form to customer detail modal
-  3. Reports page chart labels - Added axis labels and improved tooltips
-  4. Jobs page - Already has unassign and status change functionality
+  Features implemented:
+  1. Calendar - Add/edit job functionality with modals
+  2. Inbox/Conversations - Enhanced SMS view with Vapi call summaries
+  3. Quotes - Import from Lead/Vapi Call integration
 
 backend:
-  - task: "Campaign Creation API Fix"
+  - task: "All backend APIs"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/campaigns/CampaignsPage.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Fixed segment_definition to send as object, not string"
-
-  - task: "Property Update API"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "PUT /properties/{id} endpoint already exists and working"
+        comment: "All APIs working - campaigns, jobs, conversations, quotes"
 
 frontend:
-  - task: "Campaign Creation UI"
+  - task: "Calendar Add/Edit Job"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/campaigns/CampaignsPage.js"
+    file: "/app/frontend/src/pages/calendar/CalendarPage.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Campaign creation now works - tested via UI, creates and displays campaigns"
+        comment: "CreateJobModal and EditJobModal added. Can schedule new jobs and edit existing ones."
 
-  - task: "Property Edit UI"
+  - task: "Inbox/Conversations Enhanced"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/customers/CustomersPage.js"
+    file: "/app/frontend/src/pages/conversations/ConversationsPage.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Added PropertyCard component with edit functionality"
+        comment: "Enhanced with Vapi call summary display, auto-refresh, improved message bubbles"
 
-  - task: "Reports Page Labels"
+  - task: "Quotes Lead Import"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/reports/ReportsPage.js"
+    file: "/app/frontend/src/pages/quotes/QuotesPage.js"
     stuck_count: 0
-    priority: "medium"
+    priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Added axis labels (Count, Date, Jobs Completed) to charts"
+        comment: "Added Import from Lead/Vapi Call feature to pre-fill quote description"
 
 metadata:
   created_by: "main_agent"
-  version: "5.0"
-  test_sequence: 6
+  version: "6.0"
+  test_sequence: 7
   run_ui: true
 
 test_plan:
-  current_focus: "Test Campaign creation, Property editing, Reports labels"
+  current_focus: "Test Calendar job creation, Inbox messaging, Quote lead import"
   blocked_features: []
   test_all: true
 
