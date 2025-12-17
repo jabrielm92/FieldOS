@@ -1455,6 +1455,8 @@ async def vapi_create_lead(
         description=description
     )
     lead_dict = lead.model_dump()
+    lead_dict["caller_name"] = name  # Store caller name directly on lead
+    lead_dict["caller_phone"] = phone  # Store caller phone directly on lead
     lead_dict["created_at"] = lead_dict["created_at"].isoformat()
     lead_dict["updated_at"] = lead_dict["updated_at"].isoformat()
     lead_dict["first_contact_at"] = lead_dict["first_contact_at"].isoformat()
