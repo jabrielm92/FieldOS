@@ -351,12 +351,424 @@ export default function CalendarPage() {
             <Button variant="outline" onClick={() => setShowJobModal(false)}>
               Close
             </Button>
+            <Button variant="outline" onClick={() => handleEditJob(selectedJob)}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
             <Button onClick={() => navigate('/jobs')}>
               View in Jobs
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Job Modal */}
+      <CreateJobModal
+        open={showCreateModal}
+        onOpenChange={setShowCreateModal}
+        selectedDate={selectedDate}
+        customers={customers}
+        technicians={technicians}
+        onSuccess={fetchJobs}
+      />
+
+      {/* Edit Job Modal */}
+      <EditJobModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        job={selectedJob}
+        technicians={technicians}
+        onSuccess={fetchJobs}
+      />
     </Layout>
+  );
+}
+
+function CreateJobModal({ open, onOpenChange, selectedDate, customers, technicians, onSuccess }) {
+  const [formData, setFormData] = useState({
+    customer_id: "",
+    property_id: "",
+    job_type: "DIAGNOSTIC",
+    priority: "NORMAL",
+    notes: "",
+    service_window_start: "",
+    service_window_end: "",
+    assigned_technician_id: "",
+  });
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (selectedDate && open) {
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      setFormData(prev => ({
+        ...prev,
+        service_window_start: `${dateStr}T09:00`,
+        service_window_end: `${dateStr}T11:00`,
+      }));
+    }
+  }, [selectedDate, open]);
+
+  useEffect(() => {
+    if (formData.customer_id) {
+      fetchProperties(formData.customer_id);
+    }
+  }, [formData.customer_id]);
+
+  const fetchProperties = async (customerId) => {
+    try {
+      const response = await propertyAPI.list(customerId);
+      setProperties(response.data);
+      if (response.data.length > 0) {
+        setFormData(prev => ({ ...prev, property_id: response.data[0].id }));
+      }
+    } catch (error) {
+      console.error("Failed to load properties");
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.customer_id || !formData.property_id) {
+      toast.error("Please select a customer and property");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      await jobAPI.create({
+        ...formData,
+        service_window_start: new Date(formData.service_window_start).toISOString(),
+        service_window_end: new Date(formData.service_window_end).toISOString(),
+        assigned_technician_id: formData.assigned_technician_id || null,
+      });
+      toast.success("Job scheduled successfully!");
+      onOpenChange(false);
+      onSuccess();
+      setFormData({
+        customer_id: "",
+        property_id: "",
+        job_type: "DIAGNOSTIC",
+        priority: "NORMAL",
+        notes: "",
+        service_window_start: "",
+        service_window_end: "",
+        assigned_technician_id: "",
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create job");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="h-5 w-5" />
+            Schedule New Job
+          </DialogTitle>
+          <DialogDescription>
+            {selectedDate && `Scheduling for ${selectedDate.toLocaleDateString()}`}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Customer *</Label>
+            <Select value={formData.customer_id} onValueChange={(v) => setFormData({...formData, customer_id: v, property_id: ""})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select customer" />
+              </SelectTrigger>
+              <SelectContent>
+                {customers.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name} - {c.phone}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {properties.length > 0 && (
+            <div className="space-y-2">
+              <Label>Property *</Label>
+              <Select value={formData.property_id} onValueChange={(v) => setFormData({...formData, property_id: v})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select property" />
+                </SelectTrigger>
+                <SelectContent>
+                  {properties.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.address_line1}, {p.city}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Job Type</Label>
+              <Select value={formData.job_type} onValueChange={(v) => setFormData({...formData, job_type: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DIAGNOSTIC">Diagnostic</SelectItem>
+                  <SelectItem value="REPAIR">Repair</SelectItem>
+                  <SelectItem value="INSTALL">Install</SelectItem>
+                  <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                  <SelectItem value="INSPECTION">Inspection</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={formData.priority} onValueChange={(v) => setFormData({...formData, priority: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                  <SelectItem value="HIGH">High</SelectItem>
+                  <SelectItem value="NORMAL">Normal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Start Time</Label>
+              <Input
+                type="datetime-local"
+                value={formData.service_window_start}
+                onChange={(e) => setFormData({...formData, service_window_start: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>End Time</Label>
+              <Input
+                type="datetime-local"
+                value={formData.service_window_end}
+                onChange={(e) => setFormData({...formData, service_window_end: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Assign Technician</Label>
+            <Select value={formData.assigned_technician_id} onValueChange={(v) => setFormData({...formData, assigned_technician_id: v})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Unassigned</SelectItem>
+                {technicians.filter(t => t.active !== false).map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Textarea
+              placeholder="Job notes..."
+              value={formData.notes}
+              onChange={(e) => setFormData({...formData, notes: e.target.value})}
+              rows={2}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Scheduling..." : "Schedule Job"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditJobModal({ open, onOpenChange, job, technicians, onSuccess }) {
+  const [formData, setFormData] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (job) {
+      setFormData({
+        job_type: job.job_type || "DIAGNOSTIC",
+        priority: job.priority || "NORMAL",
+        status: job.status || "BOOKED",
+        notes: job.notes || "",
+        service_window_start: job.service_window_start ? job.service_window_start.slice(0, 16) : "",
+        service_window_end: job.service_window_end ? job.service_window_end.slice(0, 16) : "",
+        assigned_technician_id: job.assigned_technician_id || "",
+      });
+    }
+  }, [job]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!job) return;
+    
+    setLoading(true);
+    try {
+      await jobAPI.update(job.id, {
+        customer_id: job.customer_id,
+        property_id: job.property_id,
+        ...formData,
+        service_window_start: new Date(formData.service_window_start).toISOString(),
+        service_window_end: new Date(formData.service_window_end).toISOString(),
+        assigned_technician_id: formData.assigned_technician_id || null,
+      });
+      toast.success("Job updated successfully!");
+      onOpenChange(false);
+      onSuccess();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to update job");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkEnRoute = async () => {
+    if (!job) return;
+    try {
+      await jobAPI.markEnRoute(job.id);
+      toast.success("Job marked as en-route, SMS sent!");
+      onOpenChange(false);
+      onSuccess();
+    } catch (error) {
+      toast.error("Failed to update status");
+    }
+  };
+
+  if (!job) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Edit className="h-5 w-5" />
+            Edit Job
+          </DialogTitle>
+          <DialogDescription>
+            {job.customer?.first_name} {job.customer?.last_name} - {job.property?.address_line1}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Job Type</Label>
+              <Select value={formData.job_type} onValueChange={(v) => setFormData({...formData, job_type: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DIAGNOSTIC">Diagnostic</SelectItem>
+                  <SelectItem value="REPAIR">Repair</SelectItem>
+                  <SelectItem value="INSTALL">Install</SelectItem>
+                  <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                  <SelectItem value="INSPECTION">Inspection</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={formData.priority} onValueChange={(v) => setFormData({...formData, priority: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                  <SelectItem value="HIGH">High</SelectItem>
+                  <SelectItem value="NORMAL">Normal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select value={formData.status} onValueChange={(v) => setFormData({...formData, status: v})}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BOOKED">Booked</SelectItem>
+                <SelectItem value="EN_ROUTE">En Route</SelectItem>
+                <SelectItem value="ON_SITE">On Site</SelectItem>
+                <SelectItem value="COMPLETED">Completed</SelectItem>
+                <SelectItem value="NO_SHOW">No Show</SelectItem>
+                <SelectItem value="CANCELLED">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Start Time</Label>
+              <Input
+                type="datetime-local"
+                value={formData.service_window_start}
+                onChange={(e) => setFormData({...formData, service_window_start: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>End Time</Label>
+              <Input
+                type="datetime-local"
+                value={formData.service_window_end}
+                onChange={(e) => setFormData({...formData, service_window_end: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Assign Technician</Label>
+            <Select value={formData.assigned_technician_id} onValueChange={(v) => setFormData({...formData, assigned_technician_id: v})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Unassigned</SelectItem>
+                {technicians.filter(t => t.active !== false).map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Textarea
+              placeholder="Job notes..."
+              value={formData.notes}
+              onChange={(e) => setFormData({...formData, notes: e.target.value})}
+              rows={2}
+            />
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {formData.status === "BOOKED" && (
+              <Button type="button" variant="outline" onClick={handleMarkEnRoute} className="w-full sm:w-auto">
+                <Truck className="h-4 w-4 mr-2" />
+                Mark En Route & Send SMS
+              </Button>
+            )}
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
