@@ -371,36 +371,36 @@ function LeadDetailModal({ lead, open, onOpenChange, onUpdate, onDelete }) {
 
         <div className="space-y-6 py-4">
           {/* Customer Info */}
-          {lead.customer && (
-            <div className="bg-muted/50 rounded-lg p-4">
-              <h4 className="font-medium mb-3 flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Customer Information
-              </h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="bg-muted/50 rounded-lg p-4">
+            <h4 className="font-medium mb-3 flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Customer Information
+            </h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Name:</span>
+                <p className="font-medium">
+                  {lead.caller_name || (lead.customer ? `${lead.customer.first_name} ${lead.customer.last_name}` : "Unknown")}
+                </p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Phone:</span>
+                <p className="font-medium flex items-center gap-1">
+                  <Phone className="h-3 w-3" />
+                  {lead.caller_phone || lead.customer?.phone || "Not provided"}
+                </p>
+              </div>
+              {(lead.customer?.email) && (
                 <div>
-                  <span className="text-muted-foreground">Name:</span>
-                  <p className="font-medium">{lead.customer.first_name} {lead.customer.last_name}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Phone:</span>
+                  <span className="text-muted-foreground">Email:</span>
                   <p className="font-medium flex items-center gap-1">
-                    <Phone className="h-3 w-3" />
-                    {lead.customer.phone}
+                    <Mail className="h-3 w-3" />
+                    {lead.customer.email}
                   </p>
                 </div>
-                {lead.customer.email && (
-                  <div>
-                    <span className="text-muted-foreground">Email:</span>
-                    <p className="font-medium flex items-center gap-1">
-                      <Mail className="h-3 w-3" />
-                      {lead.customer.email}
-                    </p>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Property Info */}
           {properties.length > 0 && (
