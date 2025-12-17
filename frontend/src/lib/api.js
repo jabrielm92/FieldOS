@@ -59,8 +59,10 @@ export const customerAPI = {
 // Property APIs
 export const propertyAPI = {
   list: (customerId) => api.get('/properties', { params: { customer_id: customerId } }),
+  get: (id) => api.get(`/properties/${id}`),
   create: (data) => api.post('/properties', data),
   update: (id, data) => api.put(`/properties/${id}`, data),
+  delete: (id) => api.delete(`/properties/${id}`),
 };
 
 // Technician APIs
