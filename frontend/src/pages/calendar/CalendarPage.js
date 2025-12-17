@@ -203,9 +203,13 @@ export default function CalendarPage() {
               <div className="w-3 h-3 rounded-full bg-green-500"></div> Completed
             </span>
           </div>
-          <Button onClick={() => navigate('/dispatch')}>
+          <Button variant="outline" onClick={() => navigate('/dispatch')}>
             <Briefcase className="h-4 w-4 mr-2" />
             Dispatch Board
+          </Button>
+          <Button onClick={() => { setSelectedDate(new Date()); setShowCreateModal(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Job
           </Button>
         </div>
       </div>
