@@ -76,6 +76,7 @@ export const technicianAPI = {
 export const leadAPI = {
   list: (filters = {}) => api.get('/leads', { params: filters }),
   get: (id) => api.get(`/leads/${id}`),
+  getWithConversation: (id) => api.get(`/leads/${id}`), // Returns lead with customer, conversation, and messages
   create: (data) => api.post('/leads', data),
   update: (id, data) => api.put(`/leads/${id}`, data),
   delete: (id) => api.delete(`/leads/${id}`),
