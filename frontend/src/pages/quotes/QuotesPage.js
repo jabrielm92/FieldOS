@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
-import { quoteAPI, customerAPI, propertyAPI, jobAPI } from "../../lib/api";
+import { quoteAPI, customerAPI, propertyAPI, jobAPI, leadAPI } from "../../lib/api";
 import { toast } from "sonner";
 import { 
   Plus, Search, DollarSign, User, FileText, Send, Check, X, 
