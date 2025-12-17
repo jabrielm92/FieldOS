@@ -1367,38 +1367,38 @@ async def vapi_create_lead(
         
         # Resolve field aliases (support both old Make.com names and new names)
         phone = data.caller_phone or data.caller_number
-    name = data.caller_name or data.captured_name
-    description = data.description or data.issue_description
-    issue_type = data.issue_type or data.issue_description  # Use issue_description as issue_type if not provided
-    
-    # Parse address - support both structured and single-line formats
-    address_line1 = data.address_line1
-    city = data.city
-    state = data.state
-    postal_code = data.postal_code
-    
-    if data.captured_address and not address_line1:
-        # Try to parse "123 Main St, Chicago, IL 60601" format
-        parts = [p.strip() for p in data.captured_address.split(',')]
-        if len(parts) >= 1:
-            address_line1 = parts[0]
-        if len(parts) >= 2:
-            city = parts[1]
-        if len(parts) >= 3:
-            # Try to parse "IL 60601" or just "IL"
-            state_zip = parts[2].strip().split()
-            if len(state_zip) >= 1:
-                state = state_zip[0]
-            if len(state_zip) >= 2:
-                postal_code = state_zip[1]
-    
-    if not phone:
-        raise HTTPException(status_code=400, detail="Phone number is required (caller_phone or caller_number)")
-    
-    # Find or create customer
-    customer = await db.customers.find_one(
-        {"phone": phone, "tenant_id": tenant_id}, {"_id": 0}
-    )
+        name = data.caller_name or data.captured_name
+        description = data.description or data.issue_description
+        issue_type = data.issue_type or data.issue_description  # Use issue_description as issue_type if not provided
+        
+        # Parse address - support both structured and single-line formats
+        address_line1 = data.address_line1
+        city = data.city
+        state = data.state
+        postal_code = data.postal_code
+        
+        if data.captured_address and not address_line1:
+            # Try to parse "123 Main St, Chicago, IL 60601" format
+            parts = [p.strip() for p in data.captured_address.split(',')]
+            if len(parts) >= 1:
+                address_line1 = parts[0]
+            if len(parts) >= 2:
+                city = parts[1]
+            if len(parts) >= 3:
+                # Try to parse "IL 60601" or just "IL"
+                state_zip = parts[2].strip().split()
+                if len(state_zip) >= 1:
+                    state = state_zip[0]
+                if len(state_zip) >= 2:
+                    postal_code = state_zip[1]
+        
+        if not phone:
+            raise HTTPException(status_code=400, detail="Phone number is required (caller_phone or caller_number)")
+        
+        # Find or create customer
+        customer = await db.customers.find_one(
+            {"phone": phone, "tenant_id": tenant_id}, {"_id": 0}
+        )
     
     if not customer:
         # Parse name
