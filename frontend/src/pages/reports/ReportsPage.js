@@ -285,10 +285,14 @@ export default function ReportsPage() {
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={jobTypeChartData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <XAxis 
+                    type="number" 
+                    tick={{ fontSize: 12 }} 
+                    label={{ value: 'Number of Jobs', position: 'insideBottom', offset: -5, fontSize: 11, fill: '#6b7280' }}
+                  />
                   <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} width={100} />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#0066CC" radius={[0, 4, 4, 0]} />
+                  <Tooltip formatter={(value) => [`${value} jobs`, 'Count']} />
+                  <Bar dataKey="value" fill="#0066CC" radius={[0, 4, 4, 0]} name="Jobs" />
                 </BarChart>
               </ResponsiveContainer>
             )}
