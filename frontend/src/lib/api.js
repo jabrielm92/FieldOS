@@ -80,6 +80,7 @@ export const leadAPI = {
   create: (data) => api.post('/leads', data),
   update: (id, data) => api.put(`/leads/${id}`, data),
   delete: (id) => api.delete(`/leads/${id}`),
+  bulkDelete: (ids) => api.post('/leads/bulk-delete', ids),
 };
 
 // Job APIs
