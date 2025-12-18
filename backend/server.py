@@ -1216,6 +1216,39 @@ async def get_conversation_messages(
     return serialize_docs(messages)
 
 
+@v1_router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a conversation and all its messages"""
+    # Delete messages first
+    await db.messages.delete_many({"conversation_id": conversation_id, "tenant_id": tenant_id})
+    # Delete conversation
+    result = await db.conversations.delete_one({"id": conversation_id, "tenant_id": tenant_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"success": True, "message": "Conversation deleted"}
+
+
+@v1_router.post("/conversations/bulk-delete")
+async def bulk_delete_conversations(
+    conversation_ids: List[str],
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Bulk delete conversations and their messages"""
+    if not conversation_ids:
+        raise HTTPException(status_code=400, detail="No conversation IDs provided")
+    
+    # Delete messages
+    await db.messages.delete_many({"conversation_id": {"$in": conversation_ids}, "tenant_id": tenant_id})
+    # Delete conversations
+    result = await db.conversations.delete_many({"id": {"$in": conversation_ids}, "tenant_id": tenant_id})
+    return {"success": True, "deleted_count": result.deleted_count}
+
+
 @v1_router.post("/messages")
 async def send_message(
     data: MessageCreate,
