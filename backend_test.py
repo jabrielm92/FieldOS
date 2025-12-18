@@ -649,6 +649,176 @@ class FieldOSAPITester:
         # Restore superadmin token
         self.superadmin_token = original_token
 
+    def test_bulk_delete_functionality(self):
+        """Test bulk delete functionality for leads, jobs, and customers"""
+        self.log("\n=== BULK DELETE FUNCTIONALITY TESTS ===")
+        
+        # Switch to tenant owner token
+        original_token = self.superadmin_token
+        self.superadmin_token = self.tenant_owner_token
+        
+        # Create multiple test records for bulk delete testing
+        test_customer_ids = []
+        test_lead_ids = []
+        test_job_ids = []
+        
+        # Create 3 test customers
+        for i in range(3):
+            customer_data = {
+                "first_name": f"BulkTest{i}",
+                "last_name": "Customer",
+                "phone": f"+155512340{i}",
+                "email": f"bulktest{i}@example.com",
+                "preferred_channel": "SMS"
+            }
+            
+            success, response = self.run_test(
+                f"Create Bulk Test Customer {i+1}",
+                "POST",
+                "customers",
+                200,
+                data=customer_data
+            )
+            
+            if success and 'id' in response:
+                test_customer_ids.append(response['id'])
+        
+        # Create test leads for bulk delete
+        for i, customer_id in enumerate(test_customer_ids):
+            lead_data = {
+                "customer_id": customer_id,
+                "source": "MANUAL",
+                "channel": "FORM",
+                "issue_type": f"Bulk Test Issue {i+1}",
+                "urgency": "ROUTINE",
+                "description": f"Bulk test lead {i+1}"
+            }
+            
+            success, response = self.run_test(
+                f"Create Bulk Test Lead {i+1}",
+                "POST",
+                "leads",
+                200,
+                data=lead_data
+            )
+            
+            if success and 'id' in response:
+                test_lead_ids.append(response['id'])
+        
+        # Create test jobs for bulk delete (need properties first)
+        test_property_ids = []
+        for i, customer_id in enumerate(test_customer_ids):
+            property_data = {
+                "customer_id": customer_id,
+                "address_line1": f"Bulk Test St {i+1}",
+                "city": "Test City",
+                "state": "NY",
+                "postal_code": "10001",
+                "property_type": "RESIDENTIAL"
+            }
+            
+            success, response = self.run_test(
+                f"Create Bulk Test Property {i+1}",
+                "POST",
+                "properties",
+                200,
+                data=property_data
+            )
+            
+            if success and 'id' in response:
+                test_property_ids.append(response['id'])
+        
+        # Create jobs
+        for i, (customer_id, property_id) in enumerate(zip(test_customer_ids, test_property_ids)):
+            start_time = datetime.now() + timedelta(days=i+2)
+            end_time = start_time + timedelta(hours=2)
+            
+            job_data = {
+                "customer_id": customer_id,
+                "property_id": property_id,
+                "job_type": "DIAGNOSTIC",
+                "priority": "NORMAL",
+                "service_window_start": start_time.isoformat(),
+                "service_window_end": end_time.isoformat(),
+                "status": "BOOKED"
+            }
+            
+            success, response = self.run_test(
+                f"Create Bulk Test Job {i+1}",
+                "POST",
+                "jobs",
+                200,
+                data=job_data
+            )
+            
+            if success and 'id' in response:
+                test_job_ids.append(response['id'])
+        
+        # Test bulk delete leads
+        if len(test_lead_ids) >= 2:
+            bulk_lead_ids = test_lead_ids[:2]  # Delete first 2 leads
+            success, response = self.run_test(
+                "Bulk Delete Leads",
+                "POST",
+                "leads/bulk-delete",
+                200,
+                data=bulk_lead_ids
+            )
+            
+            if success:
+                self.log(f"✅ Bulk deleted {len(bulk_lead_ids)} leads")
+        
+        # Test bulk delete jobs
+        if len(test_job_ids) >= 2:
+            bulk_job_ids = test_job_ids[:2]  # Delete first 2 jobs
+            success, response = self.run_test(
+                "Bulk Delete Jobs",
+                "POST",
+                "jobs/bulk-delete",
+                200,
+                data=bulk_job_ids
+            )
+            
+            if success:
+                self.log(f"✅ Bulk deleted {len(bulk_job_ids)} jobs")
+        
+        # Test bulk delete customers (cascade delete)
+        if len(test_customer_ids) >= 2:
+            bulk_customer_ids = test_customer_ids[:2]  # Delete first 2 customers
+            success, response = self.run_test(
+                "Bulk Delete Customers (Cascade)",
+                "POST",
+                "customers/bulk-delete",
+                200,
+                data=bulk_customer_ids
+            )
+            
+            if success:
+                self.log(f"✅ Bulk deleted {len(bulk_customer_ids)} customers with cascade delete")
+        
+        # Verify deletions by trying to fetch deleted records
+        if len(test_customer_ids) >= 2:
+            # Try to get first deleted customer (should return 404)
+            self.run_test(
+                "Verify Customer Deleted",
+                "GET",
+                f"customers/{test_customer_ids[0]}",
+                404
+            )
+        
+        # Clean up remaining test data
+        if len(test_customer_ids) > 2:
+            remaining_customer = test_customer_ids[2]
+            self.run_test(
+                "Clean Up Remaining Test Customer",
+                "DELETE",
+                f"customers/{remaining_customer}",
+                200
+            )
+        
+        # Restore superadmin token
+        self.superadmin_token = original_token
+
     def test_background_scheduler(self):
         """Test background scheduler functionality"""
         self.log("\n=== BACKGROUND SCHEDULER TESTS ===")
