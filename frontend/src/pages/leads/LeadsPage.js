@@ -56,6 +56,8 @@ export default function LeadsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
   const [showLeadModal, setShowLeadModal] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchLeads();
