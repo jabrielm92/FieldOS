@@ -443,7 +443,7 @@ class FieldOSAPITester:
             self.run_test("Send Message", "POST", "messages", 404, data=message_data)
 
     def test_campaign_management(self):
-        """Test campaign CRUD operations"""
+        """Test campaign CRUD operations including new features"""
         self.log("\n=== CAMPAIGN MANAGEMENT ===")
         
         # Switch to tenant owner token
@@ -454,7 +454,7 @@ class FieldOSAPITester:
         campaign_data = {
             "name": "Test Reactivation Campaign",
             "type": "REACTIVATION",
-            "message_template": "Hi {customer_name}, it's time for your annual HVAC maintenance!"
+            "message_template": "Hi {first_name}, it's time for your annual HVAC maintenance!"
         }
         
         success, response = self.run_test(
@@ -472,8 +472,178 @@ class FieldOSAPITester:
         # List campaigns
         self.run_test("List Campaigns", "GET", "campaigns", 200)
         
+        # Test new campaign features
+        self.test_campaign_customer_selection()
+        self.test_campaign_bulk_operations()
+        self.test_campaign_messages()
+        
         # Restore superadmin token
         self.superadmin_token = original_token
+
+    def test_campaign_customer_selection(self):
+        """Test customer selection for campaigns with job type filters"""
+        self.log("\n--- CAMPAIGN CUSTOMER SELECTION TESTS ---")
+        
+        # Test get customers for selection without filters
+        success, response = self.run_test(
+            "Get Customers for Selection (No Filter)",
+            "GET",
+            "campaigns/customers-for-selection",
+            200
+        )
+        
+        if success:
+            self.log(f"✅ Found {response.get('total', 0)} customers available for selection")
+        
+        # Test with job type filter
+        success, response = self.run_test(
+            "Get Customers for Selection (DIAGNOSTIC Filter)",
+            "GET",
+            "campaigns/customers-for-selection?job_type=DIAGNOSTIC",
+            200
+        )
+        
+        if success:
+            self.log(f"✅ Found {response.get('total', 0)} customers with DIAGNOSTIC jobs")
+        
+        # Test with job type filter - REPAIR
+        success, response = self.run_test(
+            "Get Customers for Selection (REPAIR Filter)",
+            "GET",
+            "campaigns/customers-for-selection?job_type=REPAIR",
+            200
+        )
+        
+        if success:
+            self.log(f"✅ Found {response.get('total', 0)} customers with REPAIR jobs")
+        
+        # Test with last service days filter
+        success, response = self.run_test(
+            "Get Customers for Selection (90+ days)",
+            "GET",
+            "campaigns/customers-for-selection?last_service_days=90",
+            200
+        )
+        
+        if success:
+            self.log(f"✅ Found {response.get('total', 0)} customers with service 90+ days ago")
+        
+        # Test combined filters
+        success, response = self.run_test(
+            "Get Customers for Selection (MAINTENANCE + 180 days)",
+            "GET",
+            "campaigns/customers-for-selection?job_type=MAINTENANCE&last_service_days=180",
+            200
+        )
+        
+        if success:
+            self.log(f"✅ Found {response.get('total', 0)} customers with MAINTENANCE jobs 180+ days ago")
+            
+            # Test start campaign with selected customers if we have customers
+            if response.get('customers') and len(response['customers']) > 0 and self.campaign_id:
+                customer_ids = [c['id'] for c in response['customers'][:2]]  # Take first 2 customers
+                
+                success, start_response = self.run_test(
+                    "Start Campaign with Selected Customers",
+                    "POST",
+                    f"campaigns/{self.campaign_id}/start-with-customers",
+                    200,
+                    data=customer_ids
+                )
+                
+                if success:
+                    self.log(f"✅ Started campaign with {start_response.get('recipients_created', 0)} selected customers")
+
+    def test_campaign_bulk_operations(self):
+        """Test bulk delete campaigns"""
+        self.log("\n--- CAMPAIGN BULK OPERATIONS TESTS ---")
+        
+        # Create multiple test campaigns for bulk delete
+        test_campaign_ids = []
+        
+        for i in range(3):
+            campaign_data = {
+                "name": f"Bulk Test Campaign {i+1}",
+                "type": "TUNEUP",
+                "message_template": f"Test bulk campaign message {i+1}"
+            }
+            
+            success, response = self.run_test(
+                f"Create Bulk Test Campaign {i+1}",
+                "POST",
+                "campaigns",
+                200,
+                data=campaign_data
+            )
+            
+            if success and 'id' in response:
+                test_campaign_ids.append(response['id'])
+        
+        # Test bulk delete
+        if len(test_campaign_ids) >= 2:
+            bulk_delete_ids = test_campaign_ids[:2]  # Delete first 2 campaigns
+            
+            success, response = self.run_test(
+                "Bulk Delete Campaigns",
+                "POST",
+                "campaigns/bulk-delete",
+                200,
+                data=bulk_delete_ids
+            )
+            
+            if success:
+                deleted_count = response.get('deleted_count', 0)
+                self.log(f"✅ Bulk deleted {deleted_count} campaigns")
+        
+        # Clean up remaining test campaign
+        if len(test_campaign_ids) > 2:
+            remaining_id = test_campaign_ids[2]
+            self.run_test(
+                "Clean Up Remaining Test Campaign",
+                "DELETE",
+                f"campaigns/{remaining_id}",
+                200
+            )
+
+    def test_campaign_messages(self):
+        """Test campaign SMS log functionality"""
+        self.log("\n--- CAMPAIGN MESSAGES TESTS ---")
+        
+        if not self.campaign_id:
+            self.log("❌ Skipping campaign messages test - no campaign ID")
+            return
+        
+        # Test get campaign messages
+        success, response = self.run_test(
+            "Get Campaign Messages",
+            "GET",
+            f"campaigns/{self.campaign_id}/messages",
+            200
+        )
+        
+        if success:
+            messages = response.get('messages', [])
+            stats = response.get('stats', {})
+            self.log(f"✅ Retrieved {len(messages)} campaign messages")
+            self.log(f"   - Total: {stats.get('total', 0)}")
+            self.log(f"   - Outbound: {stats.get('outbound', 0)}")
+            self.log(f"   - Inbound: {stats.get('inbound', 0)}")
+        
+        # Test get campaign stats
+        success, response = self.run_test(
+            "Get Campaign Stats",
+            "GET",
+            f"campaigns/{self.campaign_id}/stats",
+            200
+        )
+        
+        if success:
+            campaign_stats = response.get('stats', {})
+            self.log(f"✅ Retrieved campaign stats:")
+            self.log(f"   - Total recipients: {campaign_stats.get('total', 0)}")
+            self.log(f"   - Sent: {campaign_stats.get('sent', 0)}")
+            self.log(f"   - Pending: {campaign_stats.get('pending', 0)}")
+            self.log(f"   - Response rate: {campaign_stats.get('response_rate', 0)}%")
 
     def test_vapi_endpoints(self):
         """Test Vapi integration endpoints"""
