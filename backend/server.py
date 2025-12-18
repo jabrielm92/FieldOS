@@ -1693,7 +1693,7 @@ async def vapi_check_availability(
             window_end_dt = target_date.replace(hour=end_hour, minute=end_min, second=0, microsecond=0)
             
             available_windows.append({
-                "date": data.date,
+                "date": target_date.strftime("%Y-%m-%d"),  # Always use calculated date, not input
                 "start": window["start"],
                 "end": window["end"],
                 "label": window["label"],
