@@ -578,3 +578,20 @@ class VapiCallSummaryRequest(BaseModel):
     lead_id: str
     summary: str
     vapi_session_id: Optional[str] = None
+
+
+class WebFormLeadRequest(BaseModel):
+    """Request model for web form lead submission"""
+    tenant_slug: str
+    name: str
+    phone: str
+    email: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    issue_description: str
+    urgency: Optional[str] = "ROUTINE"  # EMERGENCY, URGENT, ROUTINE
+    preferred_date: Optional[str] = None
+    preferred_time: Optional[str] = None
+    send_confirmation_sms: bool = True
