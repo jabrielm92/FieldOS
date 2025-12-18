@@ -283,6 +283,14 @@ export default function JobsPage() {
           <Table data-testid="jobs-table">
             <TableHeader>
               <TableRow className="table-industrial">
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === filteredJobs.length && filteredJobs.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                </TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Service</TableHead>
                 <TableHead>Schedule</TableHead>
@@ -296,10 +304,18 @@ export default function JobsPage() {
               {filteredJobs.map((job) => (
                 <TableRow 
                   key={job.id} 
-                  className="table-industrial cursor-pointer hover:bg-muted/50" 
+                  className={`table-industrial cursor-pointer hover:bg-muted/50 ${selectedIds.includes(job.id) ? 'bg-primary/5' : ''}`}
                   data-testid={`job-row-${job.id}`}
                   onClick={() => handleJobClick(job)}
                 >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(job.id)}
+                      onChange={(e) => handleSelectJob(job.id, e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
