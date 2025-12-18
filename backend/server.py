@@ -1687,6 +1687,20 @@ async def send_campaign_batch(
                 msg_dict["metadata"] = {"campaign_id": campaign_id, "twilio_sid": result.get("provider_message_id")}
                 await db.messages.insert_one(msg_dict)
             
+            # Also log to campaign_messages collection for campaign-specific tracking
+            campaign_msg = {
+                "id": str(uuid4()),
+                "campaign_id": campaign_id,
+                "tenant_id": tenant_id,
+                "customer_id": customer["id"],
+                "direction": "OUTBOUND",
+                "content": message,
+                "twilio_sid": result.get("provider_message_id"),
+                "status": "SENT",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.campaign_messages.insert_one(campaign_msg)
+            
         except Exception as e:
             errors.append({"customer_id": recipient["customer_id"], "error": str(e)})
             await db.campaign_recipients.update_one(
