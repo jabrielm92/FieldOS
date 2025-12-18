@@ -327,7 +327,7 @@ export default function ConversationsPage() {
   );
 }
 
-function ConversationItem({ conversation, isSelected, onClick, formatTime }) {
+function ConversationItem({ conversation, isSelected, onClick, formatTime, checked, onCheck, onDelete }) {
   const senderTypeIcon = {
     CUSTOMER: <User className="h-3 w-3" />,
     AI: <Bot className="h-3 w-3" />,
@@ -337,32 +337,52 @@ function ConversationItem({ conversation, isSelected, onClick, formatTime }) {
   return (
     <div
       className={cn(
-        "p-3 rounded-md cursor-pointer transition-colors mb-1",
-        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted"
+        "p-3 rounded-md cursor-pointer transition-colors mb-1 group",
+        isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted",
+        checked ? "ring-2 ring-primary" : ""
       )}
-      onClick={onClick}
       data-testid={`conversation-${conversation.id}`}
     >
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
-          <User className="h-4 w-4 text-muted-foreground" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1">
-            <p className="font-medium text-sm truncate">
-              {conversation.customer?.first_name} {conversation.customer?.last_name}
-            </p>
-            <span className="text-xs text-muted-foreground">
-              {formatTime(conversation.last_message_at)}
-            </span>
+      <div className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => {
+            e.stopPropagation();
+            onCheck(e.target.checked);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 mt-1"
+        />
+        <div className="flex-1 min-w-0" onClick={onClick}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
+              <User className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-medium text-sm truncate">
+                  {conversation.customer?.first_name} {conversation.customer?.last_name}
+                </p>
+                <span className="text-xs text-muted-foreground">
+                  {formatTime(conversation.last_message_at)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                {conversation.last_message_from && senderTypeIcon[conversation.last_message_from]}
+                <span className="truncate">
+                  {conversation.last_message_from === "CUSTOMER" ? "Customer" : "You"}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            {conversation.last_message_from && senderTypeIcon[conversation.last_message_from]}
-            <span className="truncate">
-              {conversation.last_message_from === "CUSTOMER" ? "Customer" : "You"}
-            </span>
-          </div>
         </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive transition-opacity"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
