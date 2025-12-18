@@ -127,10 +127,14 @@ export const campaignAPI = {
   create: (data) => api.post('/campaigns', data),
   update: (id, data) => api.put(`/campaigns/${id}`, data),
   delete: (id) => api.delete(`/campaigns/${id}`),
+  bulkDelete: (ids) => api.post('/campaigns/bulk-delete', ids),
   previewSegment: (id, segment) => api.post(`/campaigns/${id}/preview-segment`, segment),
   start: (id) => api.post(`/campaigns/${id}/start`),
+  startWithCustomers: (id, customerIds) => api.post(`/campaigns/${id}/start-with-customers`, customerIds),
   sendBatch: (id, batchSize = 10) => api.post(`/campaigns/${id}/send-batch`, null, { params: { batch_size: batchSize } }),
   getStats: (id) => api.get(`/campaigns/${id}/stats`),
+  getMessages: (id) => api.get(`/campaigns/${id}/messages`),
+  getCustomersForSelection: (params) => api.get('/campaigns/customers-for-selection', { params }),
 };
 
 // Dispatch APIs
