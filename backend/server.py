@@ -707,6 +707,25 @@ async def delete_lead(
     return {"success": True, "message": "Lead deleted"}
 
 
+@v1_router.post("/leads/bulk-delete")
+async def bulk_delete_leads(
+    lead_ids: List[str],
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Bulk delete leads and their associated jobs"""
+    if not lead_ids:
+        raise HTTPException(status_code=400, detail="No lead IDs provided")
+    
+    # Delete associated jobs first
+    await db.jobs.delete_many({"lead_id": {"$in": lead_ids}, "tenant_id": tenant_id})
+    
+    # Delete the leads
+    result = await db.leads.delete_many({"id": {"$in": lead_ids}, "tenant_id": tenant_id})
+    
+    return {"success": True, "deleted_count": result.deleted_count}
+
+
 # ============= JOBS ENDPOINTS =============
 
 @v1_router.get("/jobs")
