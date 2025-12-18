@@ -1,74 +1,49 @@
-# THIS SECTION CONTAINS CRITICAL TESTING INSTRUCTIONS FOR BOTH AGENTS
-# BOTH MAIN_AGENT AND TESTING_AGENT MUST PRESERVE THIS ENTIRE BLOCK
-
-#====================================================================================================
 # Testing Data
-#====================================================================================================
 
 user_problem_statement: >
-  FieldOS - Multi-tenant Revenue & Operations OS for field service companies.
-  Features implemented:
-  1. Calendar - Add/edit job functionality with modals
-  2. Inbox/Conversations - Enhanced SMS view with Vapi call summaries
-  3. Quotes - Import from Lead/Vapi Call integration
+  FieldOS - Multi-tenant app. Added bulk delete functionality with checkboxes:
+  - Leads page: checkbox selection + bulk delete
+  - Jobs page: checkbox selection + bulk delete
+  - Customers page: checkbox selection + bulk delete (cascade deletes related data)
+  - Calendar: uses jobs so already covered
 
 backend:
-  - task: "All backend APIs"
+  - task: "Bulk Delete APIs"
     implemented: true
     working: true
-    stuck_count: 0
     priority: "high"
     needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "All APIs working - campaigns, jobs, conversations, quotes"
 
 frontend:
-  - task: "Calendar Add/Edit Job"
+  - task: "Leads Bulk Delete UI"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/calendar/CalendarPage.js"
-    stuck_count: 0
+    file: "/app/frontend/src/pages/leads/LeadsPage.js"
     priority: "high"
     needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "CreateJobModal and EditJobModal added. Can schedule new jobs and edit existing ones."
 
-  - task: "Inbox/Conversations Enhanced"
+  - task: "Jobs Bulk Delete UI"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/conversations/ConversationsPage.js"
-    stuck_count: 0
+    file: "/app/frontend/src/pages/jobs/JobsPage.js"
     priority: "high"
     needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Enhanced with Vapi call summary display, auto-refresh, improved message bubbles"
 
-  - task: "Quotes Lead Import"
+  - task: "Customers Bulk Delete UI"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/quotes/QuotesPage.js"
-    stuck_count: 0
+    file: "/app/frontend/src/pages/customers/CustomersPage.js"
     priority: "high"
     needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Added Import from Lead/Vapi Call feature to pre-fill quote description"
 
 metadata:
   created_by: "main_agent"
-  version: "6.0"
-  test_sequence: 7
+  version: "7.0"
+  test_sequence: 8
   run_ui: true
 
 test_plan:
-  current_focus: "Test Calendar job creation, Inbox messaging, Quote lead import"
+  current_focus: "Test bulk delete functionality on Leads, Jobs, Customers pages"
   blocked_features: []
   test_all: true
 
