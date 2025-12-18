@@ -2852,10 +2852,21 @@ async def get_dashboard(
     current_user: dict = Depends(get_current_user)
 ):
     """Get dashboard data for tenant"""
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    import pytz
+    
+    # Get tenant timezone
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    tenant_tz_str = tenant.get("timezone", "America/New_York") if tenant else "America/New_York"
+    try:
+        tenant_tz = pytz.timezone(tenant_tz_str)
+    except:
+        tenant_tz = pytz.timezone("America/New_York")
+    
+    # Use tenant timezone for date calculations
+    now = datetime.now(tenant_tz)
+    today_start = tenant_tz.localize(datetime(now.year, now.month, now.day, 0, 0, 0))
     week_start = today_start - timedelta(days=today_start.weekday())
-    month_start = today_start.replace(day=1)
+    month_start = tenant_tz.localize(datetime(now.year, now.month, 1, 0, 0, 0))
     
     # Leads this week
     leads_week = await db.leads.count_documents({
