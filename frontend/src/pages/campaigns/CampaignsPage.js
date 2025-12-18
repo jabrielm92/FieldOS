@@ -1074,9 +1074,10 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
               <div className="space-y-2">
                 <Label>How do you want to select customers?</Label>
                 <div className="grid grid-cols-2 gap-3">
-                  <Card 
-                    className={`p-4 cursor-pointer transition-all ${
-                      selectionMode === "segment" ? "ring-2 ring-primary bg-primary/5" : "hover:bg-muted/50"
+                  <button 
+                    type="button"
+                    className={`p-4 rounded-lg border text-left transition-all ${
+                      selectionMode === "segment" ? "ring-2 ring-primary bg-primary/5 border-primary" : "hover:bg-muted/50 border-border"
                     }`}
                     onClick={() => setSelectionMode("segment")}
                   >
@@ -1085,10 +1086,11 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                       <p className="font-medium text-sm">By Segment</p>
                       <p className="text-xs text-muted-foreground">Auto-select based on criteria</p>
                     </div>
-                  </Card>
-                  <Card 
-                    className={`p-4 cursor-pointer transition-all ${
-                      selectionMode === "manual" ? "ring-2 ring-primary bg-primary/5" : "hover:bg-muted/50"
+                  </button>
+                  <button 
+                    type="button"
+                    className={`p-4 rounded-lg border text-left transition-all ${
+                      selectionMode === "manual" ? "ring-2 ring-primary bg-primary/5 border-primary" : "hover:bg-muted/50 border-border"
                     }`}
                     onClick={() => setSelectionMode("manual")}
                   >
@@ -1097,7 +1099,7 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                       <p className="font-medium text-sm">Manual Selection</p>
                       <p className="text-xs text-muted-foreground">Pick specific customers</p>
                     </div>
-                  </Card>
+                  </button>
                 </div>
               </div>
 
