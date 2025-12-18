@@ -7,7 +7,7 @@ import { Badge } from "../../components/ui/badge";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { conversationAPI, customerAPI } from "../../lib/api";
 import { toast } from "sonner";
-import { Search, Send, Phone, MessageSquare, User, Bot, Clock, PhoneIncoming, PhoneOutgoing, RefreshCw, Plus } from "lucide-react";
+import { Search, Send, Phone, MessageSquare, User, Bot, Clock, PhoneIncoming, PhoneOutgoing, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import {
   Dialog,
