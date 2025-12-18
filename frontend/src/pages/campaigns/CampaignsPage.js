@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Layout } from "../../components/layout/Layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
+import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
@@ -30,13 +30,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { campaignAPI, customerAPI } from "../../lib/api";
+import { campaignAPI } from "../../lib/api";
 import { toast } from "sonner";
 import { 
   Plus, Megaphone, Play, Pause, Check, Clock, Users, 
   MessageSquare, Target, BarChart3, Send, Calendar,
-  AlertCircle, CheckCircle, XCircle, Loader2, Settings,
-  TrendingUp, Eye, Edit, Copy, Trash2
+  CheckCircle, XCircle, Loader2, Settings,
+  TrendingUp, Trash2, RefreshCw
 } from "lucide-react";
 
 const statusColors = {
@@ -66,13 +66,7 @@ export default function CampaignsPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [filter, setFilter] = useState("all");
 
-  useEffect(() => {
-    fetchCampaigns();
-    const interval = setInterval(fetchCampaigns, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchCampaigns = async () => {
+  const fetchCampaigns = useCallback(async () => {
     try {
       const response = await campaignAPI.list();
       setCampaigns(response.data);
@@ -81,29 +75,27 @@ export default function CampaignsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchCampaigns();
+    const interval = setInterval(fetchCampaigns, 30000);
+    return () => clearInterval(interval);
+  }, [fetchCampaigns]);
 
   const handleCampaignClick = (campaign) => {
     setSelectedCampaign(campaign);
     setShowDetailModal(true);
   };
 
-  const handleStatusChange = async (campaign, newStatus) => {
+  const handleDeleteCampaign = async (campaignId) => {
+    if (!window.confirm("Are you sure you want to delete this campaign?")) return;
     try {
-      // Only send fields that are in CampaignCreate model
-      const payload = {
-        name: campaign.name,
-        type: campaign.type,
-        status: newStatus,
-        message_template: campaign.message_template || null,
-        segment_definition: campaign.segment_definition || null,
-      };
-      await campaignAPI.update(campaign.id, payload);
-      toast.success(`Campaign ${newStatus === "RUNNING" ? "started" : newStatus.toLowerCase()}`);
+      await campaignAPI.delete(campaignId);
+      toast.success("Campaign deleted");
       fetchCampaigns();
     } catch (error) {
-      console.error("Campaign update error:", error);
-      toast.error(error.response?.data?.detail || "Failed to update campaign");
+      toast.error("Failed to delete campaign");
     }
   };
 
@@ -121,7 +113,6 @@ export default function CampaignsPage() {
     });
   };
 
-  // Stats
   const stats = {
     total: campaigns.length,
     active: campaigns.filter(c => c.status === "RUNNING").length,
@@ -243,8 +234,8 @@ export default function CampaignsPage() {
               key={campaign.id} 
               campaign={campaign} 
               formatDate={formatDate}
-              onStatusChange={handleStatusChange}
               onClick={() => handleCampaignClick(campaign)}
+              onDelete={() => handleDeleteCampaign(campaign.id)}
             />
           ))}
         </div>
@@ -255,7 +246,6 @@ export default function CampaignsPage() {
         campaign={selectedCampaign}
         open={showDetailModal}
         onOpenChange={setShowDetailModal}
-        onStatusChange={handleStatusChange}
         onUpdate={fetchCampaigns}
         formatDate={formatDate}
       />
@@ -263,25 +253,15 @@ export default function CampaignsPage() {
   );
 }
 
-function CampaignCard({ campaign, formatDate, onStatusChange, onClick }) {
+function CampaignCard({ campaign, formatDate, onClick, onDelete }) {
   const TypeIcon = typeIcons[campaign.type] || Megaphone;
-  
-  // Mock recipient data (would come from backend in real app)
-  const recipientStats = {
-    total: Math.floor(Math.random() * 100) + 20,
-    sent: Math.floor(Math.random() * 80),
-    responded: Math.floor(Math.random() * 20),
-  };
-  const progress = campaign.status === "RUNNING" || campaign.status === "COMPLETED" 
-    ? Math.min(100, (recipientStats.sent / recipientStats.total) * 100) 
-    : 0;
+  const totalRecipients = campaign.total_recipients || 0;
 
   return (
     <Card 
       className="card-industrial cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
       onClick={onClick}
     >
-      {/* Status indicator bar */}
       <div className={`h-1 ${
         campaign.status === "RUNNING" ? "bg-green-500" : 
         campaign.status === "PAUSED" ? "bg-yellow-500" :
@@ -307,9 +287,19 @@ function CampaignCard({ campaign, formatDate, onStatusChange, onClick }) {
               </Badge>
             </div>
           </div>
-          <Badge className={statusColors[campaign.status]}>
-            {campaign.status}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge className={statusColors[campaign.status]}>
+              {campaign.status}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         
         {campaign.message_template && (
@@ -318,23 +308,11 @@ function CampaignCard({ campaign, formatDate, onStatusChange, onClick }) {
           </p>
         )}
 
-        {/* Progress for running campaigns */}
-        {(campaign.status === "RUNNING" || campaign.status === "COMPLETED") && (
+        {totalRecipients > 0 && (
           <div className="mb-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-              <span>Progress</span>
-              <span>{Math.round(progress)}%</span>
-            </div>
-            <Progress value={progress} className="h-2" />
-            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
-                <Users className="h-3 w-3" /> {recipientStats.total} recipients
-              </span>
-              <span className="flex items-center gap-1">
-                <Send className="h-3 w-3" /> {recipientStats.sent} sent
-              </span>
-              <span className="flex items-center gap-1">
-                <MessageSquare className="h-3 w-3" /> {recipientStats.responded} responded
+                <Users className="h-3 w-3" /> {totalRecipients} recipients
               </span>
             </div>
           </div>
@@ -349,56 +327,19 @@ function CampaignCard({ campaign, formatDate, onStatusChange, onClick }) {
         
         <div className="flex gap-2 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
           {campaign.status === "DRAFT" && (
-            <Button 
-              size="sm" 
-              className="flex-1"
-              onClick={() => onStatusChange(campaign, "RUNNING")}
-            >
+            <Button size="sm" className="flex-1" onClick={onClick}>
               <Play className="h-3 w-3 mr-1" />
-              Start Campaign
+              Configure & Start
             </Button>
           )}
           {campaign.status === "RUNNING" && (
-            <>
-              <Button 
-                size="sm" 
-                variant="outline"
-                className="flex-1"
-                onClick={() => onStatusChange(campaign, "PAUSED")}
-              >
-                <Pause className="h-3 w-3 mr-1" />
-                Pause
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => onStatusChange(campaign, "COMPLETED")}
-              >
-                <Check className="h-3 w-3" />
-              </Button>
-            </>
-          )}
-          {campaign.status === "PAUSED" && (
-            <>
-              <Button 
-                size="sm" 
-                className="flex-1"
-                onClick={() => onStatusChange(campaign, "RUNNING")}
-              >
-                <Play className="h-3 w-3 mr-1" />
-                Resume
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => onStatusChange(campaign, "COMPLETED")}
-              >
-                <Check className="h-3 w-3" />
-              </Button>
-            </>
+            <Button size="sm" variant="outline" className="flex-1" onClick={onClick}>
+              <BarChart3 className="h-3 w-3 mr-1" />
+              View Progress
+            </Button>
           )}
           {campaign.status === "COMPLETED" && (
-            <Button size="sm" variant="outline" className="flex-1">
+            <Button size="sm" variant="outline" className="flex-1" onClick={onClick}>
               <BarChart3 className="h-3 w-3 mr-1" />
               View Results
             </Button>
@@ -409,21 +350,93 @@ function CampaignCard({ campaign, formatDate, onStatusChange, onClick }) {
   );
 }
 
-function CampaignDetailModal({ campaign, open, onOpenChange, onStatusChange, onUpdate, formatDate }) {
+function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDate }) {
   const [activeTab, setActiveTab] = useState("overview");
+  const [stats, setStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [starting, setStarting] = useState(false);
+
+  const fetchStats = useCallback(async () => {
+    if (!campaign?.id) return;
+    setLoadingStats(true);
+    try {
+      const response = await campaignAPI.getStats(campaign.id);
+      setStats(response.data);
+    } catch (error) {
+      console.error("Failed to load stats:", error);
+    } finally {
+      setLoadingStats(false);
+    }
+  }, [campaign?.id]);
+
+  useEffect(() => {
+    if (open && campaign) {
+      fetchStats();
+    }
+  }, [open, campaign, fetchStats]);
+
+  const handleStartCampaign = async () => {
+    if (!campaign) return;
+    setStarting(true);
+    try {
+      const response = await campaignAPI.start(campaign.id);
+      toast.success(`Campaign started with ${response.data.recipients_created} recipients`);
+      fetchStats();
+      onUpdate();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to start campaign");
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const handleSendBatch = async () => {
+    if (!campaign) return;
+    setSending(true);
+    try {
+      const response = await campaignAPI.sendBatch(campaign.id, 10);
+      if (response.data.status === "completed") {
+        toast.success("All messages sent! Campaign completed.");
+      } else {
+        toast.success(`Sent ${response.data.sent_in_batch} messages. ${response.data.remaining} remaining.`);
+      }
+      fetchStats();
+      onUpdate();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to send batch");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handlePauseCampaign = async () => {
+    try {
+      await campaignAPI.update(campaign.id, {
+        ...campaign,
+        status: "PAUSED"
+      });
+      toast.success("Campaign paused");
+      onUpdate();
+    } catch (error) {
+      toast.error("Failed to pause campaign");
+    }
+  };
 
   if (!campaign) return null;
 
-  // Mock data for demonstration
-  const recipientStats = {
-    total: 85,
-    pending: 12,
-    sent: 60,
-    responded: 18,
-    optedOut: 3,
+  const recipientStats = stats?.stats || {
+    total: 0,
+    pending: 0,
+    sent: 0,
+    responded: 0,
+    opted_out: 0,
+    response_rate: 0
   };
 
-  const responseRate = ((recipientStats.responded / recipientStats.sent) * 100).toFixed(1);
+  const progress = recipientStats.total > 0 
+    ? ((recipientStats.sent + recipientStats.opted_out) / recipientStats.total) * 100 
+    : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -453,7 +466,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onStatusChange, onU
           <TabsList className="w-full">
             <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
             <TabsTrigger value="recipients" className="flex-1">Recipients</TabsTrigger>
-            <TabsTrigger value="analytics" className="flex-1">Analytics</TabsTrigger>
+            <TabsTrigger value="send" className="flex-1">Send Messages</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-4">
@@ -466,7 +479,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onStatusChange, onU
                 {campaign.message_template || "No message template set"}
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Use {"{first_name}"}, {"{company_name}"} for personalization
+                Variables: {"{first_name}"}, {"{last_name}"}, {"{company_name}"}
               </p>
             </div>
 
@@ -477,20 +490,24 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onStatusChange, onU
               </h4>
               <div className="bg-muted/50 rounded-lg p-4">
                 {campaign.segment_definition ? (
-                  <pre className="text-xs">{JSON.stringify(typeof campaign.segment_definition === 'string' ? JSON.parse(campaign.segment_definition) : campaign.segment_definition, null, 2)}</pre>
+                  <div className="text-sm">
+                    {campaign.segment_definition.lastServiceDaysAgo && (
+                      <p>• Last service: more than {campaign.segment_definition.lastServiceDaysAgo.replace(">", "")} days ago</p>
+                    )}
+                    {campaign.segment_definition.last_service_days_ago && (
+                      <p>• Last service: more than {campaign.segment_definition.last_service_days_ago.replace(">", "")} days ago</p>
+                    )}
+                    {!campaign.segment_definition.lastServiceDaysAgo && !campaign.segment_definition.last_service_days_ago && (
+                      <pre className="text-xs">{JSON.stringify(campaign.segment_definition, null, 2)}</pre>
+                    )}
+                  </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {campaign.type === "REACTIVATION" 
-                      ? "Customers with no service in last 6+ months"
-                      : campaign.type === "TUNEUP"
-                      ? "Customers due for seasonal maintenance"
-                      : "All active customers"}
-                  </p>
+                  <p className="text-sm text-muted-foreground">All customers with completed jobs</p>
                 )}
               </div>
             </div>
 
-            {/* Quick Stats */}
+            {/* Stats */}
             <div className="grid grid-cols-4 gap-4">
               <Card className="p-3 text-center">
                 <p className="text-2xl font-bold">{recipientStats.total}</p>
@@ -505,48 +522,37 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onStatusChange, onU
                 <p className="text-xs text-muted-foreground">Responded</p>
               </Card>
               <Card className="p-3 text-center">
-                <p className="text-2xl font-bold text-primary">{responseRate}%</p>
+                <p className="text-2xl font-bold text-primary">{recipientStats.response_rate}%</p>
                 <p className="text-xs text-muted-foreground">Response Rate</p>
               </Card>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-2">
-              {campaign.status === "DRAFT" && (
-                <Button onClick={() => onStatusChange(campaign, "RUNNING")} className="flex-1">
-                  <Play className="h-4 w-4 mr-2" />
-                  Start Campaign
-                </Button>
-              )}
-              {campaign.status === "RUNNING" && (
-                <>
-                  <Button variant="outline" onClick={() => onStatusChange(campaign, "PAUSED")} className="flex-1">
-                    <Pause className="h-4 w-4 mr-2" />
-                    Pause
-                  </Button>
-                  <Button variant="outline" onClick={() => onStatusChange(campaign, "COMPLETED")}>
-                    <Check className="h-4 w-4 mr-2" />
-                    Complete
-                  </Button>
-                </>
-              )}
-              {campaign.status === "PAUSED" && (
-                <Button onClick={() => onStatusChange(campaign, "RUNNING")} className="flex-1">
-                  <Play className="h-4 w-4 mr-2" />
-                  Resume
-                </Button>
-              )}
-            </div>
+            {/* Progress */}
+            {campaign.status === "RUNNING" && recipientStats.total > 0 && (
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Sending Progress</span>
+                  <span>{Math.round(progress)}%</span>
+                </div>
+                <Progress value={progress} className="h-2" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {recipientStats.pending} messages remaining
+                </p>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="recipients" className="mt-4">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h4 className="font-medium">Campaign Recipients</h4>
-                <Badge variant="outline">{recipientStats.total} total</Badge>
+                <Button variant="outline" size="sm" onClick={fetchStats} disabled={loadingStats}>
+                  <RefreshCw className={`h-3 w-3 mr-1 ${loadingStats ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
               </div>
 
-              {/* Recipient status breakdown */}
+              {/* Status breakdown */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-gray-50 rounded-lg p-3 flex items-center gap-2">
                   <Clock className="h-4 w-4 text-gray-500" />
@@ -572,64 +578,187 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onStatusChange, onU
                 <div className="bg-red-50 rounded-lg p-3 flex items-center gap-2">
                   <XCircle className="h-4 w-4 text-red-500" />
                   <div>
-                    <p className="font-medium text-red-700">{recipientStats.optedOut}</p>
-                    <p className="text-xs text-muted-foreground">Opted Out</p>
+                    <p className="font-medium text-red-700">{recipientStats.opted_out}</p>
+                    <p className="text-xs text-muted-foreground">Failed/Opted Out</p>
                   </div>
                 </div>
               </div>
 
-              {/* Sample recipient list */}
-              <div className="bg-muted/30 rounded-lg p-4">
-                <p className="text-sm text-muted-foreground text-center">
-                  Recipient list will populate when campaign is active
-                </p>
-              </div>
+              {/* Recipient list */}
+              {stats?.recipients && stats.recipients.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left p-3">Customer</th>
+                        <th className="text-left p-3">Phone</th>
+                        <th className="text-left p-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.recipients.slice(0, 20).map((r) => (
+                        <tr key={r.id} className="border-t">
+                          <td className="p-3">{r.customer_name || "Unknown"}</td>
+                          <td className="p-3 text-muted-foreground">{r.customer_phone}</td>
+                          <td className="p-3">
+                            <Badge className={
+                              r.status === "SENT" ? "bg-green-100 text-green-800" :
+                              r.status === "RESPONDED" ? "bg-blue-100 text-blue-800" :
+                              r.status === "PENDING" ? "bg-gray-100 text-gray-800" :
+                              "bg-red-100 text-red-800"
+                            }>
+                              {r.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {stats.recipients.length > 20 && (
+                    <div className="p-3 text-center text-sm text-muted-foreground bg-muted/30">
+                      Showing 20 of {stats.recipients.length} recipients
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-muted/30 rounded-lg p-8 text-center">
+                  <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    {campaign.status === "DRAFT" 
+                      ? "Start the campaign to generate recipients" 
+                      : "No recipients found"}
+                  </p>
+                </div>
+              )}
             </div>
           </TabsContent>
 
-          <TabsContent value="analytics" className="mt-4">
+          <TabsContent value="send" className="mt-4">
             <div className="space-y-6">
-              {/* Performance metrics */}
-              <div>
-                <h4 className="font-medium mb-3">Performance Metrics</h4>
-                <div className="grid grid-cols-3 gap-4">
-                  <Card className="p-4 text-center">
-                    <p className="text-3xl font-bold text-green-600">{responseRate}%</p>
-                    <p className="text-sm text-muted-foreground">Response Rate</p>
-                  </Card>
-                  <Card className="p-4 text-center">
-                    <p className="text-3xl font-bold text-blue-600">$2,450</p>
-                    <p className="text-sm text-muted-foreground">Revenue Generated</p>
-                  </Card>
-                  <Card className="p-4 text-center">
-                    <p className="text-3xl font-bold text-purple-600">5</p>
-                    <p className="text-sm text-muted-foreground">Jobs Booked</p>
-                  </Card>
-                </div>
-              </div>
+              {campaign.status === "DRAFT" && (
+                <Card className="p-6 text-center">
+                  <Target className="h-12 w-12 mx-auto mb-4 text-purple-500" />
+                  <h4 className="font-medium mb-2">Ready to Start Campaign?</h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    This will find all customers matching your segment and prepare them for messaging.
+                  </p>
+                  <Button onClick={handleStartCampaign} disabled={starting}>
+                    {starting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Starting...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Start Campaign
+                      </>
+                    )}
+                  </Button>
+                </Card>
+              )}
 
-              {/* Timeline */}
-              <div>
-                <h4 className="font-medium mb-3">Campaign Timeline</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-green-500 rounded-full" />
-                    <span className="text-sm">Created on {formatDate(campaign.created_at)}</span>
+              {campaign.status === "RUNNING" && (
+                <div className="space-y-4">
+                  <Card className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="font-medium">Send Messages</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {recipientStats.pending} messages waiting to be sent
+                        </p>
+                      </div>
+                      <Badge className="bg-green-100 text-green-800">Campaign Active</Badge>
+                    </div>
+
+                    {recipientStats.pending > 0 ? (
+                      <div className="space-y-4">
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <p className="text-sm text-yellow-800">
+                            <strong>Note:</strong> Messages are sent in batches of 10 to avoid rate limits. 
+                            Click "Send Next Batch" repeatedly until all messages are sent.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button onClick={handleSendBatch} disabled={sending} className="flex-1">
+                            {sending ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Sending...
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-4 w-4 mr-2" />
+                                Send Next Batch (10 messages)
+                              </>
+                            )}
+                          </Button>
+                          <Button variant="outline" onClick={handlePauseCampaign}>
+                            <Pause className="h-4 w-4 mr-2" />
+                            Pause
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                        <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                        <p className="text-green-800 font-medium">All messages sent!</p>
+                        <p className="text-sm text-green-600">Campaign will be marked as completed.</p>
+                      </div>
+                    )}
+                  </Card>
+
+                  {/* Progress summary */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <Card className="p-4 text-center">
+                      <p className="text-3xl font-bold text-green-600">{recipientStats.sent}</p>
+                      <p className="text-sm text-muted-foreground">Messages Sent</p>
+                    </Card>
+                    <Card className="p-4 text-center">
+                      <p className="text-3xl font-bold text-gray-600">{recipientStats.pending}</p>
+                      <p className="text-sm text-muted-foreground">Remaining</p>
+                    </Card>
+                    <Card className="p-4 text-center">
+                      <p className="text-3xl font-bold text-red-600">{recipientStats.opted_out}</p>
+                      <p className="text-sm text-muted-foreground">Failed</p>
+                    </Card>
                   </div>
-                  {campaign.status !== "DRAFT" && (
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                      <span className="text-sm">Started sending messages</span>
-                    </div>
-                  )}
-                  {campaign.status === "COMPLETED" && (
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full" />
-                      <span className="text-sm">Campaign completed</span>
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
+
+              {campaign.status === "COMPLETED" && (
+                <Card className="p-6 text-center">
+                  <CheckCircle className="h-12 w-12 mx-auto mb-4 text-blue-500" />
+                  <h4 className="font-medium mb-2">Campaign Completed</h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Sent {recipientStats.sent} messages to customers.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
+                    <Card className="p-3">
+                      <p className="text-2xl font-bold text-blue-600">{recipientStats.responded}</p>
+                      <p className="text-xs text-muted-foreground">Responses</p>
+                    </Card>
+                    <Card className="p-3">
+                      <p className="text-2xl font-bold text-primary">{recipientStats.response_rate}%</p>
+                      <p className="text-xs text-muted-foreground">Response Rate</p>
+                    </Card>
+                  </div>
+                </Card>
+              )}
+
+              {campaign.status === "PAUSED" && (
+                <Card className="p-6 text-center">
+                  <Pause className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
+                  <h4 className="font-medium mb-2">Campaign Paused</h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {recipientStats.pending} messages still pending.
+                  </p>
+                  <Button onClick={handleStartCampaign}>
+                    <Play className="h-4 w-4 mr-2" />
+                    Resume Campaign
+                  </Button>
+                </Card>
+              )}
             </div>
           </TabsContent>
         </Tabs>
@@ -652,17 +781,12 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
   });
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
+  const [segmentDays, setSegmentDays] = useState("180");
 
   const templates = {
-    REACTIVATION: "Hi {first_name}, it's been a while since we serviced your HVAC system. Schedule a tune-up today and get 10% off! Reply YES to book or call us at [phone].",
+    REACTIVATION: "Hi {first_name}, it's been a while since we serviced your HVAC system. Schedule a tune-up today and get 10% off! Reply YES to book or call us.",
     TUNEUP: "Hi {first_name}, it's that time of year! Get your system ready for the season with our $79 tune-up special. Reply YES to schedule!",
-    SPECIAL_OFFER: "Hi {first_name}, exclusive offer for our valued customers! Get $50 off any repair this month. Reply YES or call [phone] to claim.",
-  };
-
-  const segmentPresets = {
-    REACTIVATION: { lastServiceDaysAgo: ">180", hasActiveService: false },
-    TUNEUP: { lastMaintenanceDaysAgo: ">300", propertyType: "RESIDENTIAL" },
-    SPECIAL_OFFER: { totalJobsCompleted: ">0", status: "active" },
+    SPECIAL_OFFER: "Hi {first_name}, exclusive offer for our valued customers! Get $50 off any repair this month. Reply YES or call us to claim.",
   };
 
   const handleTypeChange = (type) => {
@@ -670,30 +794,29 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
       ...formData,
       type,
       message_template: templates[type],
-      segment_definition: segmentPresets[type],
     });
   };
+
+  useEffect(() => {
+    // Update segment definition when days change
+    setFormData(prev => ({
+      ...prev,
+      segment_definition: { last_service_days_ago: `>${segmentDays}` }
+    }));
+  }, [segmentDays]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // Ensure segment_definition is sent as an object, not a string
-      const payload = {
-        ...formData,
-        segment_definition: typeof formData.segment_definition === 'string' 
-          ? (formData.segment_definition ? JSON.parse(formData.segment_definition) : null)
-          : formData.segment_definition || null,
-      };
-      await campaignAPI.create(payload);
+      await campaignAPI.create(formData);
       toast.success("Campaign created successfully");
       onOpenChange(false);
       setFormData({ name: "", type: "REACTIVATION", message_template: "", segment_definition: null, status: "DRAFT" });
       setStep(1);
       onSuccess();
     } catch (error) {
-      console.error("Campaign creation error:", error);
       toast.error(error.response?.data?.detail || "Failed to create campaign");
     } finally {
       setLoading(false);
@@ -722,7 +845,7 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
               <div className="space-y-2">
                 <Label>Campaign Name *</Label>
                 <Input
-                  placeholder="e.g., Summer Reactivation 2025"
+                  placeholder="e.g., Winter Reactivation 2025"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                   required
@@ -775,21 +898,27 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                   rows={4}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Variables: {"{first_name}"}, {"{last_service_date}"}, {"{property_address}"}
+                  Variables: {"{first_name}"}, {"{last_name}"}, {"{company_name}"}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label>Target Segment</Label>
-                <div className="bg-muted/50 rounded-lg p-4 text-sm">
-                  <p className="font-medium mb-2">
-                    {formData.type === "REACTIVATION" && "Customers with no service in last 6 months"}
-                    {formData.type === "TUNEUP" && "Customers due for seasonal maintenance"}
-                    {formData.type === "SPECIAL_OFFER" && "All active customers"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Estimated reach: ~45 customers
-                  </p>
+                <Label>Target Customers</Label>
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm">Customers with no service in the last</span>
+                    <Select value={segmentDays} onValueChange={setSegmentDays}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="90">90 days</SelectItem>
+                        <SelectItem value="180">180 days</SelectItem>
+                        <SelectItem value="365">1 year</SelectItem>
+                        <SelectItem value="730">2 years</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -799,14 +928,9 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                 <Button type="button" variant="outline" onClick={() => setStep(1)}>
                   Back
                 </Button>
-                <div className="flex gap-2">
-                  <Button type="submit" variant="outline" disabled={loading}>
-                    Save as Draft
-                  </Button>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? "Creating..." : "Create & Start"}
-                  </Button>
-                </div>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Creating..." : "Create Campaign"}
+                </Button>
               </div>
             </div>
           )}
