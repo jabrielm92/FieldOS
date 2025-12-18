@@ -10,12 +10,59 @@
 | Tool | URL |
 |------|-----|
 | **Create Lead** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/create-lead` |
-| **Get Current Date** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/get-current-date` |
 | **Check Availability** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/check-availability` |
 | **Book Job** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/book-job` |
 | **Send SMS** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/send-sms` |
 | **Log Call Summary** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/call-summary` |
 | **Twilio Inbound SMS Webhook** | `https://service-hub-261.preview.emergentagent.com/api/v1/sms/inbound` |
+
+---
+
+## ⚠️ CRITICAL: Fixing the Date Issue
+
+The AI doesn't inherently know today's date. To fix this, you MUST inject the current date into your Vapi assistant's system prompt.
+
+### Option 1: Use Vapi's Built-in {{now}} Variable (Recommended)
+
+In your Vapi assistant's **System Prompt**, add at the very beginning:
+
+```
+CURRENT DATE: {{now}}
+
+When converting relative dates to YYYY-MM-DD format:
+- "today" = the date shown above
+- "tomorrow" = add 1 day
+- "next week" = add 7 days  
+- "next Monday" = calculate from current date above
+```
+
+### Option 2: Use Custom Dynamic Variables via API
+
+When starting a call via Vapi API, pass the current date:
+
+```javascript
+const response = await vapi.calls.create({
+  assistantId: "your-assistant-id",
+  customer: { number: "+1234567890" },
+  assistantOverrides: {
+    variableValues: {
+      current_date: new Date().toISOString().split('T')[0],
+      current_date_formatted: new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+      })
+    }
+  }
+});
+```
+
+Then in your system prompt:
+```
+Today is {{current_date_formatted}} ({{current_date}}).
+```
+
+### Option 3: Server URL for Dynamic System Prompt
+
+Create an endpoint that returns the system prompt with current date injected, then use Vapi's "Server URL" feature for the system prompt.
 
 ---
 
