@@ -1604,14 +1604,27 @@ async def vapi_check_availability(
     available_windows = []
     for window in windows:
         if available_slots > 0:
+            # Build full ISO datetime strings for the booking
+            start_hour, start_min = map(int, window["start"].split(":"))
+            end_hour, end_min = map(int, window["end"].split(":"))
+            
+            window_start_dt = target_date.replace(hour=start_hour, minute=start_min, second=0, microsecond=0)
+            window_end_dt = target_date.replace(hour=end_hour, minute=end_min, second=0, microsecond=0)
+            
             available_windows.append({
                 "date": data.date,
                 "start": window["start"],
                 "end": window["end"],
                 "label": window["label"],
-                "available": True
+                "available": True,
+                # Include full ISO datetime strings for book-job
+                "window_start": window_start_dt.isoformat(),
+                "window_end": window_end_dt.isoformat()
             })
             available_slots -= 1
+    
+    # Format date for human-readable response
+    date_formatted = target_date.strftime("%A, %B %d, %Y")
     
     # Format response for Vapi - structured for AI to understand
     if len(available_windows) == 0:
@@ -1619,9 +1632,10 @@ async def vapi_check_availability(
             "result": "no_availability",
             "status": "fully_booked",
             "date": data.date,
+            "date_formatted": date_formatted,
             "windows": [],
             "has_availability": False,
-            "instructions": f"IMPORTANT: There are NO available time slots for {data.date}. Tell the customer that unfortunately, that date is fully booked. Ask them to suggest an alternative date and you will check availability for that date instead."
+            "instructions": f"IMPORTANT: There are NO available time slots for {date_formatted}. Tell the customer that unfortunately, that date is fully booked. Ask them to suggest an alternative date and you will check availability for that date instead."
         }
     else:
         slots_text = ", ".join([w["label"] for w in available_windows])
@@ -1629,10 +1643,11 @@ async def vapi_check_availability(
             "result": "success",
             "status": "slots_available",
             "date": data.date,
+            "date_formatted": date_formatted,
             "windows": available_windows,
             "has_availability": True,
             "available_slots": slots_text,
-            "instructions": f"IMPORTANT: Good news! For {data.date}, the following time slots are available: {slots_text}. Tell the customer these options and ask which one works best for them. Once they choose, call the book-job tool to complete the booking."
+            "instructions": f"IMPORTANT: Good news! For {date_formatted}, the following time slots are available: {slots_text}. Tell the customer these options and ask which one works best for them. Once they choose, call the book-job tool using the window_start and window_end values from the chosen slot to complete the booking."
         }
 
 
