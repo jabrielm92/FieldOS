@@ -290,11 +290,10 @@ export default function LeadsPage() {
   );
 }
 
-function LeadCard({ lead, formatDate, onClick }) {
+function LeadCard({ lead, formatDate, onClick, selected, onSelect }) {
   return (
     <Card 
-      className="card-industrial cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden group"
-      onClick={onClick}
+      className={`card-industrial cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden group ${selected ? 'ring-2 ring-primary' : ''}`}
       data-testid={`lead-card-${lead.id}`}
     >
       {/* Urgency indicator */}
@@ -304,13 +303,25 @@ function LeadCard({ lead, formatDate, onClick }) {
         </div>
       )}
       
-      <CardContent className="p-5">
+      <CardContent className="p-5" onClick={onClick}>
         <div className="flex items-start justify-between mb-3">
-          <div>
-            <h3 className="font-medium">{lead.issue_type || "New Lead"}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {lead.source?.replace('_', ' ')}
-            </p>
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(e) => {
+                e.stopPropagation();
+                onSelect(e.target.checked);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 mt-1"
+            />
+            <div>
+              <h3 className="font-medium">{lead.issue_type || "New Lead"}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {lead.source?.replace('_', ' ')}
+              </p>
+            </div>
           </div>
           <Badge className={urgencyColors[lead.urgency]}>
             {lead.urgency}
