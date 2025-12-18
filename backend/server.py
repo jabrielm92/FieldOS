@@ -444,6 +444,31 @@ async def delete_customer(
     return {"success": True, "message": "Customer and all related data deleted"}
 
 
+@v1_router.post("/customers/bulk-delete")
+async def bulk_delete_customers(
+    customer_ids: List[str],
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Bulk delete customers and all related data (leads, jobs, properties, conversations)"""
+    if not customer_ids:
+        raise HTTPException(status_code=400, detail="No customer IDs provided")
+    
+    # Delete all related data for each customer
+    await db.jobs.delete_many({"customer_id": {"$in": customer_ids}, "tenant_id": tenant_id})
+    await db.leads.delete_many({"customer_id": {"$in": customer_ids}, "tenant_id": tenant_id})
+    await db.properties.delete_many({"customer_id": {"$in": customer_ids}, "tenant_id": tenant_id})
+    await db.conversations.delete_many({"customer_id": {"$in": customer_ids}, "tenant_id": tenant_id})
+    await db.messages.delete_many({"customer_id": {"$in": customer_ids}, "tenant_id": tenant_id})
+    await db.quotes.delete_many({"customer_id": {"$in": customer_ids}, "tenant_id": tenant_id})
+    await db.invoices.delete_many({"customer_id": {"$in": customer_ids}, "tenant_id": tenant_id})
+    
+    # Delete customers
+    result = await db.customers.delete_many({"id": {"$in": customer_ids}, "tenant_id": tenant_id})
+    
+    return {"success": True, "deleted_count": result.deleted_count}
+
+
 # ============= PROPERTIES ENDPOINTS =============
 
 @v1_router.get("/properties")
