@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import { Progress } from "../../components/ui/progress";
 import { Separator } from "../../components/ui/separator";
+import { Checkbox } from "../../components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +37,8 @@ import {
   Plus, Megaphone, Play, Pause, Check, Clock, Users, 
   MessageSquare, Target, BarChart3, Send, Calendar,
   CheckCircle, XCircle, Loader2, Settings,
-  TrendingUp, Trash2, RefreshCw
+  TrendingUp, Trash2, RefreshCw, ArrowDown, ArrowUp,
+  Search, Filter, UserPlus
 } from "lucide-react";
 
 const statusColors = {
@@ -65,6 +67,10 @@ export default function CampaignsPage() {
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [filter, setFilter] = useState("all");
+  
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [selectAll, setSelectAll] = useState(false);
 
   const fetchCampaigns = useCallback(async () => {
     try {
@@ -97,6 +103,41 @@ export default function CampaignsPage() {
     } catch (error) {
       toast.error("Failed to delete campaign");
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} selected campaign(s)?`)) return;
+    
+    try {
+      await campaignAPI.bulkDelete(Array.from(selectedIds));
+      toast.success(`Deleted ${selectedIds.size} campaigns`);
+      setSelectedIds(new Set());
+      setSelectAll(false);
+      fetchCampaigns();
+    } catch (error) {
+      toast.error("Failed to delete campaigns");
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectAll) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCampaigns.map(c => c.id)));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const toggleSelect = (id) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+    setSelectAll(newSet.size === filteredCampaigns.length);
   };
 
   const filteredCampaigns = campaigns.filter(c => {
@@ -170,9 +211,9 @@ export default function CampaignsPage() {
         </Card>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-2">
+      {/* Filters & Actions */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant={filter === "all" ? "default" : "outline"} 
             size="sm"
@@ -203,12 +244,38 @@ export default function CampaignsPage() {
           </Button>
         </div>
 
-        <CreateCampaignDialog 
-          open={showCreateDialog} 
-          onOpenChange={setShowCreateDialog}
-          onSuccess={fetchCampaigns}
-        />
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <Button 
+              variant="destructive" 
+              size="sm"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              Delete ({selectedIds.size})
+            </Button>
+          )}
+          <CreateCampaignDialog 
+            open={showCreateDialog} 
+            onOpenChange={setShowCreateDialog}
+            onSuccess={fetchCampaigns}
+          />
+        </div>
       </div>
+
+      {/* Select All */}
+      {filteredCampaigns.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 px-2">
+          <Checkbox 
+            checked={selectAll}
+            onCheckedChange={toggleSelectAll}
+            id="select-all"
+          />
+          <label htmlFor="select-all" className="text-sm text-muted-foreground cursor-pointer">
+            Select all ({filteredCampaigns.length})
+          </label>
+        </div>
+      )}
 
       {/* Campaigns Grid */}
       {loading ? (
@@ -236,6 +303,8 @@ export default function CampaignsPage() {
               formatDate={formatDate}
               onClick={() => handleCampaignClick(campaign)}
               onDelete={() => handleDeleteCampaign(campaign.id)}
+              selected={selectedIds.has(campaign.id)}
+              onSelect={() => toggleSelect(campaign.id)}
             />
           ))}
         </div>
@@ -253,14 +322,15 @@ export default function CampaignsPage() {
   );
 }
 
-function CampaignCard({ campaign, formatDate, onClick, onDelete }) {
+function CampaignCard({ campaign, formatDate, onClick, onDelete, selected, onSelect }) {
   const TypeIcon = typeIcons[campaign.type] || Megaphone;
   const totalRecipients = campaign.total_recipients || 0;
 
   return (
     <Card 
-      className="card-industrial cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
-      onClick={onClick}
+      className={`card-industrial cursor-pointer hover:shadow-md transition-shadow overflow-hidden ${
+        selected ? "ring-2 ring-primary" : ""
+      }`}
     >
       <div className={`h-1 ${
         campaign.status === "RUNNING" ? "bg-green-500" : 
@@ -271,20 +341,27 @@ function CampaignCard({ campaign, formatDate, onClick, onDelete }) {
       <CardContent className="p-5">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-              campaign.type === "REACTIVATION" ? "bg-purple-100" :
-              campaign.type === "TUNEUP" ? "bg-cyan-100" : "bg-orange-100"
-            }`}>
-              <TypeIcon className={`h-5 w-5 ${
-                campaign.type === "REACTIVATION" ? "text-purple-600" :
-                campaign.type === "TUNEUP" ? "text-cyan-600" : "text-orange-600"
-              }`} />
-            </div>
-            <div>
-              <h3 className="font-medium">{campaign.name}</h3>
-              <Badge className={typeColors[campaign.type]} variant="outline">
-                {campaign.type?.replace('_', ' ')}
-              </Badge>
+            <Checkbox 
+              checked={selected}
+              onCheckedChange={onSelect}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="flex items-center gap-3" onClick={onClick}>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                campaign.type === "REACTIVATION" ? "bg-purple-100" :
+                campaign.type === "TUNEUP" ? "bg-cyan-100" : "bg-orange-100"
+              }`}>
+                <TypeIcon className={`h-5 w-5 ${
+                  campaign.type === "REACTIVATION" ? "text-purple-600" :
+                  campaign.type === "TUNEUP" ? "text-cyan-600" : "text-orange-600"
+                }`} />
+              </div>
+              <div>
+                <h3 className="font-medium">{campaign.name}</h3>
+                <Badge className={typeColors[campaign.type]} variant="outline">
+                  {campaign.type?.replace('_', ' ')}
+                </Badge>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -302,27 +379,29 @@ function CampaignCard({ campaign, formatDate, onClick, onDelete }) {
           </div>
         </div>
         
-        {campaign.message_template && (
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-4 bg-muted/50 p-2 rounded italic">
-            "{campaign.message_template}"
-          </p>
-        )}
+        <div onClick={onClick}>
+          {campaign.message_template && (
+            <p className="text-sm text-muted-foreground line-clamp-2 mb-4 bg-muted/50 p-2 rounded italic">
+              "{campaign.message_template}"
+            </p>
+          )}
 
-        {totalRecipients > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Users className="h-3 w-3" /> {totalRecipients} recipients
-              </span>
+          {totalRecipients > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3" /> {totalRecipients} recipients
+                </span>
+              </div>
             </div>
+          )}
+          
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-4">
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {formatDate(campaign.created_at)}
+            </span>
           </div>
-        )}
-        
-        <div className="flex items-center justify-between text-xs text-muted-foreground mb-4">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3" />
-            {formatDate(campaign.created_at)}
-          </span>
         </div>
         
         <div className="flex gap-2 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
@@ -353,7 +432,9 @@ function CampaignCard({ campaign, formatDate, onClick, onDelete }) {
 function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDate }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [stats, setStats] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [starting, setStarting] = useState(false);
 
@@ -370,11 +451,25 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
     }
   }, [campaign?.id]);
 
+  const fetchMessages = useCallback(async () => {
+    if (!campaign?.id) return;
+    setLoadingMessages(true);
+    try {
+      const response = await campaignAPI.getMessages(campaign.id);
+      setMessages(response.data.messages || []);
+    } catch (error) {
+      console.error("Failed to load messages:", error);
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, [campaign?.id]);
+
   useEffect(() => {
     if (open && campaign) {
       fetchStats();
+      fetchMessages();
     }
-  }, [open, campaign, fetchStats]);
+  }, [open, campaign, fetchStats, fetchMessages]);
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -383,6 +478,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
       const response = await campaignAPI.start(campaign.id);
       toast.success(`Campaign started with ${response.data.recipients_created} recipients`);
       fetchStats();
+      fetchMessages();
       onUpdate();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to start campaign");
@@ -402,6 +498,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
         toast.success(`Sent ${response.data.sent_in_batch} messages. ${response.data.remaining} remaining.`);
       }
       fetchStats();
+      fetchMessages();
       onUpdate();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to send batch");
@@ -412,10 +509,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
 
   const handlePauseCampaign = async () => {
     try {
-      await campaignAPI.update(campaign.id, {
-        ...campaign,
-        status: "PAUSED"
-      });
+      await campaignAPI.update(campaign.id, { ...campaign, status: "PAUSED" });
       toast.success("Campaign paused");
       onUpdate();
     } catch (error) {
@@ -426,12 +520,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
   if (!campaign) return null;
 
   const recipientStats = stats?.stats || {
-    total: 0,
-    pending: 0,
-    sent: 0,
-    responded: 0,
-    opted_out: 0,
-    response_rate: 0
+    total: 0, pending: 0, sent: 0, responded: 0, opted_out: 0, response_rate: 0
   };
 
   const progress = recipientStats.total > 0 
@@ -440,7 +529,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
@@ -466,7 +555,8 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
           <TabsList className="w-full">
             <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
             <TabsTrigger value="recipients" className="flex-1">Recipients</TabsTrigger>
-            <TabsTrigger value="send" className="flex-1">Send Messages</TabsTrigger>
+            <TabsTrigger value="messages" className="flex-1">SMS Log</TabsTrigger>
+            <TabsTrigger value="send" className="flex-1">Send</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-4">
@@ -491,14 +581,14 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
               <div className="bg-muted/50 rounded-lg p-4">
                 {campaign.segment_definition ? (
                   <div className="text-sm">
-                    {campaign.segment_definition.lastServiceDaysAgo && (
-                      <p>• Last service: more than {campaign.segment_definition.lastServiceDaysAgo.replace(">", "")} days ago</p>
+                    {(campaign.segment_definition.lastServiceDaysAgo || campaign.segment_definition.last_service_days_ago) && (
+                      <p>• Last service: more than {(campaign.segment_definition.lastServiceDaysAgo || campaign.segment_definition.last_service_days_ago).replace(">", "")} days ago</p>
                     )}
-                    {campaign.segment_definition.last_service_days_ago && (
-                      <p>• Last service: more than {campaign.segment_definition.last_service_days_ago.replace(">", "")} days ago</p>
+                    {campaign.segment_definition.job_type && (
+                      <p>• Job type: {campaign.segment_definition.job_type}</p>
                     )}
-                    {!campaign.segment_definition.lastServiceDaysAgo && !campaign.segment_definition.last_service_days_ago && (
-                      <pre className="text-xs">{JSON.stringify(campaign.segment_definition, null, 2)}</pre>
+                    {campaign.selection_type === "manual" && (
+                      <p>• Manually selected customers</p>
                     )}
                   </div>
                 ) : (
@@ -579,7 +669,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
                   <XCircle className="h-4 w-4 text-red-500" />
                   <div>
                     <p className="font-medium text-red-700">{recipientStats.opted_out}</p>
-                    <p className="text-xs text-muted-foreground">Failed/Opted Out</p>
+                    <p className="text-xs text-muted-foreground">Failed</p>
                   </div>
                 </div>
               </div>
@@ -624,10 +714,73 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
                 <div className="bg-muted/30 rounded-lg p-8 text-center">
                   <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
-                    {campaign.status === "DRAFT" 
-                      ? "Start the campaign to generate recipients" 
-                      : "No recipients found"}
+                    {campaign.status === "DRAFT" ? "Start the campaign to generate recipients" : "No recipients found"}
                   </p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="messages" className="mt-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium">Campaign SMS Log</h4>
+                <Button variant="outline" size="sm" onClick={fetchMessages} disabled={loadingMessages}>
+                  <RefreshCw className={`h-3 w-3 mr-1 ${loadingMessages ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+
+              {/* Message stats */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <p className="font-medium">{messages.length}</p>
+                  <p className="text-xs text-muted-foreground">Total Messages</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <p className="font-medium text-green-700">
+                    {messages.filter(m => m.direction === "OUTBOUND").length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Outbound</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <p className="font-medium text-blue-700">
+                    {messages.filter(m => m.direction === "INBOUND").length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Inbound (Replies)</p>
+                </div>
+              </div>
+
+              {/* Messages list */}
+              {messages.length > 0 ? (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {messages.map((msg) => (
+                    <div 
+                      key={msg.id} 
+                      className={`rounded-lg p-3 ${
+                        msg.direction === "OUTBOUND" ? "bg-green-50 ml-8" : "bg-blue-50 mr-8"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium flex items-center gap-1">
+                          {msg.direction === "OUTBOUND" ? (
+                            <><ArrowUp className="h-3 w-3" /> Sent to {msg.customer_name}</>
+                          ) : (
+                            <><ArrowDown className="h-3 w-3" /> Reply from {msg.customer_name}</>
+                          )}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(msg.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm">{msg.content}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-muted/30 rounded-lg p-8 text-center">
+                  <MessageSquare className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">No messages yet</p>
                 </div>
               )}
             </div>
@@ -644,15 +797,9 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
                   </p>
                   <Button onClick={handleStartCampaign} disabled={starting}>
                     {starting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Starting...
-                      </>
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Starting...</>
                     ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Start Campaign
-                      </>
+                      <><Play className="h-4 w-4 mr-2" />Start Campaign</>
                     )}
                   </Button>
                 </Card>
@@ -675,27 +822,19 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
                       <div className="space-y-4">
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                           <p className="text-sm text-yellow-800">
-                            <strong>Note:</strong> Messages are sent in batches of 10 to avoid rate limits. 
-                            Click "Send Next Batch" repeatedly until all messages are sent.
+                            <strong>Note:</strong> Messages are sent in batches of 10 to avoid rate limits.
                           </p>
                         </div>
                         <div className="flex gap-2">
                           <Button onClick={handleSendBatch} disabled={sending} className="flex-1">
                             {sending ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Sending...
-                              </>
+                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
                             ) : (
-                              <>
-                                <Send className="h-4 w-4 mr-2" />
-                                Send Next Batch (10 messages)
-                              </>
+                              <><Send className="h-4 w-4 mr-2" />Send Next Batch (10)</>
                             )}
                           </Button>
                           <Button variant="outline" onClick={handlePauseCampaign}>
-                            <Pause className="h-4 w-4 mr-2" />
-                            Pause
+                            <Pause className="h-4 w-4 mr-2" />Pause
                           </Button>
                         </div>
                       </div>
@@ -703,26 +842,9 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
                       <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
                         <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
                         <p className="text-green-800 font-medium">All messages sent!</p>
-                        <p className="text-sm text-green-600">Campaign will be marked as completed.</p>
                       </div>
                     )}
                   </Card>
-
-                  {/* Progress summary */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <Card className="p-4 text-center">
-                      <p className="text-3xl font-bold text-green-600">{recipientStats.sent}</p>
-                      <p className="text-sm text-muted-foreground">Messages Sent</p>
-                    </Card>
-                    <Card className="p-4 text-center">
-                      <p className="text-3xl font-bold text-gray-600">{recipientStats.pending}</p>
-                      <p className="text-sm text-muted-foreground">Remaining</p>
-                    </Card>
-                    <Card className="p-4 text-center">
-                      <p className="text-3xl font-bold text-red-600">{recipientStats.opted_out}</p>
-                      <p className="text-sm text-muted-foreground">Failed</p>
-                    </Card>
-                  </div>
                 </div>
               )}
 
@@ -731,18 +853,8 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
                   <CheckCircle className="h-12 w-12 mx-auto mb-4 text-blue-500" />
                   <h4 className="font-medium mb-2">Campaign Completed</h4>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Sent {recipientStats.sent} messages to customers.
+                    Sent {recipientStats.sent} messages, received {recipientStats.responded} responses.
                   </p>
-                  <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-                    <Card className="p-3">
-                      <p className="text-2xl font-bold text-blue-600">{recipientStats.responded}</p>
-                      <p className="text-xs text-muted-foreground">Responses</p>
-                    </Card>
-                    <Card className="p-3">
-                      <p className="text-2xl font-bold text-primary">{recipientStats.response_rate}%</p>
-                      <p className="text-xs text-muted-foreground">Response Rate</p>
-                    </Card>
-                  </div>
                 </Card>
               )}
 
@@ -754,8 +866,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onUpdate, formatDat
                     {recipientStats.pending} messages still pending.
                   </p>
                   <Button onClick={handleStartCampaign}>
-                    <Play className="h-4 w-4 mr-2" />
-                    Resume Campaign
+                    <Play className="h-4 w-4 mr-2" />Resume
                   </Button>
                 </Card>
               )}
@@ -782,6 +893,12 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
   const [segmentDays, setSegmentDays] = useState("180");
+  const [selectionMode, setSelectionMode] = useState("segment"); // "segment" or "manual"
+  const [jobTypeFilter, setJobTypeFilter] = useState("");
+  const [availableCustomers, setAvailableCustomers] = useState([]);
+  const [selectedCustomers, setSelectedCustomers] = useState(new Set());
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
 
   const templates = {
     REACTIVATION: "Hi {first_name}, it's been a while since we serviced your HVAC system. Schedule a tune-up today and get 10% off! Reply YES to book or call us.",
@@ -797,24 +914,56 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
     });
   };
 
+  const fetchCustomers = useCallback(async () => {
+    setLoadingCustomers(true);
+    try {
+      const params = {};
+      if (jobTypeFilter) params.job_type = jobTypeFilter;
+      if (selectionMode === "segment" && segmentDays) {
+        params.last_service_days = parseInt(segmentDays);
+      }
+      const response = await campaignAPI.getCustomersForSelection(params);
+      setAvailableCustomers(response.data.customers || []);
+    } catch (error) {
+      console.error("Failed to load customers:", error);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  }, [jobTypeFilter, segmentDays, selectionMode]);
+
   useEffect(() => {
-    // Update segment definition when days change
+    if (step === 2) {
+      fetchCustomers();
+    }
+  }, [step, fetchCustomers]);
+
+  useEffect(() => {
     setFormData(prev => ({
       ...prev,
-      segment_definition: { last_service_days_ago: `>${segmentDays}` }
+      segment_definition: { 
+        last_service_days_ago: `>${segmentDays}`,
+        job_type: jobTypeFilter || undefined
+      }
     }));
-  }, [segmentDays]);
+  }, [segmentDays, jobTypeFilter]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await campaignAPI.create(formData);
+      const campaignData = {
+        ...formData,
+        segment_definition: selectionMode === "manual" 
+          ? { manual_selection: true, job_type: jobTypeFilter || undefined }
+          : formData.segment_definition,
+        selected_customer_ids: selectionMode === "manual" ? Array.from(selectedCustomers) : undefined
+      };
+      
+      await campaignAPI.create(campaignData);
       toast.success("Campaign created successfully");
       onOpenChange(false);
-      setFormData({ name: "", type: "REACTIVATION", message_template: "", segment_definition: null, status: "DRAFT" });
-      setStep(1);
+      resetForm();
       onSuccess();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to create campaign");
@@ -823,24 +972,61 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
     }
   };
 
+  const resetForm = () => {
+    setFormData({ name: "", type: "REACTIVATION", message_template: "", segment_definition: null, status: "DRAFT" });
+    setStep(1);
+    setSelectionMode("segment");
+    setJobTypeFilter("");
+    setSelectedCustomers(new Set());
+    setSegmentDays("180");
+  };
+
+  const toggleCustomer = (id) => {
+    const newSet = new Set(selectedCustomers);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedCustomers(newSet);
+  };
+
+  const selectAllCustomers = () => {
+    setSelectedCustomers(new Set(filteredCustomers.map(c => c.id)));
+  };
+
+  const deselectAllCustomers = () => {
+    setSelectedCustomers(new Set());
+  };
+
+  const filteredCustomers = availableCustomers.filter(c => {
+    if (!customerSearch) return true;
+    const searchLower = customerSearch.toLowerCase();
+    return (
+      c.first_name?.toLowerCase().includes(searchLower) ||
+      c.last_name?.toLowerCase().includes(searchLower) ||
+      c.phone?.includes(customerSearch)
+    );
+  });
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setStep(1); }}>
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
       <DialogTrigger asChild>
         <Button className="btn-industrial">
           <Plus className="h-4 w-4 mr-2" />
           NEW CAMPAIGN
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-heading">Create Campaign</DialogTitle>
           <DialogDescription>
-            Step {step} of 2: {step === 1 ? "Basic Info" : "Message & Targeting"}
+            Step {step} of 3: {step === 1 ? "Basic Info" : step === 2 ? "Select Customers" : "Message"}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-          {step === 1 ? (
+          {step === 1 && (
             <div className="grid gap-6 py-4">
               <div className="space-y-2">
                 <Label>Campaign Name *</Label>
@@ -859,9 +1045,7 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                     <Card 
                       key={type}
                       className={`p-4 cursor-pointer transition-all ${
-                        formData.type === type 
-                          ? "ring-2 ring-primary bg-primary/5" 
-                          : "hover:bg-muted/50"
+                        formData.type === type ? "ring-2 ring-primary bg-primary/5" : "hover:bg-muted/50"
                       }`}
                       onClick={() => handleTypeChange(type)}
                     >
@@ -870,11 +1054,6 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                         {type === "TUNEUP" && <Settings className="h-8 w-8 mx-auto mb-2 text-cyan-600" />}
                         {type === "SPECIAL_OFFER" && <TrendingUp className="h-8 w-8 mx-auto mb-2 text-orange-600" />}
                         <p className="font-medium text-sm">{type.replace('_', ' ')}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {type === "REACTIVATION" && "Win back inactive customers"}
-                          {type === "TUNEUP" && "Seasonal maintenance offers"}
-                          {type === "SPECIAL_OFFER" && "Limited time promotions"}
-                        </p>
                       </div>
                     </Card>
                   ))}
@@ -883,11 +1062,173 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
 
               <div className="flex justify-end">
                 <Button type="button" onClick={() => setStep(2)} disabled={!formData.name}>
-                  Next: Message & Targeting
+                  Next: Select Customers
                 </Button>
               </div>
             </div>
-          ) : (
+          )}
+
+          {step === 2 && (
+            <div className="grid gap-6 py-4">
+              {/* Selection Mode */}
+              <div className="space-y-2">
+                <Label>How do you want to select customers?</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <Card 
+                    className={`p-4 cursor-pointer transition-all ${
+                      selectionMode === "segment" ? "ring-2 ring-primary bg-primary/5" : "hover:bg-muted/50"
+                    }`}
+                    onClick={() => setSelectionMode("segment")}
+                  >
+                    <div className="text-center">
+                      <Filter className="h-6 w-6 mx-auto mb-2" />
+                      <p className="font-medium text-sm">By Segment</p>
+                      <p className="text-xs text-muted-foreground">Auto-select based on criteria</p>
+                    </div>
+                  </Card>
+                  <Card 
+                    className={`p-4 cursor-pointer transition-all ${
+                      selectionMode === "manual" ? "ring-2 ring-primary bg-primary/5" : "hover:bg-muted/50"
+                    }`}
+                    onClick={() => setSelectionMode("manual")}
+                  >
+                    <div className="text-center">
+                      <UserPlus className="h-6 w-6 mx-auto mb-2" />
+                      <p className="font-medium text-sm">Manual Selection</p>
+                      <p className="text-xs text-muted-foreground">Pick specific customers</p>
+                    </div>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="space-y-4 bg-muted/30 rounded-lg p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Filter by Job Type</Label>
+                    <Select value={jobTypeFilter} onValueChange={setJobTypeFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All job types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">All job types</SelectItem>
+                        <SelectItem value="DIAGNOSTIC">Diagnostic</SelectItem>
+                        <SelectItem value="REPAIR">Repair</SelectItem>
+                        <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                        <SelectItem value="INSTALLATION">Installation</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {selectionMode === "segment" && (
+                    <div className="space-y-2">
+                      <Label>Last Service More Than</Label>
+                      <Select value={segmentDays} onValueChange={setSegmentDays}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="90">90 days ago</SelectItem>
+                          <SelectItem value="180">180 days ago</SelectItem>
+                          <SelectItem value="365">1 year ago</SelectItem>
+                          <SelectItem value="730">2 years ago</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <p className="text-sm text-muted-foreground">
+                    {loadingCustomers ? (
+                      <><Loader2 className="h-3 w-3 inline animate-spin mr-1" /> Loading...</>
+                    ) : (
+                      <>{filteredCustomers.length} customers match criteria</>
+                    )}
+                  </p>
+                  <Button type="button" variant="outline" size="sm" onClick={fetchCustomers}>
+                    <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+                  </Button>
+                </div>
+              </div>
+
+              {/* Customer Selection (for manual mode) */}
+              {selectionMode === "manual" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Select Customers ({selectedCustomers.size} selected)</Label>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={selectAllCustomers}>
+                        Select All
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={deselectAllCustomers}>
+                        Deselect All
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search customers..." 
+                      className="pl-9"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="border rounded-lg max-h-64 overflow-y-auto">
+                    {filteredCustomers.length > 0 ? (
+                      filteredCustomers.map((c) => (
+                        <div 
+                          key={c.id} 
+                          className={`flex items-center gap-3 p-3 border-b last:border-b-0 cursor-pointer hover:bg-muted/50 ${
+                            selectedCustomers.has(c.id) ? "bg-primary/5" : ""
+                          }`}
+                          onClick={() => toggleCustomer(c.id)}
+                        >
+                          <Checkbox 
+                            checked={selectedCustomers.has(c.id)} 
+                            onCheckedChange={() => toggleCustomer(c.id)}
+                          />
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{c.first_name} {c.last_name}</p>
+                            <p className="text-xs text-muted-foreground">{c.phone}</p>
+                          </div>
+                          {c.job_types?.length > 0 && (
+                            <div className="flex gap-1">
+                              {c.job_types.slice(0, 2).map(jt => (
+                                <Badge key={jt} variant="outline" className="text-xs">{jt}</Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-muted-foreground">
+                        {loadingCustomers ? "Loading..." : "No customers found"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="flex justify-between">
+                <Button type="button" variant="outline" onClick={() => setStep(1)}>Back</Button>
+                <Button 
+                  type="button" 
+                  onClick={() => setStep(3)}
+                  disabled={selectionMode === "manual" && selectedCustomers.size === 0}
+                >
+                  Next: Message
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
             <div className="grid gap-6 py-4">
               <div className="space-y-2">
                 <Label>Message Template</Label>
@@ -902,32 +1243,20 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label>Target Customers</Label>
-                <div className="bg-muted/50 rounded-lg p-4">
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm">Customers with no service in the last</span>
-                    <Select value={segmentDays} onValueChange={setSegmentDays}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="90">90 days</SelectItem>
-                        <SelectItem value="180">180 days</SelectItem>
-                        <SelectItem value="365">1 year</SelectItem>
-                        <SelectItem value="730">2 years</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+              <div className="bg-muted/50 rounded-lg p-4">
+                <h4 className="font-medium text-sm mb-2">Campaign Summary</h4>
+                <ul className="text-sm space-y-1 text-muted-foreground">
+                  <li>• Name: {formData.name}</li>
+                  <li>• Type: {formData.type?.replace('_', ' ')}</li>
+                  <li>• Selection: {selectionMode === "manual" ? `${selectedCustomers.size} customers manually selected` : `Segment-based (${segmentDays}+ days)`}</li>
+                  {jobTypeFilter && <li>• Job type filter: {jobTypeFilter}</li>}
+                </ul>
               </div>
 
               <Separator />
 
               <div className="flex justify-between">
-                <Button type="button" variant="outline" onClick={() => setStep(1)}>
-                  Back
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setStep(2)}>Back</Button>
                 <Button type="submit" disabled={loading}>
                   {loading ? "Creating..." : "Create Campaign"}
                 </Button>
