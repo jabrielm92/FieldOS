@@ -292,8 +292,11 @@ export default function CalendarPage() {
                     {dayJobs.length > 3 && (
                       <div 
                         className="text-xs text-muted-foreground text-center cursor-pointer hover:text-primary"
-                        onClick={() => {
-                          // Could open a modal showing all jobs for this day
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDayJobs(dayJobs);
+                          setSelectedDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day));
+                          setShowJobListModal(true);
                         }}
                       >
                         +{dayJobs.length - 3} more
