@@ -204,7 +204,7 @@ export default function LeadsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Sources</SelectItem>
-            <SelectItem value="VAPI_CALL">Vapi Call</SelectItem>
+            <SelectItem value="VAPI_CALL">AI Receptionist</SelectItem>
             <SelectItem value="MISSED_CALL_SMS">Missed Call SMS</SelectItem>
             <SelectItem value="WEB_FORM">Web Form</SelectItem>
             <SelectItem value="LANDING_PAGE">Landing Page</SelectItem>
@@ -899,7 +899,7 @@ function CreateLeadDialog({ open, onOpenChange, onSuccess }) {
                   <SelectContent>
                     <SelectItem value="MANUAL">Manual</SelectItem>
                     <SelectItem value="WEB_FORM">Web Form</SelectItem>
-                    <SelectItem value="VAPI_CALL">Vapi Call</SelectItem>
+                    <SelectItem value="VAPI_CALL">AI Receptionist</SelectItem>
                     <SelectItem value="MISSED_CALL_SMS">Missed Call SMS</SelectItem>
                     <SelectItem value="FB_LEAD">Facebook Lead</SelectItem>
                   </SelectContent>
