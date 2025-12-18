@@ -1042,10 +1042,11 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                 <Label>Campaign Type</Label>
                 <div className="grid grid-cols-3 gap-3">
                   {["REACTIVATION", "TUNEUP", "SPECIAL_OFFER"].map((type) => (
-                    <Card 
+                    <button 
+                      type="button"
                       key={type}
-                      className={`p-4 cursor-pointer transition-all ${
-                        formData.type === type ? "ring-2 ring-primary bg-primary/5" : "hover:bg-muted/50"
+                      className={`p-4 rounded-lg border transition-all ${
+                        formData.type === type ? "ring-2 ring-primary bg-primary/5 border-primary" : "hover:bg-muted/50 border-border"
                       }`}
                       onClick={() => handleTypeChange(type)}
                     >
@@ -1055,7 +1056,7 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                         {type === "SPECIAL_OFFER" && <TrendingUp className="h-8 w-8 mx-auto mb-2 text-orange-600" />}
                         <p className="font-medium text-sm">{type.replace('_', ' ')}</p>
                       </div>
-                    </Card>
+                    </button>
                   ))}
                 </div>
               </div>
