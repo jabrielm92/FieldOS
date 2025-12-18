@@ -888,6 +888,10 @@ class FieldOSAPITester:
         
         # New features testing
         self.test_new_features()
+        
+        # Bulk delete functionality testing
+        self.test_bulk_delete_functionality()
+        
         self.test_background_scheduler()
         
         return self.generate_report()
