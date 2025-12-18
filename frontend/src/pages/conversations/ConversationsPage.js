@@ -247,6 +247,9 @@ export default function ConversationsPage() {
                     isSelected={selectedConv?.id === conv.id}
                     onClick={() => setSelectedConv(conv)}
                     formatTime={formatTime}
+                    checked={selectedIds.includes(conv.id)}
+                    onCheck={(checked) => handleSelectConversation(conv.id, checked)}
+                    onDelete={() => handleDeleteConversation(conv.id)}
                   />
                 ))
               )}
