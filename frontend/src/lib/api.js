@@ -117,6 +117,8 @@ export const conversationAPI = {
   get: (id) => api.get(`/conversations/${id}`),
   getMessages: (id) => api.get(`/conversations/${id}/messages`),
   sendMessage: (data) => api.post('/messages', data),
+  delete: (id) => api.delete(`/conversations/${id}`),
+  bulkDelete: (ids) => api.post('/conversations/bulk-delete', ids),
 };
 
 // Campaign APIs
