@@ -383,6 +383,77 @@ export default function CalendarPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Job List Modal - shows jobs for a specific day */}
+      <Dialog open={showJobListModal} onOpenChange={setShowJobListModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-heading flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5" />
+              {selectedDate?.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedDayJobs.length} job{selectedDayJobs.length !== 1 ? 's' : ''} scheduled
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 max-h-96 overflow-y-auto py-4">
+            {selectedDayJobs.map((job) => (
+              <Card 
+                key={job.id} 
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => {
+                  setSelectedJob(job);
+                  setShowJobListModal(false);
+                  setShowJobModal(true);
+                }}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className={statusBadgeColors[job.status] || "bg-gray-100"}>
+                          {job.status}
+                        </Badge>
+                        <Badge variant="outline">{job.job_type}</Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatTime(job.service_window_start)} - {formatTime(job.service_window_end)}
+                        </span>
+                        {job.customer_name && (
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            {job.customer_name}
+                          </span>
+                        )}
+                      </div>
+                      {job.property_address && (
+                        <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {job.property_address}
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowJobListModal(false)}>
+              Close
+            </Button>
+            <Button onClick={handleCreateFromJobList}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add New Job
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Create Job Modal */}
       <CreateJobModal
         open={showCreateModal}
