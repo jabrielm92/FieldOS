@@ -36,6 +36,8 @@ export default function ConversationsPage() {
   const [search, setSearch] = useState("");
   const [showNewConvDialog, setShowNewConvDialog] = useState(false);
   const [customers, setCustomers] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [deleting, setDeleting] = useState(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
