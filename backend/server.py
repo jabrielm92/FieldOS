@@ -1713,7 +1713,7 @@ async def vapi_book_job(
             {"$set": {"status": LeadStatus.JOB_BOOKED.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
         )
     
-    # Send confirmation SMS
+    # Send confirmation SMS and store in conversation
     if tenant.get("twilio_phone_number"):
         from services.twilio_service import twilio_service
         
@@ -1722,11 +1722,43 @@ async def vapi_book_job(
         
         message = f"Hi {customer['first_name']}, your service visit is confirmed for {window_date}, {window_time}. We'll send a reminder before your appointment. {tenant.get('sms_signature', '')}"
         
-        await twilio_service.send_sms(
+        sms_result = await twilio_service.send_sms(
             to_phone=customer["phone"],
             body=message,
             from_phone=tenant["twilio_phone_number"]
         )
+        
+        # Find or create conversation and store the message
+        conv = await db.conversations.find_one(
+            {"customer_id": data.customer_id, "tenant_id": tenant_id},
+            {"_id": 0}
+        )
+        
+        if conv:
+            # Store the confirmation message
+            msg = Message(
+                tenant_id=tenant_id,
+                conversation_id=conv["id"],
+                customer_id=data.customer_id,
+                direction=MessageDirection.OUTBOUND,
+                sender_type=SenderType.SYSTEM,
+                channel=PreferredChannel.SMS,
+                content=message
+            )
+            msg_dict = msg.model_dump()
+            msg_dict["created_at"] = msg_dict["created_at"].isoformat()
+            msg_dict["metadata"] = {"twilio_sid": sms_result.get("provider_message_id"), "job_id": job.id}
+            await db.messages.insert_one(msg_dict)
+            
+            # Update conversation
+            await db.conversations.update_one(
+                {"id": conv["id"]},
+                {"$set": {
+                    "last_message_at": datetime.now(timezone.utc).isoformat(),
+                    "last_message_from": SenderType.SYSTEM.value,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
     
     # Format confirmation for Vapi - structured for AI to understand
     window_date = window_start.strftime("%A, %B %d")
