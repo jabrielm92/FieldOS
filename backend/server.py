@@ -1605,11 +1605,32 @@ async def vapi_check_availability(
     
     tenant_id = tenant["id"]
     
-    # Parse date
-    try:
-        target_date = datetime.strptime(data.date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    # Get current server date for reference
+    current_date = datetime.now(timezone.utc)
+    current_date_str = current_date.strftime("%Y-%m-%d")
+    current_date_formatted = current_date.strftime("%A, %B %d, %Y")
+    
+    # Parse date - handle relative dates like "tomorrow", "today"
+    date_input = data.date.lower().strip() if data.date else current_date_str
+    
+    if date_input in ["today", "now"]:
+        target_date = current_date
+    elif date_input == "tomorrow":
+        target_date = current_date + timedelta(days=1)
+    else:
+        # Try to parse YYYY-MM-DD format
+        try:
+            target_date = datetime.strptime(data.date, "%Y-%m-%d")
+        except ValueError:
+            # Return helpful error with current date reference
+            return {
+                "result": "error",
+                "status": "invalid_date",
+                "error": f"Invalid date format. Use YYYY-MM-DD format.",
+                "current_server_date": current_date_str,
+                "current_server_date_formatted": current_date_formatted,
+                "instructions": f"IMPORTANT: The date format was invalid. Today's date is {current_date_formatted}. Ask the customer to specify a date, then call this tool again with the date in YYYY-MM-DD format. For example, if they say 'tomorrow', you should pass '{(current_date + timedelta(days=1)).strftime('%Y-%m-%d')}'."
+            }
     
     # Define standard time windows
     windows = [
