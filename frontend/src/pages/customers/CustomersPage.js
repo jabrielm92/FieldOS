@@ -47,6 +47,8 @@ export default function CustomersPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showCustomerDetailDialog, setShowCustomerDetailDialog] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchCustomers();
