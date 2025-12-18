@@ -574,10 +574,17 @@ x-vapi-secret: service-hub-258
 **Method:** POST  
 **Content-Type:** application/x-www-form-urlencoded (Twilio's default)
 
+### Twilio Configuration
+
+| Setting | Value |
+|---------|-------|
+| **Phone Number** | `+12154843375` |
+| **Messaging Service SID** | `MG174aa9ccba71d3bb841cd7c7ff6c3ba1` |
+
 ### Twilio Console Configuration
 
 1. Go to **Twilio Console** → **Phone Numbers** → **Manage** → **Active Numbers**
-2. Click on your phone number (`+18777804239`)
+2. Click on your phone number (`+12154843375`)
 3. Scroll to **Messaging Configuration**
 4. Under **A MESSAGE COMES IN**, set:
    - **Webhook URL:** `https://service-hub-261.preview.emergentagent.com/api/v1/sms/inbound`
