@@ -275,7 +275,8 @@ export default function CalendarPage() {
                         key={job.id}
                         className={`text-xs p-1.5 rounded cursor-pointer hover:opacity-80 transition-opacity
                           ${statusColors[job.status]} text-white`}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setSelectedJob(job);
                           setShowJobModal(true);
                         }}
