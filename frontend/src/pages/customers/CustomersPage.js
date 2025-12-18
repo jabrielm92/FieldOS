@@ -30,7 +30,7 @@ import { customerAPI, propertyAPI
 import { toast } from "sonner";
 import { 
   Plus, Search, User, MapPin, Phone, Mail, Home, Edit, 
-  Save, X, MessageSquare, Calendar, ChevronRight, FileText
+  Save, X, MessageSquare, Calendar, ChevronRight, FileText, Trash2
 } from "lucide-react";
 import {
   Select,
