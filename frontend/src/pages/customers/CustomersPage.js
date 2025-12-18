@@ -84,6 +84,39 @@ export default function CustomersPage() {
     setShowCustomerDetailDialog(true);
   };
 
+  const handleSelectCustomer = (customerId, checked) => {
+    if (checked) {
+      setSelectedIds([...selectedIds, customerId]);
+    } else {
+      setSelectedIds(selectedIds.filter(id => id !== customerId));
+    }
+  };
+
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedIds(filteredCustomers.map(c => c.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} customer(s)? This will also delete all their leads, jobs, properties, and conversations.`)) return;
+    
+    setDeleting(true);
+    try {
+      await customerAPI.bulkDelete(selectedIds);
+      toast.success(`${selectedIds.length} customer(s) deleted`);
+      setSelectedIds([]);
+      fetchCustomers();
+    } catch (error) {
+      toast.error("Failed to delete customers");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filteredCustomers = customers.filter((customer) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
