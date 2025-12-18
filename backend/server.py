@@ -918,6 +918,21 @@ async def mark_job_en_route(
     return {"message": "Job marked en-route", "sms_sent": True}
 
 
+@v1_router.post("/jobs/bulk-delete")
+async def bulk_delete_jobs(
+    job_ids: List[str],
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Bulk delete jobs"""
+    if not job_ids:
+        raise HTTPException(status_code=400, detail="No job IDs provided")
+    
+    result = await db.jobs.delete_many({"id": {"$in": job_ids}, "tenant_id": tenant_id})
+    
+    return {"success": True, "deleted_count": result.deleted_count}
+
+
 # ============= QUOTES ENDPOINTS =============
 
 @v1_router.get("/quotes")
