@@ -294,7 +294,7 @@ export default function DashboardPage() {
               ) : (
                 Object.entries(charts.leads_by_source || {}).map(([source, count]) => (
                   <div key={source} className="flex items-center justify-between">
-                    <span className="text-sm">{source.replace('_', ' ')}</span>
+                    <span className="text-sm">{formatSource(source)}</span>
                     <div className="flex items-center gap-2">
                       <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                         <div 
@@ -466,7 +466,7 @@ function LeadRow({ lead, onClick }) {
         </p>
       )}
       <div className="flex items-center justify-between mt-1">
-        <span className="text-xs text-muted-foreground">{lead.source?.replace('_', ' ')}</span>
+        <span className="text-xs text-muted-foreground">{formatSource(lead.source)}</span>
         <Badge className={statusColors[lead.status] || "bg-gray-100"} variant="outline" className="text-xs">
           {lead.status}
         </Badge>
