@@ -477,7 +477,7 @@ function CampaignDetailModal({ campaign, open, onOpenChange, onStatusChange, onU
               </h4>
               <div className="bg-muted/50 rounded-lg p-4">
                 {campaign.segment_definition ? (
-                  <pre className="text-xs">{JSON.stringify(JSON.parse(campaign.segment_definition), null, 2)}</pre>
+                  <pre className="text-xs">{JSON.stringify(typeof campaign.segment_definition === 'string' ? JSON.parse(campaign.segment_definition) : campaign.segment_definition, null, 2)}</pre>
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     {campaign.type === "REACTIVATION" 
