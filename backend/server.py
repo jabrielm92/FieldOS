@@ -1626,14 +1626,23 @@ async def vapi_check_availability(
     _: bool = Depends(verify_vapi_secret)
 ):
     """Check available time windows"""
+    import pytz
+    
     tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
     tenant_id = tenant["id"]
     
-    # Get current server date for reference
-    current_date = datetime.now(timezone.utc)
+    # Use tenant's timezone for date calculations (default to America/New_York)
+    tenant_tz_str = tenant.get("timezone", "America/New_York")
+    try:
+        tenant_tz = pytz.timezone(tenant_tz_str)
+    except:
+        tenant_tz = pytz.timezone("America/New_York")
+    
+    # Get current date in tenant's timezone
+    current_date = datetime.now(tenant_tz)
     current_date_str = current_date.strftime("%Y-%m-%d")
     current_date_formatted = current_date.strftime("%A, %B %d, %Y")
     
@@ -1648,6 +1657,8 @@ async def vapi_check_availability(
         # Try to parse YYYY-MM-DD format
         try:
             target_date = datetime.strptime(data.date, "%Y-%m-%d")
+            # Make it timezone-aware in tenant's timezone
+            target_date = tenant_tz.localize(target_date)
         except ValueError:
             # Return helpful error with current date reference
             return {
