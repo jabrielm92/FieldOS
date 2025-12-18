@@ -579,17 +579,6 @@ Always use tenant_slug: "radiance-hvac" for all tool calls.
 You can test each tool using curl:
 
 ```bash
-# Test get-current-date
-curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/get-current-date" \
-  -H "Content-Type: application/json" \
-  -H "x-vapi-secret: service-hub-258"
-
-# Test check-availability
-curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/check-availability" \
-  -H "Content-Type: application/json" \
-  -H "x-vapi-secret: service-hub-258" \
-  -d '{"tenant_slug": "radiance-hvac", "date": "tomorrow"}'
-
 # Test create-lead
 curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/create-lead" \
   -H "Content-Type: application/json" \
@@ -601,5 +590,25 @@ curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/crea
     "captured_address": "123 Test St, Philadelphia, PA 19001",
     "description": "AC not cooling",
     "urgency": "URGENT"
+  }'
+
+# Test check-availability (use actual YYYY-MM-DD date)
+curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/check-availability" \
+  -H "Content-Type: application/json" \
+  -H "x-vapi-secret: service-hub-258" \
+  -d '{"tenant_slug": "radiance-hvac", "date": "2025-12-20"}'
+
+# Test book-job (use IDs from create-lead and windows from check-availability)
+curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/book-job" \
+  -H "Content-Type: application/json" \
+  -H "x-vapi-secret: service-hub-258" \
+  -d '{
+    "tenant_slug": "radiance-hvac",
+    "lead_id": "YOUR_LEAD_ID",
+    "customer_id": "YOUR_CUSTOMER_ID",
+    "property_id": "YOUR_PROPERTY_ID",
+    "job_type": "DIAGNOSTIC",
+    "window_start": "2025-12-20T08:00:00",
+    "window_end": "2025-12-20T12:00:00"
   }'
 ```
