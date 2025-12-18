@@ -96,7 +96,24 @@ export default function CalendarPage() {
   const handleDayClick = (day) => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    setSelectedDate(new Date(year, month, day));
+    const clickedDate = new Date(year, month, day);
+    setSelectedDate(clickedDate);
+    
+    // Get jobs for this day
+    const dayJobs = getJobsForDay(day);
+    
+    if (dayJobs.length > 0) {
+      // Show job list modal if there are jobs
+      setSelectedDayJobs(dayJobs);
+      setShowJobListModal(true);
+    } else {
+      // Show create modal if no jobs
+      setShowCreateModal(true);
+    }
+  };
+  
+  const handleCreateFromJobList = () => {
+    setShowJobListModal(false);
     setShowCreateModal(true);
   };
 
