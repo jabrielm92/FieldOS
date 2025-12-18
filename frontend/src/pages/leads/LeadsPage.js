@@ -271,6 +271,8 @@ export default function LeadsPage() {
               lead={lead} 
               formatDate={formatDate}
               onClick={() => handleLeadClick(lead)}
+              selected={selectedIds.includes(lead.id)}
+              onSelect={(checked) => handleSelectLead(lead.id, checked)}
             />
           ))}
         </div>
