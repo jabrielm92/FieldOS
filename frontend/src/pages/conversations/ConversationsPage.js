@@ -124,6 +124,50 @@ export default function ConversationsPage() {
     );
   });
 
+  const handleSelectConversation = (convId, checked) => {
+    if (checked) {
+      setSelectedIds([...selectedIds, convId]);
+    } else {
+      setSelectedIds(selectedIds.filter(id => id !== convId));
+    }
+  };
+
+  const handleDeleteConversation = async (convId) => {
+    if (!window.confirm("Delete this conversation and all its messages?")) return;
+    try {
+      await conversationAPI.delete(convId);
+      toast.success("Conversation deleted");
+      if (selectedConv?.id === convId) {
+        setSelectedConv(null);
+        setMessages([]);
+      }
+      fetchConversations();
+    } catch (error) {
+      toast.error("Failed to delete conversation");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.length} conversation(s) and all messages?`)) return;
+    
+    setDeleting(true);
+    try {
+      await conversationAPI.bulkDelete(selectedIds);
+      toast.success(`${selectedIds.length} conversation(s) deleted`);
+      if (selectedIds.includes(selectedConv?.id)) {
+        setSelectedConv(null);
+        setMessages([]);
+      }
+      setSelectedIds([]);
+      fetchConversations();
+    } catch (error) {
+      toast.error("Failed to delete conversations");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const formatTime = (dateStr) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
