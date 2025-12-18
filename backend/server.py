@@ -2740,6 +2740,39 @@ async def sms_inbound(request: Request):
     msg_dict["created_at"] = msg_dict["created_at"].isoformat()
     await db.messages.insert_one(msg_dict)
     
+    # Check if this customer has any active campaign - log as campaign response
+    active_recipient = await db.campaign_recipients.find_one({
+        "customer_id": customer["id"],
+        "status": {"$in": [RecipientStatus.SENT.value, RecipientStatus.PENDING.value]}
+    }, {"_id": 0})
+    
+    if active_recipient:
+        campaign_id = active_recipient.get("campaign_id")
+        
+        # Update recipient status to RESPONDED
+        await db.campaign_recipients.update_one(
+            {"id": active_recipient["id"]},
+            {"$set": {
+                "status": RecipientStatus.RESPONDED.value,
+                "response": body,
+                "responded_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        # Log inbound message to campaign_messages
+        campaign_msg = {
+            "id": str(uuid4()),
+            "campaign_id": campaign_id,
+            "tenant_id": tenant_id,
+            "customer_id": customer["id"],
+            "direction": "INBOUND",
+            "content": body,
+            "status": "RECEIVED",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.campaign_messages.insert_one(campaign_msg)
+        logger.info(f"Campaign response logged from {from_phone} for campaign {campaign_id}")
+    
     # Update conversation
     await db.conversations.update_one(
         {"id": conv["id"]},
