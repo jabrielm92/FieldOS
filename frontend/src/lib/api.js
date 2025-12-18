@@ -126,6 +126,11 @@ export const campaignAPI = {
   list: () => api.get('/campaigns'),
   create: (data) => api.post('/campaigns', data),
   update: (id, data) => api.put(`/campaigns/${id}`, data),
+  delete: (id) => api.delete(`/campaigns/${id}`),
+  previewSegment: (id, segment) => api.post(`/campaigns/${id}/preview-segment`, segment),
+  start: (id) => api.post(`/campaigns/${id}/start`),
+  sendBatch: (id, batchSize = 10) => api.post(`/campaigns/${id}/send-batch`, null, { params: { batch_size: batchSize } }),
+  getStats: (id) => api.get(`/campaigns/${id}/stats`),
 };
 
 // Dispatch APIs
