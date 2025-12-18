@@ -175,7 +175,7 @@ x-vapi-secret: service-hub-258
 
 ---
 
-## Tool 3: Check Availability
+## Tool 2: Check Availability
 
 **Purpose:** Check available appointment slots for a given date.
 
@@ -269,7 +269,7 @@ x-vapi-secret: service-hub-258
 
 ---
 
-## Tool 4: Book Job
+## Tool 3: Book Job
 
 **Purpose:** Book a service appointment after the customer selects a time slot.
 
@@ -372,7 +372,7 @@ x-vapi-secret: service-hub-258
 
 ---
 
-## Tool 5: Send SMS
+## Tool 4: Send SMS
 
 **Purpose:** Send an SMS message to a customer (optional, for custom messages).
 
@@ -437,7 +437,7 @@ x-vapi-secret: service-hub-258
 
 ---
 
-## Tool 6: Log Call Summary
+## Tool 5: Log Call Summary
 
 **Purpose:** Log a summary of the call for record-keeping (typically called at end of call).
 
