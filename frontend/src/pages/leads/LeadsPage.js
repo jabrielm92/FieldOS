@@ -46,6 +46,19 @@ const urgencyColors = {
   ROUTINE: "bg-blue-500 text-white",
 };
 
+// Helper to display lead source nicely
+const formatSource = (source) => {
+  const sourceLabels = {
+    'VAPI_CALL': '📞 AI Receptionist',
+    'WEB_FORM': '🌐 Web Form',
+    'PHONE': '📱 Phone',
+    'WALK_IN': '🚶 Walk-in',
+    'REFERRAL': '👥 Referral',
+    'MANUAL': '✏️ Manual',
+  };
+  return sourceLabels[source] || source?.replace('_', ' ') || 'Unknown';
+};
+
 export default function LeadsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [leads, setLeads] = useState([]);
