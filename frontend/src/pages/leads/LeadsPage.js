@@ -112,6 +112,39 @@ export default function LeadsPage() {
     }
   };
 
+  const handleSelectLead = (leadId, checked) => {
+    if (checked) {
+      setSelectedIds([...selectedIds, leadId]);
+    } else {
+      setSelectedIds(selectedIds.filter(id => id !== leadId));
+    }
+  };
+
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedIds(filteredLeads.map(l => l.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} lead(s)? This will also delete any associated jobs.`)) return;
+    
+    setDeleting(true);
+    try {
+      await leadAPI.bulkDelete(selectedIds);
+      toast.success(`${selectedIds.length} lead(s) deleted`);
+      setSelectedIds([]);
+      fetchLeads();
+    } catch (error) {
+      toast.error("Failed to delete leads");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filteredLeads = leads.filter((lead) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
