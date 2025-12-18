@@ -32,7 +32,7 @@ import {
 } from "../../components/ui/table";
 import { jobAPI, customerAPI, propertyAPI, technicianAPI, dispatchAPI } from "../../lib/api";
 import { toast } from "sonner";
-import { Plus, Search, Clock, MapPin, User, Truck, Calendar, UserPlus, Edit } from "lucide-react";
+import { Plus, Search, Clock, MapPin, User, Truck, Calendar, UserPlus, Edit, Trash2 } from "lucide-react";
 
 const statusColors = {
   BOOKED: "bg-yellow-100 text-yellow-800",
