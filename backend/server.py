@@ -1787,7 +1787,253 @@ async def delete_campaign(
     # Delete associated recipients
     await db.campaign_recipients.delete_many({"campaign_id": campaign_id})
     
+    # Delete associated campaign messages
+    await db.campaign_messages.delete_many({"campaign_id": campaign_id})
+    
     return {"status": "deleted", "campaign_id": campaign_id}
+
+
+@v1_router.post("/campaigns/bulk-delete")
+async def bulk_delete_campaigns(
+    campaign_ids: List[str],
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete multiple campaigns at once"""
+    deleted_count = 0
+    for campaign_id in campaign_ids:
+        result = await db.campaigns.delete_one({"id": campaign_id, "tenant_id": tenant_id})
+        if result.deleted_count > 0:
+            await db.campaign_recipients.delete_many({"campaign_id": campaign_id})
+            await db.campaign_messages.delete_many({"campaign_id": campaign_id})
+            deleted_count += 1
+    
+    return {"status": "deleted", "deleted_count": deleted_count}
+
+
+@v1_router.get("/campaigns/customers-for-selection")
+async def get_customers_for_campaign_selection(
+    job_type: Optional[str] = None,
+    last_service_days: Optional[int] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get customers filtered by job type for campaign selection.
+    job_type: DIAGNOSTIC, REPAIR, MAINTENANCE, INSTALLATION
+    last_service_days: Filter by last service more than X days ago
+    """
+    import pytz
+    
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    tenant_tz_str = tenant.get("timezone", "America/New_York") if tenant else "America/New_York"
+    try:
+        tenant_tz = pytz.timezone(tenant_tz_str)
+    except:
+        tenant_tz = pytz.timezone("America/New_York")
+    
+    now = datetime.now(tenant_tz)
+    
+    # Build job filter
+    job_filter = {"tenant_id": tenant_id, "status": "COMPLETED"}
+    if job_type:
+        job_filter["job_type"] = job_type.upper()
+    
+    # Get customers with matching jobs
+    pipeline = [
+        {"$match": job_filter},
+        {"$sort": {"service_window_start": -1}},
+        {"$group": {
+            "_id": "$customer_id",
+            "last_service": {"$first": "$service_window_start"},
+            "job_types": {"$addToSet": "$job_type"},
+            "job_count": {"$sum": 1}
+        }}
+    ]
+    
+    # Add date filter if specified
+    if last_service_days:
+        cutoff_date = now - timedelta(days=last_service_days)
+        pipeline.append({"$match": {"last_service": {"$lt": cutoff_date.isoformat()}}})
+    
+    job_data = {}
+    async for doc in db.jobs.aggregate(pipeline):
+        if doc["_id"]:
+            job_data[doc["_id"]] = {
+                "last_service": doc["last_service"],
+                "job_types": doc["job_types"],
+                "job_count": doc["job_count"]
+            }
+    
+    # Get customer details
+    if job_data:
+        customers = await db.customers.find(
+            {"tenant_id": tenant_id, "id": {"$in": list(job_data.keys())}},
+            {"_id": 0}
+        ).to_list(500)
+    else:
+        # If no filter, get all customers
+        customers = await db.customers.find(
+            {"tenant_id": tenant_id},
+            {"_id": 0}
+        ).to_list(500)
+    
+    # Enrich with job data
+    enriched_customers = []
+    for c in customers:
+        if c.get("phone"):  # Only include customers with phone
+            customer_job_data = job_data.get(c["id"], {})
+            enriched_customers.append({
+                "id": c["id"],
+                "first_name": c.get("first_name", ""),
+                "last_name": c.get("last_name", ""),
+                "phone": c.get("phone", ""),
+                "email": c.get("email", ""),
+                "last_service": customer_job_data.get("last_service"),
+                "job_types": customer_job_data.get("job_types", []),
+                "job_count": customer_job_data.get("job_count", 0)
+            })
+    
+    # Get available job types for filter dropdown
+    all_job_types = await db.jobs.distinct("job_type", {"tenant_id": tenant_id})
+    
+    return {
+        "customers": enriched_customers,
+        "total": len(enriched_customers),
+        "available_job_types": all_job_types,
+        "filters_applied": {
+            "job_type": job_type,
+            "last_service_days": last_service_days
+        }
+    }
+
+
+@v1_router.post("/campaigns/{campaign_id}/start-with-customers")
+async def start_campaign_with_selected_customers(
+    campaign_id: str,
+    customer_ids: List[str],
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Start a campaign with manually selected customers.
+    """
+    import pytz
+    
+    # Get campaign
+    campaign = await db.campaigns.find_one(
+        {"id": campaign_id, "tenant_id": tenant_id},
+        {"_id": 0}
+    )
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    if campaign["status"] not in ["DRAFT", "PAUSED"]:
+        raise HTTPException(status_code=400, detail=f"Campaign is already {campaign['status']}")
+    
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    tenant_tz_str = tenant.get("timezone", "America/New_York") if tenant else "America/New_York"
+    try:
+        tenant_tz = pytz.timezone(tenant_tz_str)
+    except:
+        tenant_tz = pytz.timezone("America/New_York")
+    
+    now = datetime.now(tenant_tz)
+    
+    # Get customer details
+    customers = await db.customers.find(
+        {"tenant_id": tenant_id, "id": {"$in": customer_ids}},
+        {"_id": 0}
+    ).to_list(len(customer_ids))
+    
+    # Filter customers with phone numbers
+    customers_with_phone = [c for c in customers if c.get("phone")]
+    
+    # Delete existing recipients for this campaign (in case of restart)
+    await db.campaign_recipients.delete_many({"campaign_id": campaign_id})
+    
+    # Create recipient records
+    recipients_created = 0
+    for customer in customers_with_phone:
+        recipient = CampaignRecipient(
+            campaign_id=campaign_id,
+            customer_id=customer["id"],
+            status=RecipientStatus.PENDING
+        )
+        recipient_dict = recipient.model_dump()
+        await db.campaign_recipients.insert_one(recipient_dict)
+        recipients_created += 1
+    
+    # Update campaign status
+    await db.campaigns.update_one(
+        {"id": campaign_id},
+        {"$set": {
+            "status": CampaignStatus.RUNNING.value,
+            "started_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "total_recipients": recipients_created,
+            "selection_type": "manual",
+            "selected_customer_ids": customer_ids
+        }}
+    )
+    
+    return {
+        "status": "started",
+        "campaign_id": campaign_id,
+        "recipients_created": recipients_created,
+        "message": f"Campaign started with {recipients_created} manually selected recipients."
+    }
+
+
+@v1_router.get("/campaigns/{campaign_id}/messages")
+async def get_campaign_messages(
+    campaign_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all SMS messages (outbound and inbound) for a specific campaign.
+    """
+    # Get campaign
+    campaign = await db.campaigns.find_one(
+        {"id": campaign_id, "tenant_id": tenant_id},
+        {"_id": 0}
+    )
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Get campaign messages from dedicated collection
+    messages = await db.campaign_messages.find(
+        {"campaign_id": campaign_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    
+    # Enrich with customer data
+    enriched_messages = []
+    for msg in messages:
+        customer = await db.customers.find_one(
+            {"id": msg.get("customer_id")},
+            {"_id": 0, "first_name": 1, "last_name": 1, "phone": 1}
+        )
+        enriched_messages.append({
+            **msg,
+            "customer_name": f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() if customer else "Unknown",
+            "customer_phone": customer.get("phone", "") if customer else ""
+        })
+    
+    # Get stats
+    outbound_count = len([m for m in messages if m.get("direction") == "OUTBOUND"])
+    inbound_count = len([m for m in messages if m.get("direction") == "INBOUND"])
+    
+    return {
+        "campaign_id": campaign_id,
+        "messages": enriched_messages,
+        "stats": {
+            "total": len(messages),
+            "outbound": outbound_count,
+            "inbound": inbound_count
+        }
+    }
 
 
 # ============= REPORTS ENDPOINT =============
