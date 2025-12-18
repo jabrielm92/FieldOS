@@ -155,6 +155,31 @@ export default function CustomersPage() {
         />
       </div>
 
+      {/* Bulk Actions */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center gap-4 mb-4 p-3 bg-muted rounded-lg">
+          <input
+            type="checkbox"
+            checked={selectedIds.length === filteredCustomers.length && filteredCustomers.length > 0}
+            onChange={(e) => handleSelectAll(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <span className="text-sm font-medium">{selectedIds.length} selected</span>
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            onClick={handleBulkDelete}
+            disabled={deleting}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            {deleting ? "Deleting..." : "Delete Selected"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>
+            Clear Selection
+          </Button>
+        </div>
+      )}
+
       {/* Customers Table */}
       {loading ? (
         <div className="flex items-center justify-center h-64">
