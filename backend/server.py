@@ -1681,27 +1681,32 @@ async def vapi_check_availability(
     date_formatted = target_date.strftime("%A, %B %d, %Y")
     
     # Format response for Vapi - structured for AI to understand
+    # Include current server date so Vapi AI knows the reference point
     if len(available_windows) == 0:
         return {
             "result": "no_availability",
             "status": "fully_booked",
-            "date": data.date,
+            "date": target_date.strftime("%Y-%m-%d"),
             "date_formatted": date_formatted,
+            "current_server_date": current_date_str,
+            "current_server_date_formatted": current_date_formatted,
             "windows": [],
             "has_availability": False,
-            "instructions": f"IMPORTANT: There are NO available time slots for {date_formatted}. Tell the customer that unfortunately, that date is fully booked. Ask them to suggest an alternative date and you will check availability for that date instead."
+            "instructions": f"IMPORTANT: There are NO available time slots for {date_formatted}. Tell the customer that unfortunately, that date is fully booked. Ask them to suggest an alternative date and you will check availability for that date instead. Remember: Today is {current_date_formatted}."
         }
     else:
         slots_text = ", ".join([w["label"] for w in available_windows])
         return {
             "result": "success",
             "status": "slots_available",
-            "date": data.date,
+            "date": target_date.strftime("%Y-%m-%d"),
             "date_formatted": date_formatted,
+            "current_server_date": current_date_str,
+            "current_server_date_formatted": current_date_formatted,
             "windows": available_windows,
             "has_availability": True,
             "available_slots": slots_text,
-            "instructions": f"IMPORTANT: Good news! For {date_formatted}, the following time slots are available: {slots_text}. Tell the customer these options and ask which one works best for them. Once they choose, call the book-job tool using the window_start and window_end values from the chosen slot to complete the booking."
+            "instructions": f"IMPORTANT: Good news! For {date_formatted}, the following time slots are available: {slots_text}. Tell the customer these options and ask which one works best for them. Once they choose, call the book-job tool using the window_start and window_end values from the chosen slot to complete the booking. Remember: Today is {current_date_formatted}."
         }
 
 
