@@ -3049,9 +3049,16 @@ async def get_dispatch_board(
         else:
             unassigned_jobs.append(serialize_doc(job))
     
+    # Merge assigned jobs into technician objects
+    technicians_with_jobs = []
+    for tech in technicians:
+        tech_data = serialize_doc(tech)
+        tech_data["jobs"] = assigned_jobs.get(tech["id"], [])
+        technicians_with_jobs.append(tech_data)
+    
     return {
         "date": date,
-        "technicians": serialize_docs(technicians),
+        "technicians": technicians_with_jobs,
         "unassigned_jobs": unassigned_jobs,
         "assigned_jobs": assigned_jobs,
         "summary": {
