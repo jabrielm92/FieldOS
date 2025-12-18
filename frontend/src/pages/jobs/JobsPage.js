@@ -59,6 +59,8 @@ export default function JobsPage() {
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showJobDetailDialog, setShowJobDetailDialog] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchJobs();
