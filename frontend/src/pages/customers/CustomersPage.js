@@ -203,6 +203,14 @@ export default function CustomersPage() {
           <Table data-testid="customers-table">
             <TableHeader>
               <TableRow className="table-industrial">
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === filteredCustomers.length && filteredCustomers.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                </TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Property Address</TableHead>
@@ -214,10 +222,18 @@ export default function CustomersPage() {
               {filteredCustomers.map((customer) => (
                 <TableRow 
                   key={customer.id} 
-                  className="table-industrial cursor-pointer hover:bg-muted/50" 
+                  className={`table-industrial cursor-pointer hover:bg-muted/50 ${selectedIds.includes(customer.id) ? 'bg-primary/5' : ''}`}
                   data-testid={`customer-row-${customer.id}`}
                   onClick={() => handleCustomerClick(customer)}
                 >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(customer.id)}
+                      onChange={(e) => handleSelectCustomer(customer.id, e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
