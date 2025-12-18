@@ -37,7 +37,9 @@ from models import (
     LoginRequest, TokenResponse,
     # Vapi
     VapiCreateLeadRequest, VapiCheckAvailabilityRequest,
-    VapiBookJobRequest, VapiSendSmsRequest, VapiCallSummaryRequest
+    VapiBookJobRequest, VapiSendSmsRequest, VapiCallSummaryRequest,
+    # Web Form
+    WebFormLeadRequest
 )
 
 ROOT_DIR = Path(__file__).parent
