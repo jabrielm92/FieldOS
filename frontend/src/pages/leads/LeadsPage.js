@@ -332,7 +332,7 @@ function LeadCard({ lead, formatDate, onClick, selected, onSelect }) {
             <div>
               <h3 className="font-medium">{lead.issue_type || "New Lead"}</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {lead.source?.replace('_', ' ')}
+                {formatSource(lead.source)}
               </p>
             </div>
           </div>
@@ -448,7 +448,7 @@ function LeadDetailModal({ lead, open, onOpenChange, onUpdate, onDelete }) {
                   {lead.urgency}
                 </Badge>
                 <span className="text-muted-foreground">
-                  via {lead.source?.replace('_', ' ')}
+                  via {formatSource(lead.source)}
                 </span>
               </DialogDescription>
             </div>
