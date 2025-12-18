@@ -1106,12 +1106,12 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Filter by Job Type</Label>
-                    <Select value={jobTypeFilter} onValueChange={setJobTypeFilter}>
+                    <Select value={jobTypeFilter || "all"} onValueChange={(v) => setJobTypeFilter(v === "all" ? "" : v)}>
                       <SelectTrigger>
                         <SelectValue placeholder="All job types" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All job types</SelectItem>
+                        <SelectItem value="all">All job types</SelectItem>
                         <SelectItem value="DIAGNOSTIC">Diagnostic</SelectItem>
                         <SelectItem value="REPAIR">Repair</SelectItem>
                         <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
