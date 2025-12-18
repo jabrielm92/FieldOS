@@ -2979,18 +2979,28 @@ async def get_dispatch_board(
     current_user: dict = Depends(get_current_user)
 ):
     """Get dispatch board data - jobs and technicians for a day"""
-    # Default to today
-    if not date:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    import pytz
     
-    # Parse date
+    # Get tenant timezone
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    tenant_tz_str = tenant.get("timezone", "America/New_York") if tenant else "America/New_York"
+    try:
+        tenant_tz = pytz.timezone(tenant_tz_str)
+    except:
+        tenant_tz = pytz.timezone("America/New_York")
+    
+    # Default to today in tenant timezone
+    if not date:
+        date = datetime.now(tenant_tz).strftime("%Y-%m-%d")
+    
+    # Parse date and create timezone-aware bounds
     try:
         target_date = datetime.strptime(date, "%Y-%m-%d")
+        # Make timezone aware in tenant timezone
+        date_start = tenant_tz.localize(target_date.replace(hour=0, minute=0, second=0))
+        date_end = date_start + timedelta(days=1)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format")
-    
-    date_start = target_date.replace(hour=0, minute=0, second=0)
-    date_end = date_start + timedelta(days=1)
     
     # Get jobs for the day
     jobs = await db.jobs.find({
