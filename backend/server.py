@@ -1593,6 +1593,33 @@ async def vapi_create_lead(
         raise HTTPException(status_code=500, detail=f"Error creating lead: {str(e)}")
 
 
+@v1_router.post("/vapi/get-current-date")
+async def vapi_get_current_date(
+    _: bool = Depends(verify_vapi_secret)
+):
+    """
+    Get current server date - Vapi utility tool.
+    Call this tool first if you need to know today's date before checking availability.
+    """
+    current_date = datetime.now(timezone.utc)
+    tomorrow = current_date + timedelta(days=1)
+    
+    return {
+        "result": "success",
+        "today": {
+            "date": current_date.strftime("%Y-%m-%d"),
+            "formatted": current_date.strftime("%A, %B %d, %Y"),
+            "day_of_week": current_date.strftime("%A")
+        },
+        "tomorrow": {
+            "date": tomorrow.strftime("%Y-%m-%d"),
+            "formatted": tomorrow.strftime("%A, %B %d, %Y"),
+            "day_of_week": tomorrow.strftime("%A")
+        },
+        "instructions": f"Today is {current_date.strftime('%A, %B %d, %Y')}. Tomorrow is {tomorrow.strftime('%A, %B %d, %Y')}. Use the 'date' values (YYYY-MM-DD format) when calling check-availability."
+    }
+
+
 @v1_router.post("/vapi/check-availability")
 async def vapi_check_availability(
     data: VapiCheckAvailabilityRequest,
