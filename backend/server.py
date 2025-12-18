@@ -1468,12 +1468,15 @@ async def vapi_create_lead(
                 first_name = parts[0]
                 last_name = parts[1] if len(parts) > 1 else ""
             
+            # Convert empty email to None to pass validation
+            email = data.captured_email if data.captured_email and data.captured_email.strip() else None
+            
             customer = Customer(
                 tenant_id=tenant_id,
                 first_name=first_name,
                 last_name=last_name,
                 phone=phone,
-                email=data.captured_email
+                email=email
             )
             customer_dict = customer.model_dump()
             customer_dict["created_at"] = customer_dict["created_at"].isoformat()
