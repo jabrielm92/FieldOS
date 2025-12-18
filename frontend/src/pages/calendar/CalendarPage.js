@@ -63,7 +63,9 @@ export default function CalendarPage() {
   const [showJobModal, setShowJobModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showJobListModal, setShowJobListModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDayJobs, setSelectedDayJobs] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const navigate = useNavigate();
