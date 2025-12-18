@@ -748,10 +748,10 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
         desc += `Urgency: ${response.data.urgency}\n`;
       }
       
-      // Add Vapi call summary if available
+      // Add AI Receptionist call summary if available
       const callSummary = response.data.messages?.find(m => m.is_call_summary);
       if (callSummary) {
-        desc += `\n--- Vapi Call Summary ---\n${callSummary.content}`;
+        desc += `\n--- AI Receptionist Summary ---\n${callSummary.content}`;
       }
       
       if (desc) {
@@ -804,7 +804,7 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  Import from Lead/Vapi Call (optional)
+                  Import from Lead/AI Receptionist (optional)
                 </Label>
                 <Select value={formData.lead_id || "none"} onValueChange={(v) => setFormData({...formData, lead_id: v === "none" ? "" : v})}>
                   <SelectTrigger><SelectValue placeholder="Select lead to import" /></SelectTrigger>
