@@ -137,6 +137,39 @@ export default function JobsPage() {
     setShowJobDetailDialog(true);
   };
 
+  const handleSelectJob = (jobId, checked) => {
+    if (checked) {
+      setSelectedIds([...selectedIds, jobId]);
+    } else {
+      setSelectedIds(selectedIds.filter(id => id !== jobId));
+    }
+  };
+
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedIds(filteredJobs.map(j => j.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} job(s)?`)) return;
+    
+    setDeleting(true);
+    try {
+      await jobAPI.bulkDelete(selectedIds);
+      toast.success(`${selectedIds.length} job(s) deleted`);
+      setSelectedIds([]);
+      fetchJobs();
+    } catch (error) {
+      toast.error("Failed to delete jobs");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filteredJobs = jobs.filter((job) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
