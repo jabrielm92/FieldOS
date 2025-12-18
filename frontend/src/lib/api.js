@@ -49,11 +49,12 @@ export const adminAPI = {
 
 // Customer APIs
 export const customerAPI = {
-  list: () => api.get('/customers'),
+  list: (filters = {}) => api.get('/customers', { params: filters }),
   get: (id) => api.get(`/customers/${id}`),
   create: (data) => api.post('/customers', data),
   update: (id, data) => api.put(`/customers/${id}`, data),
   delete: (id) => api.delete(`/customers/${id}`),
+  bulkDelete: (ids) => api.post('/customers/bulk-delete', ids),
 };
 
 // Property APIs
