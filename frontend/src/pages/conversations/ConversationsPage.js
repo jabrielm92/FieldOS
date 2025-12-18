@@ -206,9 +206,17 @@ export default function ConversationsPage() {
           <CardHeader className="pb-3 border-b space-y-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-heading">Conversations</CardTitle>
-              <Button size="sm" variant="outline" onClick={() => fetchConversations()}>
-                <RefreshCw className="h-3 w-3" />
-              </Button>
+              <div className="flex items-center gap-2">
+                {selectedIds.length > 0 && (
+                  <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={deleting}>
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    {deleting ? "..." : selectedIds.length}
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" onClick={() => fetchConversations()}>
+                  <RefreshCw className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
