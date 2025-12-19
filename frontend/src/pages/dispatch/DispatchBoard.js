@@ -46,13 +46,12 @@ const statusColors = {
   COMPLETED: "bg-green-100 text-green-800",
 };
 
+// Helper to get local date string (avoids UTC timezone issues)
+const getLocalDateString = (date = new Date()) => {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
 export default function DispatchBoard() {
-  // Use local date, not UTC
-  const getLocalDateString = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  };
-  
   const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [boardData, setBoardData] = useState({ technicians: [], unassigned_jobs: [] });
   const [technicians, setTechnicians] = useState([]);
