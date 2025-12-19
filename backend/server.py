@@ -110,6 +110,29 @@ def serialize_doc(doc: dict) -> dict:
     return result
 
 
+def calculate_quote_amount(job_type: str, urgency: str = None) -> float:
+    """Calculate quote amount based on job type and urgency"""
+    # Base prices by job type
+    base_prices = {
+        "DIAGNOSTIC": 89.00,
+        "REPAIR": 250.00,
+        "MAINTENANCE": 149.00,
+        "INSTALLATION": 1500.00,
+    }
+    
+    # Urgency multipliers
+    urgency_multipliers = {
+        "EMERGENCY": 1.5,  # 50% extra for emergency
+        "URGENT": 1.25,    # 25% extra for urgent
+        "ROUTINE": 1.0,    # Standard price
+    }
+    
+    base = base_prices.get(job_type, 150.00)
+    multiplier = urgency_multipliers.get(urgency, 1.0)
+    
+    return round(base * multiplier, 2)
+
+
 def serialize_docs(docs: list) -> list:
     """Serialize list of MongoDB documents"""
     return [serialize_doc(doc) for doc in docs]
