@@ -107,24 +107,27 @@ class AiSmsService:
         # Initialize chat with session ID based on conversation
         session_id = f"sms-booking-{conversation_context.get('conversation_id', 'unknown')}"
         
+        # Build conversation history string for context
+        history = conversation_context.get("message_history", [])
+        history_str = ""
+        for msg in history[-8:]:  # Last 8 messages for context
+            role = "Customer" if msg.get("direction") == "INBOUND" else "Assistant"
+            history_str += f"{role}: {msg.get('content', '')}\n"
+        
+        # Include history in the prompt
+        full_prompt = system_prompt
+        if history_str:
+            full_prompt += f"\n\nCONVERSATION SO FAR:\n{history_str}"
+        
         chat = LlmChat(
             api_key=self.api_key,
             session_id=session_id,
-            system_message=system_prompt
+            system_message=full_prompt
         ).with_model("openai", "gpt-4o")
-        
-        # Build conversation history for context
-        history = conversation_context.get("message_history", [])
-        
-        # Add previous messages to establish context
-        for msg in history[-6:]:  # Last 6 messages for context
-            if msg.get("direction") == "INBOUND":
-                await chat.send_message(UserMessage(text=msg.get("content", "")))
-            # Note: Outbound messages are implicitly in the chat history
         
         # Send current message and get response
         try:
-            user_msg = UserMessage(text=customer_message)
+            user_msg = UserMessage(text=f"Customer says: {customer_message}")
             ai_response = await chat.send_message(user_msg)
             
             # Check if response contains booking JSON
