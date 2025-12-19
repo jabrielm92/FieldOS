@@ -117,13 +117,17 @@ export default function DispatchBoard() {
   };
 
   const navigateDate = (direction) => {
-    const date = new Date(selectedDate);
+    const date = new Date(selectedDate + 'T12:00:00'); // Use noon to avoid timezone issues
     date.setDate(date.getDate() + direction);
-    setSelectedDate(date.toISOString().split('T')[0]);
+    const newDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    setSelectedDate(newDate);
   };
 
   const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString(undefined, {
+    // Parse as local date
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString(undefined, {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
