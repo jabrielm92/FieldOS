@@ -3175,12 +3175,41 @@ async def get_dashboard(
         "created_at": {"$gte": month_start.isoformat()}
     })
     
+    # Revenue metrics
+    # Potential revenue: sum of quote_amount for all booked/en_route/on_site jobs this month
+    potential_jobs = await db.jobs.find({
+        "tenant_id": tenant_id,
+        "status": {"$in": ["BOOKED", "EN_ROUTE", "ON_SITE"]},
+        "created_at": {"$gte": month_start.isoformat()}
+    }, {"_id": 0, "quote_amount": 1}).to_list(1000)
+    potential_revenue = sum(j.get("quote_amount", 0) or 0 for j in potential_jobs)
+    
+    # Completed revenue: sum of quote_amount for completed jobs this month
+    completed_jobs = await db.jobs.find({
+        "tenant_id": tenant_id,
+        "status": "COMPLETED",
+        "created_at": {"$gte": month_start.isoformat()}
+    }, {"_id": 0, "quote_amount": 1}).to_list(1000)
+    completed_revenue = sum(j.get("quote_amount", 0) or 0 for j in completed_jobs)
+    
+    # Also add invoice revenue for comparison
+    paid_invoices = await db.invoices.find({
+        "tenant_id": tenant_id,
+        "status": "PAID",
+        "created_at": {"$gte": month_start.isoformat()}
+    }, {"_id": 0, "amount": 1}).to_list(1000)
+    invoiced_revenue = sum(i.get("amount", 0) or 0 for i in paid_invoices)
+    
     return {
         "metrics": {
             "leads_this_week": leads_week,
             "leads_this_month": leads_month,
             "jobs_this_week": jobs_week,
-            "quote_conversion": round(accepted_quotes / total_quotes * 100, 1) if total_quotes > 0 else 0
+            "quote_conversion": round(accepted_quotes / total_quotes * 100, 1) if total_quotes > 0 else 0,
+            "potential_revenue": round(potential_revenue, 2),
+            "completed_revenue": round(completed_revenue, 2),
+            "invoiced_revenue": round(invoiced_revenue, 2),
+            "total_estimated_revenue": round(potential_revenue + completed_revenue, 2)
         },
         "jobs_today": serialize_docs(jobs_today),
         "jobs_tomorrow": serialize_docs(jobs_tomorrow),
