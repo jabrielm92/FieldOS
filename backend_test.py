@@ -743,7 +743,15 @@ class FieldOSAPITester:
         """Test dashboard data endpoint"""
         self.log("\n=== DASHBOARD METRICS ===")
         
-        self.run_test("Get Dashboard Data", "GET", "dashboard", 200)
+        success, response = self.run_test("Get Dashboard Data", "GET", "dashboard", 200)
+        
+        if success:
+            metrics = response.get('metrics', {})
+            self.log(f"✅ Dashboard metrics retrieved:")
+            self.log(f"   - Potential Revenue: ${metrics.get('potential_revenue', 0)}")
+            self.log(f"   - Completed Revenue: ${metrics.get('completed_revenue', 0)}")
+            self.log(f"   - Invoiced Revenue: ${metrics.get('invoiced_revenue', 0)}")
+            self.log(f"   - Total Estimated Revenue: ${metrics.get('total_estimated_revenue', 0)}")
         
         # Test reports summary
         self.run_test("Get Reports Summary", "GET", "reports/summary", 200)
