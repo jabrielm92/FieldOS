@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 class CampaignTester:
-    def __init__(self, base_url: str = "https://service-hub-261.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://fieldos-service.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tenant_id = None

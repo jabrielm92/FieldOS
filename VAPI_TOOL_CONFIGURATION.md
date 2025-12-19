@@ -1,7 +1,7 @@
 # Vapi Tool Configuration for FieldOS
 
 **Last Updated:** December 18, 2025  
-**Backend Base URL:** `https://service-hub-261.preview.emergentagent.com`
+**Backend Base URL:** `https://fieldos-service.preview.emergentagent.com`
 
 ---
 
@@ -9,12 +9,12 @@
 
 | Tool | URL |
 |------|-----|
-| **Create Lead** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/create-lead` |
-| **Check Availability** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/check-availability` |
-| **Book Job** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/book-job` |
-| **Send SMS** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/send-sms` |
-| **Log Call Summary** | `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/call-summary` |
-| **Twilio Inbound SMS Webhook** | `https://service-hub-261.preview.emergentagent.com/api/v1/sms/inbound` |
+| **Create Lead** | `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/create-lead` |
+| **Check Availability** | `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/check-availability` |
+| **Book Job** | `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/book-job` |
+| **Send SMS** | `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/send-sms` |
+| **Log Call Summary** | `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/call-summary` |
+| **Twilio Inbound SMS Webhook** | `https://fieldos-service.preview.emergentagent.com/api/v1/sms/inbound` |
 
 ---
 
@@ -80,7 +80,7 @@ x-vapi-secret: service-hub-258
 
 **Purpose:** Create a new lead and customer record when a caller provides their information.
 
-**URL:** `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/create-lead`  
+**URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/create-lead`  
 **Method:** POST  
 **Content-Type:** application/json
 
@@ -163,7 +163,7 @@ x-vapi-secret: service-hub-258
     }
   },
   "server": {
-    "url": "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/create-lead",
+    "url": "https://fieldos-service.preview.emergentagent.com/api/v1/vapi/create-lead",
     "method": "POST",
     "headers": {
       "Content-Type": "application/json",
@@ -179,7 +179,7 @@ x-vapi-secret: service-hub-258
 
 **Purpose:** Check available appointment slots for a given date.
 
-**URL:** `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/check-availability`  
+**URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/check-availability`  
 **Method:** POST  
 **Content-Type:** application/json
 
@@ -257,7 +257,7 @@ x-vapi-secret: service-hub-258
     }
   },
   "server": {
-    "url": "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/check-availability",
+    "url": "https://fieldos-service.preview.emergentagent.com/api/v1/vapi/check-availability",
     "method": "POST",
     "headers": {
       "Content-Type": "application/json",
@@ -273,7 +273,7 @@ x-vapi-secret: service-hub-258
 
 **Purpose:** Book a service appointment after the customer selects a time slot.
 
-**URL:** `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/book-job`  
+**URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/book-job`  
 **Method:** POST  
 **Content-Type:** application/json
 
@@ -360,7 +360,7 @@ x-vapi-secret: service-hub-258
     }
   },
   "server": {
-    "url": "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/book-job",
+    "url": "https://fieldos-service.preview.emergentagent.com/api/v1/vapi/book-job",
     "method": "POST",
     "headers": {
       "Content-Type": "application/json",
@@ -376,7 +376,7 @@ x-vapi-secret: service-hub-258
 
 **Purpose:** Send an SMS message to a customer (optional, for custom messages).
 
-**URL:** `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/send-sms`  
+**URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/send-sms`  
 **Method:** POST  
 **Content-Type:** application/json
 
@@ -425,7 +425,7 @@ x-vapi-secret: service-hub-258
     }
   },
   "server": {
-    "url": "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/send-sms",
+    "url": "https://fieldos-service.preview.emergentagent.com/api/v1/vapi/send-sms",
     "method": "POST",
     "headers": {
       "Content-Type": "application/json",
@@ -441,7 +441,7 @@ x-vapi-secret: service-hub-258
 
 **Purpose:** Log a summary of the call for record-keeping (typically called at end of call).
 
-**URL:** `https://service-hub-261.preview.emergentagent.com/api/v1/vapi/call-summary`  
+**URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/call-summary`  
 **Method:** POST  
 **Content-Type:** application/json
 
@@ -490,7 +490,7 @@ x-vapi-secret: service-hub-258
     }
   },
   "server": {
-    "url": "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/call-summary",
+    "url": "https://fieldos-service.preview.emergentagent.com/api/v1/vapi/call-summary",
     "method": "POST",
     "headers": {
       "Content-Type": "application/json",
@@ -506,7 +506,7 @@ x-vapi-secret: service-hub-258
 
 **Purpose:** Configure this in your Twilio console to receive incoming SMS messages.
 
-**URL:** `https://service-hub-261.preview.emergentagent.com/api/v1/sms/inbound`  
+**URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/sms/inbound`  
 **Method:** POST  
 **Content-Type:** application/x-www-form-urlencoded (Twilio's default)
 
@@ -523,7 +523,7 @@ x-vapi-secret: service-hub-258
 2. Click on your phone number (`+12154843375`)
 3. Scroll to **Messaging Configuration**
 4. Under **A MESSAGE COMES IN**, set:
-   - **Webhook URL:** `https://service-hub-261.preview.emergentagent.com/api/v1/sms/inbound`
+   - **Webhook URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/sms/inbound`
    - **HTTP Method:** POST
 
 ---
@@ -622,7 +622,7 @@ You can test each tool using curl:
 
 ```bash
 # Test create-lead
-curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/create-lead" \
+curl -X POST "https://fieldos-service.preview.emergentagent.com/api/v1/vapi/create-lead" \
   -H "Content-Type: application/json" \
   -H "x-vapi-secret: service-hub-258" \
   -d '{
@@ -635,13 +635,13 @@ curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/crea
   }'
 
 # Test check-availability (use actual YYYY-MM-DD date)
-curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/check-availability" \
+curl -X POST "https://fieldos-service.preview.emergentagent.com/api/v1/vapi/check-availability" \
   -H "Content-Type: application/json" \
   -H "x-vapi-secret: service-hub-258" \
   -d '{"tenant_slug": "radiance-hvac", "date": "2025-12-20"}'
 
 # Test book-job (use IDs from create-lead and windows from check-availability)
-curl -X POST "https://service-hub-261.preview.emergentagent.com/api/v1/vapi/book-job" \
+curl -X POST "https://fieldos-service.preview.emergentagent.com/api/v1/vapi/book-job" \
   -H "Content-Type: application/json" \
   -H "x-vapi-secret: service-hub-258" \
   -d '{
