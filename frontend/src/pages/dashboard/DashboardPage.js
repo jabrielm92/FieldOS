@@ -118,9 +118,18 @@ export default function DashboardPage() {
   const charts = data?.charts || {};
 
   // Calculate additional metrics
-  const totalRevenue = upcomingJobs.reduce((sum, j) => sum + (j.estimated_amount || 0), 0);
   const emergencyJobs = upcomingJobs.filter(j => j.priority === "EMERGENCY").length;
   const unassignedJobs = upcomingJobs.filter(j => !j.assigned_technician_id).length;
+
+  // Format currency
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount || 0);
+  };
 
   return (
     <Layout title="Dashboard" subtitle="Your operations at a glance">
