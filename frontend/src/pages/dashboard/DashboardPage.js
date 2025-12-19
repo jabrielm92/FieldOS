@@ -40,6 +40,28 @@ const formatSource = (source) => {
   return sourceLabels[source] || source?.replace('_', ' ') || 'Unknown';
 };
 
+// Helper to format status nicely
+const formatStatus = (status) => {
+  const statusLabels = {
+    'NEW': 'New',
+    'CONTACTED': 'Contacted',
+    'QUALIFIED': 'Qualified',
+    'JOB_BOOKED': 'Job Booked',
+    'LOST': 'Lost',
+    'BOOKED': 'Booked',
+    'EN_ROUTE': 'En Route',
+    'ON_SITE': 'On Site',
+    'COMPLETED': 'Completed',
+    'CANCELLED': 'Cancelled',
+  };
+  return statusLabels[status] || status?.replace(/_/g, ' ') || status;
+};
+
+// Helper to get local date string (avoids UTC timezone issues)
+const getLocalDateString = (date = new Date()) => {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
 export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [upcomingJobs, setUpcomingJobs] = useState([]);
