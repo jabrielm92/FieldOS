@@ -170,8 +170,8 @@ class QuoteRevenueAPITester:
             ("REPAIR", "ROUTINE", 250.00, 1.0),
             ("MAINTENANCE", "EMERGENCY", 149.00, 1.5),
             ("MAINTENANCE", "ROUTINE", 149.00, 1.0),
-            ("INSTALLATION", "EMERGENCY", 1500.00, 1.5),
-            ("INSTALLATION", "ROUTINE", 1500.00, 1.0)
+            ("INSTALL", "EMERGENCY", 1500.00, 1.5),
+            ("INSTALL", "ROUTINE", 1500.00, 1.0)
         ]
         
         quote_tests_passed = 0
