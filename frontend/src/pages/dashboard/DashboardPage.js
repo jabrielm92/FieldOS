@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { 
   TrendingUp, Briefcase, Users, FileText, ArrowUpRight, ArrowDownRight,
   Clock, MapPin, ChevronRight, Calendar, MessageSquare, Phone, AlertTriangle,
-  DollarSign, CheckCircle, Loader2
+  DollarSign, CheckCircle, Loader2, Receipt
 } from "lucide-react";
 
 const statusColors = {
