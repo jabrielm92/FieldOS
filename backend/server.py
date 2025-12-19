@@ -3371,7 +3371,9 @@ async def sms_inbound(request: Request):
             return {"status": "received", "ai_booking": True}
             
         except Exception as e:
+            import traceback
             logger.error(f"Error in AI booking conversation: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             # Fall through to regular AI handling
     
     # Regular AI response (non-booking conversations)
