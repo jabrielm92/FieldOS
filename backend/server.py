@@ -112,12 +112,14 @@ def serialize_doc(doc: dict) -> dict:
 
 def calculate_quote_amount(job_type: str, urgency: str = None) -> float:
     """Calculate quote amount based on job type and urgency"""
-    # Base prices by job type
+    # Base prices by job type (handle both INSTALL and INSTALLATION)
     base_prices = {
         "DIAGNOSTIC": 89.00,
         "REPAIR": 250.00,
         "MAINTENANCE": 149.00,
-        "INSTALLATION": 1500.00,
+        "INSTALL": 1500.00,
+        "INSTALLATION": 1500.00,  # Alias
+        "INSPECTION": 75.00,
     }
     
     # Urgency multipliers
