@@ -65,14 +65,17 @@ export default function DashboardPage() {
       
       setData(dashRes.data);
       
-      // Get upcoming 7 days of jobs
+      // Get upcoming 7 days of jobs (including today)
       const now = new Date();
-      const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const sevenDaysLater = new Date(todayStart.getTime() + 8 * 24 * 60 * 60 * 1000); // Include full 7th day
       const upcoming = jobsRes.data
         .filter(job => {
           if (!job.service_window_start) return false;
           const jobDate = new Date(job.service_window_start);
-          return jobDate >= now && jobDate <= sevenDaysLater && job.status !== "COMPLETED" && job.status !== "CANCELLED";
+          const isUpcoming = jobDate >= todayStart && jobDate <= sevenDaysLater;
+          const isNotCompleted = job.status !== "COMPLETED" && job.status !== "CANCELLED";
+          return isUpcoming && isNotCompleted;
         })
         .sort((a, b) => new Date(a.service_window_start) - new Date(b.service_window_start))
         .slice(0, 10);
