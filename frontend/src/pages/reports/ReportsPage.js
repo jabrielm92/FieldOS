@@ -111,7 +111,7 @@ export default function ReportsPage() {
 
   // Prepare chart data
   const sourceChartData = Object.entries(leadsBySource).map(([name, value]) => ({
-    name: name.replace('_', ' '),
+    name: formatSource(name),
     value
   }));
 
