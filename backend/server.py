@@ -2588,6 +2588,36 @@ async def vapi_book_job(
         if lead:
             lead_urgency = lead.get("urgency")
     
+    # Check for existing job for this lead to prevent duplicates (idempotency)
+    if data.lead_id:
+        existing_job = await db.jobs.find_one({
+            "lead_id": data.lead_id,
+            "tenant_id": tenant_id,
+            "status": {"$in": ["BOOKED", "EN_ROUTE", "ON_SITE"]}
+        }, {"_id": 0})
+        
+        if existing_job:
+            # Return existing job info instead of creating duplicate
+            customer = await db.customers.find_one({"id": data.customer_id}, {"_id": 0})
+            window_start_dt = datetime.fromisoformat(existing_job["service_window_start"])
+            window_end_dt = datetime.fromisoformat(existing_job["service_window_end"])
+            window_date = window_start_dt.strftime("%A, %B %d")
+            window_time_str = f"{window_start_dt.strftime('%I:%M %p')} to {window_end_dt.strftime('%I:%M %p')}"
+            customer_name = customer.get("first_name", "Customer") if customer else "Customer"
+            
+            return {
+                "result": "success",
+                "status": "job_already_booked",
+                "job_id": existing_job["id"],
+                "booking_details": {
+                    "date": window_date,
+                    "time_window": window_time_str,
+                    "customer_name": customer_name
+                },
+                "sms_sent": False,
+                "instructions": f"IMPORTANT: A job is already booked for this lead! Tell {customer_name} that their service appointment was already confirmed for {window_date} between {window_time_str}. Ask if there's anything else you can help them with."
+            }
+    
     # Calculate quote amount based on job type and urgency
     quote_amount = calculate_quote_amount(job_type.value, lead_urgency)
     
