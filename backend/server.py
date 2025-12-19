@@ -3180,7 +3180,192 @@ async def sms_inbound(request: Request):
         }}
     )
     
-    # Generate AI response
+    # Check if this is an AI booking conversation (from webform)
+    if conv.get("ai_booking_active"):
+        try:
+            from services.ai_sms_service import ai_sms_service
+            import pytz
+            
+            # Get conversation history
+            history = await db.messages.find(
+                {"conversation_id": conv["id"]}, {"_id": 0}
+            ).sort("created_at", -1).limit(10).to_list(10)
+            history.reverse()
+            
+            # Build context for AI
+            booking_context = conv.get("ai_booking_context", {})
+            booking_context["conversation_id"] = conv["id"]
+            booking_context["message_history"] = history
+            
+            # Process with AI booking service
+            ai_result = await ai_sms_service.process_sms_reply(
+                customer_message=body,
+                conversation_context=booking_context,
+                tenant_info=tenant
+            )
+            
+            # Send AI response
+            if tenant.get("twilio_phone_number") and ai_result.get("response_text"):
+                from services.twilio_service import twilio_service
+                
+                sms_result = await twilio_service.send_sms(
+                    to_phone=from_phone,
+                    body=ai_result["response_text"],
+                    from_phone=tenant["twilio_phone_number"]
+                )
+                
+                # Log AI response
+                ai_msg = Message(
+                    tenant_id=tenant_id,
+                    conversation_id=conv["id"],
+                    customer_id=customer["id"],
+                    direction=MessageDirection.OUTBOUND,
+                    sender_type=SenderType.AI,
+                    channel=PreferredChannel.SMS,
+                    content=ai_result["response_text"],
+                    metadata={"twilio_sid": sms_result.get("provider_message_id"), "ai_booking": True}
+                )
+                ai_msg_dict = ai_msg.model_dump()
+                ai_msg_dict["created_at"] = ai_msg_dict["created_at"].isoformat()
+                await db.messages.insert_one(ai_msg_dict)
+                
+                # If AI determined we should book a job
+                if ai_result.get("action") == "book_job" and ai_result.get("booking_data"):
+                    booking_data = ai_result["booking_data"]
+                    
+                    # Parse the booking date and time slot
+                    tenant_tz = pytz.timezone(tenant.get("timezone", "America/New_York"))
+                    booking_date = datetime.strptime(booking_data["date"], "%Y-%m-%d")
+                    
+                    time_slots = {
+                        "morning": (8, 12),
+                        "afternoon": (12, 16),
+                        "evening": (16, 19)
+                    }
+                    slot = time_slots.get(booking_data.get("time_slot", "morning"), (8, 12))
+                    
+                    window_start = tenant_tz.localize(datetime(
+                        booking_date.year, booking_date.month, booking_date.day,
+                        slot[0], 0, 0
+                    ))
+                    window_end = tenant_tz.localize(datetime(
+                        booking_date.year, booking_date.month, booking_date.day,
+                        slot[1], 0, 0
+                    ))
+                    
+                    # Get property from context
+                    property_id = booking_context.get("property_id")
+                    lead_id = conv.get("ai_booking_lead_id")
+                    
+                    # Determine job type and calculate quote
+                    job_type_str = booking_data.get("job_type", "DIAGNOSTIC").upper()
+                    if job_type_str not in ["DIAGNOSTIC", "REPAIR", "MAINTENANCE", "INSTALL"]:
+                        job_type_str = "DIAGNOSTIC"
+                    
+                    urgency = booking_context.get("urgency", "ROUTINE")
+                    quote_amount = calculate_quote_amount(job_type_str, urgency)
+                    
+                    # Create the job
+                    job = Job(
+                        tenant_id=tenant_id,
+                        customer_id=customer["id"],
+                        property_id=property_id,
+                        lead_id=lead_id,
+                        job_type=JobType(job_type_str),
+                        priority=JobPriority.NORMAL,
+                        service_window_start=window_start,
+                        service_window_end=window_end,
+                        status=JobStatus.BOOKED,
+                        created_by=JobCreatedBy.AI,
+                        quote_amount=quote_amount
+                    )
+                    
+                    job_dict = job.model_dump()
+                    job_dict["created_at"] = job_dict["created_at"].isoformat()
+                    job_dict["updated_at"] = job_dict["updated_at"].isoformat()
+                    job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
+                    job_dict["service_window_end"] = job_dict["service_window_end"].isoformat()
+                    await db.jobs.insert_one(job_dict)
+                    
+                    # Create quote
+                    quote = Quote(
+                        tenant_id=tenant_id,
+                        customer_id=customer["id"],
+                        property_id=property_id,
+                        job_id=job.id,
+                        amount=quote_amount,
+                        description=f"{job_type_str} - {booking_context.get('issue_description', 'Service')}",
+                        status=QuoteStatus.SENT
+                    )
+                    quote_dict = quote.model_dump()
+                    quote_dict["created_at"] = quote_dict["created_at"].isoformat()
+                    quote_dict["updated_at"] = quote_dict["updated_at"].isoformat()
+                    quote_dict["sent_at"] = datetime.now(timezone.utc).isoformat()
+                    await db.quotes.insert_one(quote_dict)
+                    
+                    # Link quote to job
+                    await db.jobs.update_one({"id": job.id}, {"$set": {"quote_id": quote.id}})
+                    
+                    # Update lead status
+                    if lead_id:
+                        await db.leads.update_one(
+                            {"id": lead_id},
+                            {"$set": {"status": LeadStatus.JOB_BOOKED.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
+                        )
+                    
+                    # Send quote SMS (continuation)
+                    quote_msg = f"Your service quote for {job_type_str} is ${quote_amount:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions!"
+                    
+                    await twilio_service.send_sms(
+                        to_phone=from_phone,
+                        body=quote_msg,
+                        from_phone=tenant["twilio_phone_number"]
+                    )
+                    
+                    # Log quote SMS
+                    quote_sms_msg = Message(
+                        tenant_id=tenant_id,
+                        conversation_id=conv["id"],
+                        customer_id=customer["id"],
+                        direction=MessageDirection.OUTBOUND,
+                        sender_type=SenderType.SYSTEM,
+                        channel=PreferredChannel.SMS,
+                        content=quote_msg,
+                        metadata={"quote_id": quote.id, "job_id": job.id}
+                    )
+                    quote_sms_dict = quote_sms_msg.model_dump()
+                    quote_sms_dict["created_at"] = quote_sms_dict["created_at"].isoformat()
+                    await db.messages.insert_one(quote_sms_dict)
+                    
+                    # Mark AI booking as complete
+                    await db.conversations.update_one(
+                        {"id": conv["id"]},
+                        {"$set": {
+                            "ai_booking_active": False,
+                            "ai_booking_completed": True,
+                            "ai_booking_job_id": job.id,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }}
+                    )
+                    
+                    logger.info(f"AI booking completed: Job {job.id} created for customer {customer['id']}")
+                
+                # Update conversation timestamp
+                await db.conversations.update_one(
+                    {"id": conv["id"]},
+                    {"$set": {
+                        "last_message_from": SenderType.AI.value,
+                        "last_message_at": datetime.now(timezone.utc).isoformat()
+                    }}
+                )
+            
+            return {"status": "received", "ai_booking": True}
+            
+        except Exception as e:
+            logger.error(f"Error in AI booking conversation: {e}")
+            # Fall through to regular AI handling
+    
+    # Regular AI response (non-booking conversations)
     try:
         from services.openai_service import openai_service
         
