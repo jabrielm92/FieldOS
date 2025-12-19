@@ -420,7 +420,7 @@ export default function DashboardPage() {
   );
 }
 
-function MetricCard({ title, value, icon: Icon, color, onClick }) {
+function MetricCard({ title, value, icon: Icon, color, onClick, isSmallValue }) {
   const colorClasses = {
     blue: "bg-blue-50 text-blue-600",
     green: "bg-green-50 text-green-600",
@@ -442,7 +442,7 @@ function MetricCard({ title, value, icon: Icon, color, onClick }) {
             <Icon className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-2xl font-bold">{value}</p>
+            <p className={`font-bold ${isSmallValue ? 'text-lg font-mono' : 'text-2xl'}`}>{value}</p>
             <p className="text-xs text-muted-foreground">{title}</p>
           </div>
         </div>
