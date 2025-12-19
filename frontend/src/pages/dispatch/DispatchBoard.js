@@ -47,7 +47,13 @@ const statusColors = {
 };
 
 export default function DispatchBoard() {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Use local date, not UTC
+  const getLocalDateString = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  };
+  
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [boardData, setBoardData] = useState({ technicians: [], unassigned_jobs: [] });
   const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
