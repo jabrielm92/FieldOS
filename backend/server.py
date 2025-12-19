@@ -2489,6 +2489,16 @@ async def vapi_book_job(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid datetime format")
     
+    # Get lead urgency for quote calculation (if lead exists)
+    lead_urgency = None
+    if data.lead_id:
+        lead = await db.leads.find_one({"id": data.lead_id}, {"_id": 0, "urgency": 1})
+        if lead:
+            lead_urgency = lead.get("urgency")
+    
+    # Calculate quote amount based on job type and urgency
+    quote_amount = calculate_quote_amount(job_type.value, lead_urgency)
+    
     # Create job
     job = Job(
         tenant_id=tenant_id,
@@ -2500,7 +2510,8 @@ async def vapi_book_job(
         service_window_start=window_start,
         service_window_end=window_end,
         status=JobStatus.BOOKED,
-        created_by=JobCreatedBy.AI
+        created_by=JobCreatedBy.AI,
+        quote_amount=quote_amount
     )
     
     job_dict = job.model_dump()
