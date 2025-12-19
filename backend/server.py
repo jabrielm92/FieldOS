@@ -3355,7 +3355,9 @@ async def sms_inbound(request: Request):
                         }}
                     )
                     
-                    logger.info(f"AI booking completed: Job {job.id} created for customer {customer['id']}")
+                            logger.info(f"AI booking completed: Job {job.id} created for customer {customer['id']}")
+                    except Exception as booking_err:
+                        logger.error(f"Error processing booking data: {booking_err}")
                 
                 # Update conversation timestamp
                 await db.conversations.update_one(
