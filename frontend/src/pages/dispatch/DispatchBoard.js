@@ -144,9 +144,9 @@ export default function DispatchBoard() {
           <Button variant="outline" size="icon" onClick={() => navigateDate(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-2 px-4 py-2 bg-muted rounded-md">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{formatDate(selectedDate)}</span>
+          <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-md">
+            <Calendar className="h-4 w-4 text-primary" />
+            <span className="font-semibold text-primary">{formatDate(selectedDate)}</span>
           </div>
           <Button variant="outline" size="icon" onClick={() => navigateDate(1)}>
             <ChevronRight className="h-4 w-4" />
@@ -162,7 +162,7 @@ export default function DispatchBoard() {
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3 py-2 border rounded-md text-sm"
+            className="px-3 py-2 border rounded-md text-sm text-foreground bg-background"
           />
         </div>
 
