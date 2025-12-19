@@ -922,6 +922,19 @@ async def create_job(
             {"id": job.id},
             {"$set": {"quote_id": quote.id}}
         )
+        
+        # Send quote SMS to customer
+        tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+        if tenant and tenant.get("twilio_phone_number"):
+            from services.twilio_service import twilio_service
+            
+            quote_message = f"Hi {customer['first_name']}, your service quote for {job_dict.get('job_type', 'service')} is ${job_dict['quote_amount']:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions! {tenant.get('sms_signature', '')}"
+            
+            await twilio_service.send_sms(
+                to_phone=customer["phone"],
+                body=quote_message,
+                from_phone=tenant["twilio_phone_number"]
+            )
     
     # Update lead status if linked
     if data.lead_id:
