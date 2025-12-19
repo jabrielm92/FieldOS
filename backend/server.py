@@ -887,6 +887,42 @@ async def create_job(
         job_dict["exact_arrival_time"] = job_dict["exact_arrival_time"].isoformat()
     await db.jobs.insert_one(job_dict)
     
+    # Create a Quote record linked to the job (if quote_amount exists)
+    if job_dict.get("quote_amount"):
+        lead_data = None
+        if data.lead_id:
+            lead_data = await db.leads.find_one({"id": data.lead_id}, {"_id": 0})
+        
+        quote_description = f"{job_dict.get('job_type', 'Service')} service"
+        if lead_data:
+            if lead_data.get("issue_type"):
+                quote_description = f"{job_dict.get('job_type')} - {lead_data.get('issue_type')}"
+            if lead_data.get("description"):
+                quote_description += f"\n{lead_data.get('description')}"
+        
+        quote = Quote(
+            tenant_id=tenant_id,
+            customer_id=data.customer_id,
+            property_id=data.property_id,
+            job_id=job.id,
+            amount=job_dict["quote_amount"],
+            description=quote_description,
+            status=QuoteStatus.SENT
+        )
+        
+        quote_dict = quote.model_dump()
+        quote_dict["created_at"] = quote_dict["created_at"].isoformat()
+        quote_dict["updated_at"] = quote_dict["updated_at"].isoformat()
+        quote_dict["sent_at"] = datetime.now(timezone.utc).isoformat()
+        await db.quotes.insert_one(quote_dict)
+        
+        # Link quote to job
+        job_dict["quote_id"] = quote.id
+        await db.jobs.update_one(
+            {"id": job.id},
+            {"$set": {"quote_id": quote.id}}
+        )
+    
     # Update lead status if linked
     if data.lead_id:
         await db.leads.update_one(
