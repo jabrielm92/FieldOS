@@ -3233,11 +3233,16 @@ async def sms_inbound(request: Request):
                 
                 # If AI determined we should book a job
                 if ai_result.get("action") == "book_job" and ai_result.get("booking_data"):
-                    booking_data = ai_result["booking_data"]
-                    
-                    # Parse the booking date and time slot
-                    tenant_tz = pytz.timezone(tenant.get("timezone", "America/New_York"))
-                    booking_date = datetime.strptime(booking_data["date"], "%Y-%m-%d")
+                    try:
+                        booking_data = ai_result["booking_data"]
+                        
+                        # Validate booking data has required fields
+                        if not booking_data.get("date") or not booking_data.get("time_slot"):
+                            logger.warning(f"Incomplete booking data: {booking_data}")
+                        else:
+                            # Parse the booking date and time slot
+                            tenant_tz = pytz.timezone(tenant.get("timezone", "America/New_York"))
+                            booking_date = datetime.strptime(booking_data["date"], "%Y-%m-%d")
                     
                     time_slots = {
                         "morning": (8, 12),
