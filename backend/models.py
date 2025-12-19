@@ -349,6 +349,8 @@ class JobBase(BaseModel):
     assigned_technician_id: Optional[str] = None
     created_by: JobCreatedBy = JobCreatedBy.STAFF
     notes: Optional[str] = None
+    quote_amount: Optional[float] = None  # Estimated cost for the job
+    quote_id: Optional[str] = None  # Link to quote if generated
 
 
 class JobCreate(JobBase):
