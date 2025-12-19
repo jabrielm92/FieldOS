@@ -164,11 +164,12 @@ export default function DashboardPage() {
           onClick={() => navigate('/quotes')}
         />
         <MetricCard
-          title="Upcoming Jobs"
-          value={upcomingJobs.length}
-          icon={Calendar}
-          color="cyan"
-          onClick={() => navigate('/calendar')}
+          title="Est. Revenue"
+          value={formatCurrency(metrics.total_estimated_revenue)}
+          icon={DollarSign}
+          color="green"
+          onClick={() => navigate('/reports')}
+          isSmallValue
         />
         <MetricCard
           title="Unassigned"
@@ -177,6 +178,52 @@ export default function DashboardPage() {
           color={unassignedJobs > 0 ? "red" : "gray"}
           onClick={() => navigate('/dispatch')}
         />
+      </div>
+
+      {/* Revenue Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/reports')}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Potential Revenue</p>
+                <p className="text-xl font-bold text-blue-600 font-mono">{formatCurrency(metrics.potential_revenue)}</p>
+                <p className="text-xs text-muted-foreground">Booked jobs this month</p>
+              </div>
+              <div className="p-2 rounded-lg bg-blue-50">
+                <Calendar className="h-5 w-5 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/reports')}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Completed Revenue</p>
+                <p className="text-xl font-bold text-green-600 font-mono">{formatCurrency(metrics.completed_revenue)}</p>
+                <p className="text-xs text-muted-foreground">Completed jobs this month</p>
+              </div>
+              <div className="p-2 rounded-lg bg-green-50">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/quotes')}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Invoiced Revenue</p>
+                <p className="text-xl font-bold text-emerald-600 font-mono">{formatCurrency(metrics.invoiced_revenue)}</p>
+                <p className="text-xs text-muted-foreground">Paid invoices this month</p>
+              </div>
+              <div className="p-2 rounded-lg bg-emerald-50">
+                <Receipt className="h-5 w-5 text-emerald-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
