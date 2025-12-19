@@ -3568,7 +3568,10 @@ async def get_analytics_overview(
             "completed_jobs": completed_jobs,
             "total_quotes": total_quotes,
             "accepted_quotes": accepted_quotes,
-            "total_revenue": total_revenue
+            "total_revenue": round(total_revenue, 2),
+            "potential_revenue": round(potential_revenue, 2),
+            "job_completed_revenue": round(job_completed_revenue, 2),
+            "invoiced_revenue": round(invoiced_revenue, 2)
         },
         "conversion_rates": {
             "lead_to_job": lead_conversion_rate,
