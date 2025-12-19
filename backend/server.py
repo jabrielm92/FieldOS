@@ -2230,10 +2230,13 @@ async def vapi_create_lead(
         tenant_id = tenant["id"]
         
         # Resolve field aliases (support both old Make.com names and new names)
-        phone = data.caller_phone or data.caller_number
+        phone_raw = data.caller_phone or data.caller_number
         name = data.caller_name or data.captured_name
         description = data.description or data.issue_description
         issue_type = data.issue_type or data.issue_description  # Use issue_description as issue_type if not provided
+        
+        # Normalize phone to E.164 format (+1XXXXXXXXXX)
+        phone = normalize_phone_e164(phone_raw) if phone_raw else None
         
         # Parse address - support both structured and single-line formats
         address_line1 = data.address_line1
