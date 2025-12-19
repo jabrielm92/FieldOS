@@ -775,7 +775,15 @@ class FieldOSAPITester:
         
         # Test Analytics Overview
         self.log("\n--- ANALYTICS TESTS ---")
-        self.run_test("Analytics Overview 7d", "GET", "analytics/overview?period=7d", 200)
+        success, response = self.run_test("Analytics Overview 7d", "GET", "analytics/overview?period=7d", 200)
+        if success:
+            summary = response.get('summary', {})
+            self.log(f"✅ Analytics 7d retrieved:")
+            self.log(f"   - Potential Revenue: ${summary.get('potential_revenue', 0)}")
+            self.log(f"   - Job Completed Revenue: ${summary.get('job_completed_revenue', 0)}")
+            self.log(f"   - Invoiced Revenue: ${summary.get('invoiced_revenue', 0)}")
+            self.log(f"   - Total Revenue: ${summary.get('total_revenue', 0)}")
+        
         self.run_test("Analytics Overview 30d", "GET", "analytics/overview?period=30d", 200)
         self.run_test("Analytics Overview 90d", "GET", "analytics/overview?period=90d", 200)
         
