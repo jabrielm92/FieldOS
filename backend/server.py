@@ -2866,13 +2866,8 @@ async def submit_web_form(data: WebFormLeadRequest):
     
     now = datetime.now(tenant_tz)
     
-    # Normalize phone number
-    phone = data.phone
-    if phone:
-        digits = ''.join(c for c in phone if c.isdigit())
-        if len(digits) == 10:
-            digits = '1' + digits
-        phone = '+' + digits if digits else data.phone
+    # Normalize phone number to E.164 format
+    phone = normalize_phone_e164(data.phone)
     
     if not phone:
         raise HTTPException(status_code=400, detail="Phone number is required")
