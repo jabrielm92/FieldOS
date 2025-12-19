@@ -2658,6 +2658,31 @@ async def vapi_book_job(
                     "updated_at": datetime.now(timezone.utc).isoformat()
                 }}
             )
+        
+        # Send quote SMS with payment link placeholder
+        quote_message = f"Hi {customer['first_name']}, your service quote for {job_type.value} is ${quote_amount:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions! {tenant.get('sms_signature', '')}"
+        
+        quote_sms_result = await twilio_service.send_sms(
+            to_phone=customer["phone"],
+            body=quote_message,
+            from_phone=tenant["twilio_phone_number"]
+        )
+        
+        # Store the quote SMS in conversation
+        if conv:
+            quote_msg = Message(
+                tenant_id=tenant_id,
+                conversation_id=conv["id"],
+                customer_id=data.customer_id,
+                direction=MessageDirection.OUTBOUND,
+                sender_type=SenderType.SYSTEM,
+                channel=PreferredChannel.SMS,
+                content=quote_message
+            )
+            quote_msg_dict = quote_msg.model_dump()
+            quote_msg_dict["created_at"] = quote_msg_dict["created_at"].isoformat()
+            quote_msg_dict["metadata"] = {"twilio_sid": quote_sms_result.get("provider_message_id"), "quote_id": quote.id}
+            await db.messages.insert_one(quote_msg_dict)
     
     # Format confirmation for Vapi - structured for AI to understand
     window_date = window_start.strftime("%A, %B %d")
