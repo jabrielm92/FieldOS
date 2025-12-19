@@ -859,9 +859,21 @@ async def create_job(
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
     
+    # Get lead urgency for quote calculation if not already provided
+    job_data = data.model_dump()
+    if not job_data.get("quote_amount") and data.lead_id:
+        lead = await db.leads.find_one({"id": data.lead_id}, {"_id": 0, "urgency": 1})
+        lead_urgency = lead.get("urgency") if lead else None
+        job_data["quote_amount"] = calculate_quote_amount(job_data.get("job_type", "DIAGNOSTIC"), lead_urgency)
+    elif not job_data.get("quote_amount"):
+        # Calculate based on job type and priority
+        priority_to_urgency = {"EMERGENCY": "EMERGENCY", "HIGH": "URGENT", "NORMAL": "ROUTINE"}
+        urgency = priority_to_urgency.get(job_data.get("priority", "NORMAL"), "ROUTINE")
+        job_data["quote_amount"] = calculate_quote_amount(job_data.get("job_type", "DIAGNOSTIC"), urgency)
+    
     job = Job(
         tenant_id=tenant_id,
-        **data.model_dump()
+        **job_data
     )
     
     job_dict = job.model_dump()
