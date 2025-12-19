@@ -3243,13 +3243,13 @@ async def sms_inbound(request: Request):
                             # Parse the booking date and time slot
                             tenant_tz = pytz.timezone(tenant.get("timezone", "America/New_York"))
                             booking_date = datetime.strptime(booking_data["date"], "%Y-%m-%d")
-                    
-                    time_slots = {
-                        "morning": (8, 12),
-                        "afternoon": (12, 16),
-                        "evening": (16, 19)
-                    }
-                    slot = time_slots.get(booking_data.get("time_slot", "morning"), (8, 12))
+                            
+                            time_slots = {
+                                "morning": (8, 12),
+                                "afternoon": (12, 16),
+                                "evening": (16, 19)
+                            }
+                            slot = time_slots.get(booking_data.get("time_slot", "morning"), (8, 12))
                     
                     window_start = tenant_tz.localize(datetime(
                         booking_date.year, booking_date.month, booking_date.day,
