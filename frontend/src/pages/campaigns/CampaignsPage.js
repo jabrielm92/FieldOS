@@ -1192,6 +1192,7 @@ function CreateCampaignDialog({ open, onOpenChange, onSuccess }) {
                         >
                           <Checkbox 
                             checked={selectedCustomers.has(c.id)} 
+                            onClick={(e) => e.stopPropagation()}
                             onCheckedChange={() => toggleCustomer(c.id)}
                           />
                           <div className="flex-1">
