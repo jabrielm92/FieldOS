@@ -3475,7 +3475,35 @@ async def get_analytics_overview(
         {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
     ]
     revenue_result = await db.quotes.aggregate(revenue_pipeline).to_list(1)
-    total_revenue = revenue_result[0]["total"] if revenue_result else 0
+    quote_revenue = revenue_result[0]["total"] if revenue_result else 0
+    
+    # Revenue from jobs (quote_amount field)
+    # Potential revenue: booked/scheduled jobs
+    potential_jobs = await db.jobs.find({
+        "tenant_id": tenant_id,
+        "status": {"$in": ["BOOKED", "EN_ROUTE", "ON_SITE"]},
+        "created_at": {"$gte": start_str}
+    }, {"_id": 0, "quote_amount": 1}).to_list(1000)
+    potential_revenue = sum(j.get("quote_amount", 0) or 0 for j in potential_jobs)
+    
+    # Completed revenue: completed jobs
+    completed_jobs_revenue = await db.jobs.find({
+        "tenant_id": tenant_id,
+        "status": "COMPLETED",
+        "created_at": {"$gte": start_str}
+    }, {"_id": 0, "quote_amount": 1}).to_list(1000)
+    job_completed_revenue = sum(j.get("quote_amount", 0) or 0 for j in completed_jobs_revenue)
+    
+    # Invoiced (paid) revenue
+    paid_invoices = await db.invoices.find({
+        "tenant_id": tenant_id,
+        "status": "PAID",
+        "created_at": {"$gte": start_str}
+    }, {"_id": 0, "amount": 1}).to_list(1000)
+    invoiced_revenue = sum(i.get("amount", 0) or 0 for i in paid_invoices)
+    
+    # Total revenue is the higher of invoiced or completed job revenue (to avoid double counting)
+    total_revenue = max(invoiced_revenue, job_completed_revenue, quote_revenue)
     
     # Daily trends (last 14 days)
     daily_trends = []
