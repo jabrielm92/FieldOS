@@ -209,6 +209,28 @@ class FieldOSAPITester:
             return True
         return False
 
+    def test_existing_tenant_login(self):
+        """Test login with existing tenant credentials"""
+        self.log("\n=== EXISTING TENANT LOGIN ===")
+        
+        success, response = self.run_test(
+            "Existing Tenant Login",
+            "POST",
+            "auth/login",
+            200,
+            data={"email": "owner@radiancehvac.com", "password": "owner123"}
+        )
+        
+        if success and 'access_token' in response:
+            self.tenant_owner_token = response['access_token']
+            self.log(f"✅ Existing tenant owner token obtained")
+            # Get tenant ID from user response
+            if 'user' in response and 'tenant_id' in response['user']:
+                self.tenant_id = response['user']['tenant_id']
+                self.log(f"✅ Using existing tenant ID: {self.tenant_id}")
+            return True
+        return False
+
     def test_customer_management(self):
         """Test customer CRUD operations"""
         self.log("\n=== CUSTOMER MANAGEMENT ===")
