@@ -160,13 +160,59 @@ export default function ReportsPage() {
           bgColor="bg-green-50"
         />
         <KPICard
-          title="Revenue"
+          title="Total Revenue"
           value={formatCurrency(summary.total_revenue)}
           icon={DollarSign}
           color="text-emerald-600"
           bgColor="bg-emerald-50"
           isLarge
         />
+      </div>
+
+      {/* Revenue Breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <Card className="card-industrial">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Potential Revenue</p>
+                <p className="text-2xl font-bold text-blue-600 font-mono">{formatCurrency(summary.potential_revenue)}</p>
+                <p className="text-xs text-muted-foreground">From booked jobs</p>
+              </div>
+              <div className="p-2 rounded-lg bg-blue-50">
+                <Target className="h-5 w-5 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="card-industrial">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Completed Revenue</p>
+                <p className="text-2xl font-bold text-green-600 font-mono">{formatCurrency(summary.job_completed_revenue)}</p>
+                <p className="text-xs text-muted-foreground">From completed jobs</p>
+              </div>
+              <div className="p-2 rounded-lg bg-green-50">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="card-industrial">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Invoiced Revenue</p>
+                <p className="text-2xl font-bold text-emerald-600 font-mono">{formatCurrency(summary.invoiced_revenue)}</p>
+                <p className="text-xs text-muted-foreground">Paid invoices</p>
+              </div>
+              <div className="p-2 rounded-lg bg-emerald-50">
+                <DollarSign className="h-5 w-5 text-emerald-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Conversion Rates */}
