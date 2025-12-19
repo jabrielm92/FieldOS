@@ -469,6 +469,15 @@ function JobRow({ job, onClick }) {
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatJobCurrency = (amount) => {
+    if (!amount) return null;
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
+
   return (
     <div 
       className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border-l-4"
@@ -490,6 +499,12 @@ function JobRow({ job, onClick }) {
             <span className="flex items-center gap-1">
               <MapPin className="h-3 w-3" />
               {job.property.city}
+            </span>
+          )}
+          {job.quote_amount && (
+            <span className="flex items-center gap-1 text-green-600 font-medium">
+              <DollarSign className="h-3 w-3" />
+              {formatJobCurrency(job.quote_amount)}
             </span>
           )}
         </div>
