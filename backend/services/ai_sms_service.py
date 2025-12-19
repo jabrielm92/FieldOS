@@ -44,7 +44,7 @@ CONVERSATION RULES:
 
 BOOKING COMMAND FORMAT:
 When ready to book, output ONLY this JSON (no other text):
-{"action": "book_job", "job_type": "DIAGNOSTIC|REPAIR|MAINTENANCE|INSTALL", "date": "YYYY-MM-DD", "time_slot": "morning|afternoon|evening", "confirmed": true}
+{{"action": "book_job", "job_type": "DIAGNOSTIC|REPAIR|MAINTENANCE|INSTALL", "date": "YYYY-MM-DD", "time_slot": "morning|afternoon|evening", "confirmed": true}}
 
 TIME SLOTS:
 - morning: 8 AM - 12 PM
