@@ -140,6 +140,30 @@ def serialize_docs(docs: list) -> list:
     return [serialize_doc(doc) for doc in docs]
 
 
+def normalize_phone_e164(phone: str) -> str:
+    """
+    Normalize phone number to E.164 format (+1XXXXXXXXXX).
+    Required for SMS services like Twilio.
+    """
+    if not phone:
+        return ""
+    # Remove all non-digit characters
+    digits = ''.join(c for c in phone if c.isdigit())
+    # Handle +1 prefix already present
+    if phone.startswith('+1') and len(digits) == 11 and digits.startswith('1'):
+        return '+' + digits
+    # Add country code if missing (assume US +1)
+    if len(digits) == 10:
+        digits = '1' + digits
+    elif len(digits) == 11 and digits.startswith('1'):
+        pass  # Already has country code
+    else:
+        # Return as-is with + prefix if can't normalize
+        return '+' + digits if digits else ""
+    # Add + prefix for E.164 format
+    return '+' + digits
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> dict:
