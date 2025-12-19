@@ -529,7 +529,7 @@ function LeadRow({ lead, onClick }) {
     >
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium truncate flex-1">{lead.issue_type || "New Lead"}</p>
-        <Badge className={urgencyColors[lead.urgency]} variant="outline" className="text-xs ml-2">
+        <Badge className={`${urgencyColors[lead.urgency]} text-xs ml-2`} variant="outline">
           {lead.urgency}
         </Badge>
       </div>
@@ -541,7 +541,7 @@ function LeadRow({ lead, onClick }) {
       )}
       <div className="flex items-center justify-between mt-1">
         <span className="text-xs text-muted-foreground">{formatSource(lead.source)}</span>
-        <Badge className={statusColors[lead.status] || "bg-gray-100"} variant="outline" className="text-xs">
+        <Badge className={`${statusColors[lead.status] || "bg-gray-100"} text-xs`} variant="outline">
           {lead.status}
         </Badge>
       </div>
