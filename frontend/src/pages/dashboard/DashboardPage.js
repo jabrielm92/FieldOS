@@ -476,13 +476,19 @@ function MetricCard({ title, value, icon: Icon, color, onClick, isSmallValue }) 
 function JobRow({ job, onClick }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
+    // Parse the ISO date string and compare using local dates
     const date = new Date(dateStr);
     const today = new Date();
-    const tomorrow = new Date(today);
+    const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    if (date.toDateString() === today.toDateString()) return "Today";
-    if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+    // Compare using local date strings to avoid timezone issues
+    const dateLocal = getLocalDateString(date);
+    const todayLocal = getLocalDateString(today);
+    const tomorrowLocal = getLocalDateString(tomorrow);
+    
+    if (dateLocal === todayLocal) return "Today";
+    if (dateLocal === tomorrowLocal) return "Tomorrow";
     return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
