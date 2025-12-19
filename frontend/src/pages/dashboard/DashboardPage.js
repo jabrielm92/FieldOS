@@ -570,7 +570,7 @@ function LeadRow({ lead, onClick }) {
       <div className="flex items-center justify-between mt-1">
         <span className="text-xs text-muted-foreground">{formatSource(lead.source)}</span>
         <Badge className={`${statusColors[lead.status] || "bg-gray-100"} text-xs`} variant="outline">
-          {lead.status}
+          {formatStatus(lead.status)}
         </Badge>
       </div>
     </div>
