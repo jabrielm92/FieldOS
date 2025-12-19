@@ -2952,51 +2952,70 @@ async def submit_web_form(data: WebFormLeadRequest):
     else:
         conv_id = conv["id"]
     
-    # Send confirmation SMS if enabled and tenant has Twilio configured
+    # Send AI-powered initial SMS to start booking conversation
     sms_sent = False
     sms_error = None
     
     if data.send_confirmation_sms and tenant.get("twilio_phone_number"):
         try:
-            company_name = tenant.get("name", "Our company")
-            confirmation_msg = (
-                f"Hi {first_name}! Thank you for contacting {company_name}. "
-                f"We received your request about: {data.issue_description[:50]}{'...' if len(data.issue_description) > 50 else ''}. "
-                f"A team member will reach out to you shortly to schedule your service."
-            )
+            from services.ai_sms_service import ai_sms_service
             
-            if data.urgency == "EMERGENCY":
-                confirmation_msg += " For emergencies, we prioritize same-day service."
+            company_name = tenant.get("name", "Our company")
+            
+            # Generate AI-powered initial message
+            initial_msg = await ai_sms_service.generate_initial_message(
+                customer_name=first_name,
+                issue_description=data.issue_description or "service request",
+                company_name=company_name
+            )
             
             result = await twilio_service.send_sms(
                 to_phone=phone,
-                body=confirmation_msg,
+                body=initial_msg,
                 from_phone=tenant["twilio_phone_number"]
             )
             sms_sent = True
             
-            # Store outbound message
+            # Store outbound message and mark conversation for AI handling
             msg = Message(
                 tenant_id=tenant_id,
                 conversation_id=conv_id,
                 customer_id=customer_id,
                 direction=MessageDirection.OUTBOUND,
-                sender_type=SenderType.SYSTEM,
+                sender_type=SenderType.AI,  # Mark as AI message
                 channel=PreferredChannel.SMS,
-                content=confirmation_msg
+                content=initial_msg
             )
             msg_dict = msg.model_dump()
             msg_dict["created_at"] = msg_dict["created_at"].isoformat()
             msg_dict["metadata"] = {
-                "source": "web_form_confirmation",
-                "lead_id": lead_id
+                "source": "web_form_ai_booking",
+                "lead_id": lead_id,
+                "ai_booking_active": True
             }
             await db.messages.insert_one(msg_dict)
             
-            logger.info(f"Sent confirmation SMS to {phone} for web form lead {lead_id}")
+            # Update conversation to track AI booking state
+            await db.conversations.update_one(
+                {"id": conv_id},
+                {"$set": {
+                    "ai_booking_active": True,
+                    "ai_booking_lead_id": lead_id,
+                    "ai_booking_context": {
+                        "customer_name": f"{first_name} {last_name}".strip(),
+                        "issue_description": data.issue_description,
+                        "urgency": urgency_value,
+                        "address": f"{data.address or ''}, {data.city or ''}, {data.state or ''} {data.zip_code or ''}".strip(", "),
+                        "property_id": property_id
+                    },
+                    "updated_at": now.isoformat()
+                }}
+            )
+            
+            logger.info(f"Started AI booking conversation for web form lead {lead_id}")
             
         except Exception as e:
-            logger.error(f"Failed to send confirmation SMS: {str(e)}")
+            logger.error(f"Failed to start AI SMS conversation: {str(e)}")
             sms_error = str(e)
     
     return {
