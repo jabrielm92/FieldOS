@@ -3204,8 +3204,10 @@ async def sms_inbound(request: Request):
                 tenant_info=tenant
             )
             
+            logger.info(f"AI booking result: {ai_result}")
+            
             # Send AI response
-            if tenant.get("twilio_phone_number") and ai_result.get("response_text"):
+            if tenant.get("twilio_phone_number") and ai_result and ai_result.get("response_text"):
                 from services.twilio_service import twilio_service
                 
                 sms_result = await twilio_service.send_sms(
