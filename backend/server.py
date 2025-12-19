@@ -2703,7 +2703,7 @@ async def vapi_book_job(
             )
         
         # Send quote SMS with payment link placeholder (continuation, no greeting)
-        sms_sig = tenant.get('sms_signature', '').strip()
+        sms_sig = (tenant.get('sms_signature') or '').strip()
         quote_message = f"Your service quote for {job_type.value} is ${quote_amount:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions!{' ' + sms_sig if sms_sig else ''}"
         
         quote_sms_result = await twilio_service.send_sms(
