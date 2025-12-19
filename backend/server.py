@@ -2388,13 +2388,14 @@ async def vapi_create_lead(
         
         # Return clear response for Vapi - structured for AI to understand
         first_name = customer.get("first_name", "there")
+        conv_id = conv.get("id") if isinstance(conv, dict) else conv.id
         return {
             "result": "success",
             "status": "lead_created",
             "lead_id": lead.id,
             "customer_id": customer["id"],
             "property_id": property_id,
-            "conversation_id": conv.id,
+            "conversation_id": conv_id,
             "customer_name": first_name,
             "instructions": f"IMPORTANT: The lead has been successfully created in the system. The customer {first_name} is now registered. Their customer ID is {customer['id']}. You should now ask the customer what date they would like to schedule their service appointment, then call the check-availability tool with that date."
         }
