@@ -2633,7 +2633,8 @@ async def vapi_book_job(
         window_date = window_start.strftime("%A, %B %d")
         window_time = f"{window_start.strftime('%I:%M %p')} - {window_end.strftime('%I:%M %p')}"
         
-        message = f"Hi {customer['first_name']}, your service visit is confirmed for {window_date}, {window_time}. We'll send a reminder before your appointment. {tenant.get('sms_signature', '')}"
+        sms_sig_confirm = tenant.get('sms_signature', '').strip()
+        message = f"Hi {customer['first_name']}, your service visit is confirmed for {window_date}, {window_time}. We'll send a reminder before your appointment.{' ' + sms_sig_confirm if sms_sig_confirm else ''}"
         
         sms_result = await twilio_service.send_sms(
             to_phone=customer["phone"],
