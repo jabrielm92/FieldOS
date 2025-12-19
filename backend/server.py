@@ -928,8 +928,9 @@ async def create_job(
         if tenant and tenant.get("twilio_phone_number"):
             from services.twilio_service import twilio_service
             
+            # Send quote SMS (continuation, no greeting)
             sms_sig = tenant.get('sms_signature', '').strip()
-            quote_message = f"Hi {customer['first_name']}, your service quote for {job_dict.get('job_type', 'service')} is ${job_dict['quote_amount']:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions!{' ' + sms_sig if sms_sig else ''}"
+            quote_message = f"Your service quote for {job_dict.get('job_type', 'service')} is ${job_dict['quote_amount']:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions!{' ' + sms_sig if sms_sig else ''}"
             
             await twilio_service.send_sms(
                 to_phone=customer["phone"],
