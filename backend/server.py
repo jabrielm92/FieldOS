@@ -3328,33 +3328,33 @@ async def sms_inbound(request: Request):
                                 body=quote_msg,
                                 from_phone=tenant["twilio_phone_number"]
                             )
-                    
-                    # Log quote SMS
-                    quote_sms_msg = Message(
-                        tenant_id=tenant_id,
-                        conversation_id=conv["id"],
-                        customer_id=customer["id"],
-                        direction=MessageDirection.OUTBOUND,
-                        sender_type=SenderType.SYSTEM,
-                        channel=PreferredChannel.SMS,
-                        content=quote_msg,
-                        metadata={"quote_id": quote.id, "job_id": job.id}
-                    )
-                    quote_sms_dict = quote_sms_msg.model_dump()
-                    quote_sms_dict["created_at"] = quote_sms_dict["created_at"].isoformat()
-                    await db.messages.insert_one(quote_sms_dict)
-                    
-                    # Mark AI booking as complete
-                    await db.conversations.update_one(
-                        {"id": conv["id"]},
-                        {"$set": {
-                            "ai_booking_active": False,
-                            "ai_booking_completed": True,
-                            "ai_booking_job_id": job.id,
-                            "updated_at": datetime.now(timezone.utc).isoformat()
-                        }}
-                    )
-                    
+                            
+                            # Log quote SMS
+                            quote_sms_msg = Message(
+                                tenant_id=tenant_id,
+                                conversation_id=conv["id"],
+                                customer_id=customer["id"],
+                                direction=MessageDirection.OUTBOUND,
+                                sender_type=SenderType.SYSTEM,
+                                channel=PreferredChannel.SMS,
+                                content=quote_msg,
+                                metadata={"quote_id": quote.id, "job_id": job.id}
+                            )
+                            quote_sms_dict = quote_sms_msg.model_dump()
+                            quote_sms_dict["created_at"] = quote_sms_dict["created_at"].isoformat()
+                            await db.messages.insert_one(quote_sms_dict)
+                            
+                            # Mark AI booking as complete
+                            await db.conversations.update_one(
+                                {"id": conv["id"]},
+                                {"$set": {
+                                    "ai_booking_active": False,
+                                    "ai_booking_completed": True,
+                                    "ai_booking_job_id": job.id,
+                                    "updated_at": datetime.now(timezone.utc).isoformat()
+                                }}
+                            )
+                            
                             logger.info(f"AI booking completed: Job {job.id} created for customer {customer['id']}")
                     except Exception as booking_err:
                         logger.error(f"Error processing booking data: {booking_err}")
