@@ -3250,84 +3250,84 @@ async def sms_inbound(request: Request):
                                 "evening": (16, 19)
                             }
                             slot = time_slots.get(booking_data.get("time_slot", "morning"), (8, 12))
-                    
-                    window_start = tenant_tz.localize(datetime(
-                        booking_date.year, booking_date.month, booking_date.day,
-                        slot[0], 0, 0
-                    ))
-                    window_end = tenant_tz.localize(datetime(
-                        booking_date.year, booking_date.month, booking_date.day,
-                        slot[1], 0, 0
-                    ))
-                    
-                    # Get property from context
-                    property_id = booking_context.get("property_id")
-                    lead_id = conv.get("ai_booking_lead_id")
-                    
-                    # Determine job type and calculate quote
-                    job_type_str = booking_data.get("job_type", "DIAGNOSTIC").upper()
-                    if job_type_str not in ["DIAGNOSTIC", "REPAIR", "MAINTENANCE", "INSTALL"]:
-                        job_type_str = "DIAGNOSTIC"
-                    
-                    urgency = booking_context.get("urgency", "ROUTINE")
-                    quote_amount = calculate_quote_amount(job_type_str, urgency)
-                    
-                    # Create the job
-                    job = Job(
-                        tenant_id=tenant_id,
-                        customer_id=customer["id"],
-                        property_id=property_id,
-                        lead_id=lead_id,
-                        job_type=JobType(job_type_str),
-                        priority=JobPriority.NORMAL,
-                        service_window_start=window_start,
-                        service_window_end=window_end,
-                        status=JobStatus.BOOKED,
-                        created_by=JobCreatedBy.AI,
-                        quote_amount=quote_amount
-                    )
-                    
-                    job_dict = job.model_dump()
-                    job_dict["created_at"] = job_dict["created_at"].isoformat()
-                    job_dict["updated_at"] = job_dict["updated_at"].isoformat()
-                    job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
-                    job_dict["service_window_end"] = job_dict["service_window_end"].isoformat()
-                    await db.jobs.insert_one(job_dict)
-                    
-                    # Create quote
-                    quote = Quote(
-                        tenant_id=tenant_id,
-                        customer_id=customer["id"],
-                        property_id=property_id,
-                        job_id=job.id,
-                        amount=quote_amount,
-                        description=f"{job_type_str} - {booking_context.get('issue_description', 'Service')}",
-                        status=QuoteStatus.SENT
-                    )
-                    quote_dict = quote.model_dump()
-                    quote_dict["created_at"] = quote_dict["created_at"].isoformat()
-                    quote_dict["updated_at"] = quote_dict["updated_at"].isoformat()
-                    quote_dict["sent_at"] = datetime.now(timezone.utc).isoformat()
-                    await db.quotes.insert_one(quote_dict)
-                    
-                    # Link quote to job
-                    await db.jobs.update_one({"id": job.id}, {"$set": {"quote_id": quote.id}})
-                    
-                    # Update lead status
-                    if lead_id:
-                        await db.leads.update_one(
-                            {"id": lead_id},
-                            {"$set": {"status": LeadStatus.JOB_BOOKED.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
-                        )
-                    
-                    # Send quote SMS (continuation)
-                    quote_msg = f"Your service quote for {job_type_str} is ${quote_amount:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions!"
-                    
-                    await twilio_service.send_sms(
-                        to_phone=from_phone,
-                        body=quote_msg,
-                        from_phone=tenant["twilio_phone_number"]
-                    )
+                            
+                            window_start = tenant_tz.localize(datetime(
+                                booking_date.year, booking_date.month, booking_date.day,
+                                slot[0], 0, 0
+                            ))
+                            window_end = tenant_tz.localize(datetime(
+                                booking_date.year, booking_date.month, booking_date.day,
+                                slot[1], 0, 0
+                            ))
+                            
+                            # Get property from context
+                            property_id = booking_context.get("property_id")
+                            lead_id = conv.get("ai_booking_lead_id")
+                            
+                            # Determine job type and calculate quote
+                            job_type_str = booking_data.get("job_type", "DIAGNOSTIC").upper()
+                            if job_type_str not in ["DIAGNOSTIC", "REPAIR", "MAINTENANCE", "INSTALL"]:
+                                job_type_str = "DIAGNOSTIC"
+                            
+                            urgency = booking_context.get("urgency", "ROUTINE")
+                            quote_amount = calculate_quote_amount(job_type_str, urgency)
+                            
+                            # Create the job
+                            job = Job(
+                                tenant_id=tenant_id,
+                                customer_id=customer["id"],
+                                property_id=property_id,
+                                lead_id=lead_id,
+                                job_type=JobType(job_type_str),
+                                priority=JobPriority.NORMAL,
+                                service_window_start=window_start,
+                                service_window_end=window_end,
+                                status=JobStatus.BOOKED,
+                                created_by=JobCreatedBy.AI,
+                                quote_amount=quote_amount
+                            )
+                            
+                            job_dict = job.model_dump()
+                            job_dict["created_at"] = job_dict["created_at"].isoformat()
+                            job_dict["updated_at"] = job_dict["updated_at"].isoformat()
+                            job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
+                            job_dict["service_window_end"] = job_dict["service_window_end"].isoformat()
+                            await db.jobs.insert_one(job_dict)
+                            
+                            # Create quote
+                            quote = Quote(
+                                tenant_id=tenant_id,
+                                customer_id=customer["id"],
+                                property_id=property_id,
+                                job_id=job.id,
+                                amount=quote_amount,
+                                description=f"{job_type_str} - {booking_context.get('issue_description', 'Service')}",
+                                status=QuoteStatus.SENT
+                            )
+                            quote_dict = quote.model_dump()
+                            quote_dict["created_at"] = quote_dict["created_at"].isoformat()
+                            quote_dict["updated_at"] = quote_dict["updated_at"].isoformat()
+                            quote_dict["sent_at"] = datetime.now(timezone.utc).isoformat()
+                            await db.quotes.insert_one(quote_dict)
+                            
+                            # Link quote to job
+                            await db.jobs.update_one({"id": job.id}, {"$set": {"quote_id": quote.id}})
+                            
+                            # Update lead status
+                            if lead_id:
+                                await db.leads.update_one(
+                                    {"id": lead_id},
+                                    {"$set": {"status": LeadStatus.JOB_BOOKED.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
+                                )
+                            
+                            # Send quote SMS (continuation)
+                            quote_msg = f"Your service quote for {job_type_str} is ${quote_amount:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions!"
+                            
+                            await twilio_service.send_sms(
+                                to_phone=from_phone,
+                                body=quote_msg,
+                                from_phone=tenant["twilio_phone_number"]
+                            )
                     
                     # Log quote SMS
                     quote_sms_msg = Message(
