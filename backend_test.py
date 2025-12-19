@@ -388,7 +388,12 @@ class FieldOSAPITester:
         
         if success and 'id' in response:
             self.job_id = response['id']
+            quote_amount = response.get('quote_amount')
             self.log(f"✅ Job created with ID: {self.job_id}")
+            if quote_amount:
+                self.log(f"✅ Quote amount calculated: ${quote_amount}")
+            else:
+                self.log(f"⚠️ No quote amount calculated for job")
         
         # List jobs
         self.run_test("List Jobs", "GET", "jobs", 200)
