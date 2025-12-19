@@ -2361,17 +2361,30 @@ async def vapi_create_lead(
         lead_dict["last_activity_at"] = lead_dict["last_activity_at"].isoformat()
         await db.leads.insert_one(lead_dict)
         
-        # Create conversation
-        conv = Conversation(
-            tenant_id=tenant_id,
-            customer_id=customer["id"],
-            lead_id=lead.id,
-            primary_channel=PreferredChannel.SMS
+        # Find or create conversation (prevent duplicates)
+        conv = await db.conversations.find_one(
+            {"customer_id": customer["id"], "tenant_id": tenant_id},
+            {"_id": 0}
         )
-        conv_dict = conv.model_dump()
-        conv_dict["created_at"] = conv_dict["created_at"].isoformat()
-        conv_dict["updated_at"] = conv_dict["updated_at"].isoformat()
-        await db.conversations.insert_one(conv_dict)
+        
+        if not conv:
+            new_conv = Conversation(
+                tenant_id=tenant_id,
+                customer_id=customer["id"],
+                lead_id=lead.id,
+                primary_channel=PreferredChannel.SMS
+            )
+            conv_dict = new_conv.model_dump()
+            conv_dict["created_at"] = conv_dict["created_at"].isoformat()
+            conv_dict["updated_at"] = conv_dict["updated_at"].isoformat()
+            await db.conversations.insert_one(conv_dict)
+            conv = conv_dict
+        else:
+            # Update conversation to link to new lead
+            await db.conversations.update_one(
+                {"id": conv["id"]},
+                {"$set": {"lead_id": lead.id, "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
         
         # Return clear response for Vapi - structured for AI to understand
         first_name = customer.get("first_name", "there")
