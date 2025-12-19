@@ -164,7 +164,7 @@ export default function DispatchBoard() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            onClick={() => setSelectedDate(getLocalDateString())}
           >
             Today
           </Button>
