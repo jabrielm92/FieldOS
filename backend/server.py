@@ -2751,7 +2751,7 @@ async def submit_web_form(data: WebFormLeadRequest):
         property_id=property_id,
         source=LeadSource.WEB_FORM,
         status=LeadStatus.NEW,
-        urgency=UrgencyLevel(urgency_value),
+        urgency=Urgency(urgency_value),
         issue_description=data.issue_description,
         caller_name=data.name,
         caller_phone=phone
