@@ -186,6 +186,61 @@ class TenantBase(BaseModel):
     sms_signature: Optional[str] = None
 
 
+# ============= BRANDING MODELS =============
+
+class BrandingSettings(BaseModel):
+    """White-label branding settings for a tenant"""
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    primary_color: str = "#0066CC"
+    secondary_color: str = "#004499"
+    accent_color: str = "#FF6600"
+    text_on_primary: str = "#FFFFFF"
+    font_family: str = "Inter"
+    
+    # Email branding
+    email_from_name: Optional[str] = None
+    email_reply_to: Optional[str] = None
+    
+    # SMS branding
+    sms_sender_name: Optional[str] = None
+    
+    # Portal branding
+    portal_title: Optional[str] = None
+    portal_welcome_message: Optional[str] = None
+    
+    # White-label toggle
+    white_label_enabled: bool = False
+
+
+class ReviewSettings(BaseModel):
+    """Review request automation settings"""
+    enabled: bool = True
+    delay_hours: int = 2
+    google_review_url: Optional[str] = None
+    yelp_review_url: Optional[str] = None
+    facebook_review_url: Optional[str] = None
+    preferred_platform: str = "GOOGLE"
+    message_template: Optional[str] = None
+
+
+class InvoiceSettings(BaseModel):
+    """Invoice configuration settings"""
+    default_payment_terms: int = 10  # Days until due
+    default_tax_rate: float = 0.0
+    invoice_prefix: str = "INV"
+    next_invoice_number: int = 1
+    company_name: Optional[str] = None
+    company_address: Optional[str] = None
+    company_phone: Optional[str] = None
+    company_email: Optional[str] = None
+    company_logo_url: Optional[str] = None
+    invoice_footer_text: str = "Thank you for your business!"
+    payment_instructions: str = "Pay online or call us to pay by phone."
+    auto_reminder_enabled: bool = True
+    auto_reminder_days: List[int] = [3, 7, 14]
+
+
 class TenantCreate(TenantBase):
     owner_email: EmailStr
     owner_name: str
