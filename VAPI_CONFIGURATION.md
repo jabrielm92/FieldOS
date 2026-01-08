@@ -71,7 +71,7 @@ Before hanging up, use log_call_summary to record what happened on the call.
 ### Vapi Tool Settings
 - **Name:** `create_lead`
 - **Description:** Creates a new customer lead when someone calls. Call this after gathering the customer's basic information (name, phone, address, issue).
-- **Request URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/create-lead`
+- **Request URL:** `https://smart-field-ops.preview.emergentagent.com/api/v1/vapi/create-lead`
 - **Request Method:** POST
 - **Content-Type Header:** `application/json`
 
@@ -103,7 +103,7 @@ Before hanging up, use log_call_summary to record what happened on the call.
 ### Vapi Tool Settings
 - **Name:** `check_availability`
 - **Description:** Check what appointment slots are available for a specific date. Call this to see options before offering them to the customer.
-- **Request URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/check-availability`
+- **Request URL:** `https://smart-field-ops.preview.emergentagent.com/api/v1/vapi/check-availability`
 - **Request Method:** POST
 - **Content-Type Header:** `application/json`
 
@@ -125,7 +125,7 @@ Returns available windows with start/end times. Tell customer: "I have [morning/
 ### Vapi Tool Settings
 - **Name:** `book_job`
 - **Description:** Book an appointment. Call this after the customer selects a time slot. Uses the IDs from create_lead.
-- **Request URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/book-job`
+- **Request URL:** `https://smart-field-ops.preview.emergentagent.com/api/v1/vapi/book-job`
 - **Request Method:** POST
 - **Content-Type Header:** `application/json`
 
@@ -151,7 +151,7 @@ Returns job_id and success message. SMS confirmation is sent automatically.
 ### Vapi Tool Settings
 - **Name:** `send_followup_sms`
 - **Description:** Send a text message to the customer. Use if you need to send additional info.
-- **Request URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/send-sms`
+- **Request URL:** `https://smart-field-ops.preview.emergentagent.com/api/v1/vapi/send-sms`
 - **Request Method:** POST
 - **Content-Type Header:** `application/json`
 
@@ -170,7 +170,7 @@ Returns job_id and success message. SMS confirmation is sent automatically.
 ### Vapi Tool Settings
 - **Name:** `log_call_summary`
 - **Description:** Log a summary of the call. Always call this at the end of every conversation.
-- **Request URL:** `https://fieldos-service.preview.emergentagent.com/api/v1/vapi/call-summary`
+- **Request URL:** `https://smart-field-ops.preview.emergentagent.com/api/v1/vapi/call-summary`
 - **Request Method:** POST
 - **Content-Type Header:** `application/json`
 
@@ -188,7 +188,7 @@ Returns job_id and success message. SMS confirmation is sent automatically.
 ## TWILIO INBOUND SMS (Already Configured ✅)
 
 Your Twilio webhook is already set to:
-`https://fieldos-service.preview.emergentagent.com/api/v1/sms/inbound`
+`https://smart-field-ops.preview.emergentagent.com/api/v1/sms/inbound`
 
 This handles incoming text messages and auto-responds with AI.
 
