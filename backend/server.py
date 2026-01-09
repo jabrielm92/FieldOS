@@ -3227,7 +3227,7 @@ RULES:
         logger.error(f"Voice AI error: {e}")
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna">I apologize, I'm having technical difficulties. Let me transfer you to leave a message.</Say>
+    <Say voice="Polly.Matthew-Neural">I apologize, I'm having technical difficulties. Let me transfer you to leave a message.</Say>
     <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
