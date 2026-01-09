@@ -2870,9 +2870,6 @@ async def vapi_call_summary(
 
 # ============= SELF-HOSTED VOICE AI (TWILIO) =============
 
-from fastapi import Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse
-
 @v1_router.post("/voice/inbound")
 async def voice_inbound(request: Request):
     """
