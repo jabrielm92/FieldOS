@@ -3150,8 +3150,15 @@ CRITICAL RULES:
         action = ai_response.get("action")
         response_text = ai_response.get("response_text", "I understand. What else can you tell me?")
         
-        # Use the confirmed phone or caller ID
-        confirmed_phone = collected_info.get("phone") if collected_info.get("phone_confirmed") else from_phone
+        # Use the confirmed phone or caller ID - always default to from_phone if nothing else
+        confirmed_phone = collected_info.get("phone") or from_phone
+        if not confirmed_phone:
+            # Get from call context if still missing
+            confirmed_phone = call_context.get("from_phone", "")
+        
+        # Store the phone in collected_info for the booking function
+        if confirmed_phone and not collected_info.get("phone"):
+            collected_info["phone"] = confirmed_phone
         
         # Update call context
         await db.voice_calls.update_one(
