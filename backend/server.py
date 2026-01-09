@@ -4394,6 +4394,491 @@ async def send_manual_reminder(
     return {"success": success}
 
 
+# ============= BRANDING SETTINGS =============
+
+@v1_router.get("/settings/branding")
+async def get_branding_settings(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get tenant branding settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    # Return branding settings or defaults
+    branding = tenant.get("branding", {})
+    defaults = {
+        "logo_url": None,
+        "favicon_url": None,
+        "primary_color": "#0066CC",
+        "secondary_color": "#004499",
+        "accent_color": "#FF6600",
+        "text_on_primary": "#FFFFFF",
+        "font_family": "Inter",
+        "email_from_name": tenant.get("name"),
+        "email_reply_to": tenant.get("primary_contact_email"),
+        "sms_sender_name": None,
+        "portal_title": f"{tenant.get('name')} Customer Portal",
+        "portal_welcome_message": "Welcome to your customer portal",
+        "portal_support_email": tenant.get("primary_contact_email"),
+        "portal_support_phone": tenant.get("primary_phone"),
+        "custom_domain": None,
+        "custom_domain_verified": False,
+        "white_label_enabled": False
+    }
+    
+    # Merge defaults with stored settings
+    result = {**defaults, **branding}
+    return result
+
+
+@v1_router.put("/settings/branding")
+async def update_branding_settings(
+    branding: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update tenant branding settings"""
+    # Validate required fields
+    allowed_fields = [
+        "logo_url", "favicon_url", "primary_color", "secondary_color",
+        "accent_color", "text_on_primary", "font_family",
+        "email_from_name", "email_reply_to", "sms_sender_name",
+        "portal_title", "portal_welcome_message", "portal_support_email", "portal_support_phone",
+        "custom_domain", "white_label_enabled"
+    ]
+    
+    # Filter to only allowed fields
+    filtered_branding = {k: v for k, v in branding.items() if k in allowed_fields}
+    
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {
+            "$set": {
+                "branding": filtered_branding,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    return {"success": True, "branding": filtered_branding}
+
+
+# ============= ENHANCED CUSTOMER PORTAL =============
+
+@v1_router.get("/portal/{token}/branding")
+async def get_portal_branding(token: str):
+    """Get branding for customer portal (public endpoint)"""
+    customer = await db.customers.find_one({"portal_token": token}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    tenant = await db.tenants.find_one({"id": customer["tenant_id"]}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    branding = tenant.get("branding", {})
+    defaults = {
+        "logo_url": None,
+        "company_name": tenant.get("name"),
+        "primary_color": "#0066CC",
+        "secondary_color": "#004499",
+        "accent_color": "#FF6600",
+        "text_on_primary": "#FFFFFF",
+        "portal_title": f"{tenant.get('name')} Customer Portal",
+        "portal_welcome_message": "Welcome to your customer portal",
+        "portal_support_email": tenant.get("primary_contact_email"),
+        "portal_support_phone": tenant.get("primary_phone"),
+        "white_label_enabled": False
+    }
+    
+    result = {**defaults}
+    for key in defaults:
+        if key in branding and branding[key]:
+            result[key] = branding[key]
+    
+    return result
+
+
+@v1_router.get("/portal/{token}/messages")
+async def get_portal_messages(token: str, limit: int = 50):
+    """Get conversation messages for customer portal"""
+    customer = await db.customers.find_one({"portal_token": token}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    # Find conversation
+    conversation = await db.conversations.find_one(
+        {"customer_id": customer["id"]},
+        {"_id": 0}
+    )
+    
+    if not conversation:
+        return {"conversation": None, "messages": []}
+    
+    # Get messages
+    messages = await db.messages.find(
+        {"conversation_id": conversation["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    # Reverse to get chronological order
+    messages.reverse()
+    
+    return {
+        "conversation": serialize_doc(conversation),
+        "messages": serialize_docs(messages)
+    }
+
+
+@v1_router.post("/portal/{token}/request-service")
+async def portal_request_service(
+    token: str,
+    issue_description: str,
+    urgency: str = "ROUTINE",
+    property_id: Optional[str] = None,
+    preferred_date: Optional[str] = None,
+    preferred_time_slot: Optional[str] = None
+):
+    """Customer requests service from portal"""
+    customer = await db.customers.find_one({"portal_token": token}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    tenant_id = customer["tenant_id"]
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    
+    # Validate urgency
+    valid_urgencies = ["EMERGENCY", "URGENT", "ROUTINE"]
+    if urgency not in valid_urgencies:
+        urgency = "ROUTINE"
+    
+    # Create service request record
+    service_request = {
+        "id": str(uuid4()),
+        "tenant_id": tenant_id,
+        "customer_id": customer["id"],
+        "property_id": property_id,
+        "issue_description": issue_description,
+        "urgency": urgency,
+        "preferred_date": preferred_date,
+        "preferred_time_slot": preferred_time_slot,
+        "status": "PENDING",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.service_requests.insert_one(service_request)
+    
+    # Also create a lead from this request
+    lead = {
+        "id": str(uuid4()),
+        "tenant_id": tenant_id,
+        "customer_id": customer["id"],
+        "property_id": property_id,
+        "source": "PORTAL_REQUEST",
+        "channel": "FORM",
+        "status": "NEW",
+        "issue_type": issue_description[:100] if len(issue_description) > 100 else issue_description,
+        "urgency": urgency,
+        "description": issue_description,
+        "caller_name": f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip(),
+        "caller_phone": customer.get("phone"),
+        "tags": ["portal_request"],
+        "first_contact_at": datetime.now(timezone.utc).isoformat(),
+        "last_activity_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.leads.insert_one(lead)
+    
+    # Send confirmation SMS
+    from services.twilio_service import twilio_service
+    
+    confirm_msg = f"Hi {customer.get('first_name')}! We received your service request. A team member will contact you shortly to schedule an appointment."
+    if tenant.get("sms_signature"):
+        confirm_msg += f" {tenant['sms_signature']}"
+    
+    await twilio_service.send_sms(
+        to_phone=customer["phone"],
+        body=confirm_msg
+    )
+    
+    return {
+        "success": True,
+        "service_request_id": service_request["id"],
+        "lead_id": lead["id"],
+        "message": "Service request submitted successfully"
+    }
+
+
+@v1_router.get("/portal/{token}/invoices")
+async def get_portal_invoices(token: str, status: Optional[str] = None):
+    """Get all invoices for customer portal"""
+    customer = await db.customers.find_one({"portal_token": token}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    query = {"customer_id": customer["id"]}
+    if status:
+        query["status"] = status
+    
+    invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).to_list(50)
+    
+    # Enrich with job info
+    for invoice in invoices:
+        if invoice.get("job_id"):
+            job = await db.jobs.find_one({"id": invoice["job_id"]}, {"_id": 0, "job_type": 1, "service_window_start": 1})
+            invoice["job"] = serialize_doc(job) if job else None
+        if invoice.get("property_id"):
+            prop = await db.properties.find_one({"id": invoice["property_id"]}, {"_id": 0})
+            invoice["property"] = serialize_doc(prop) if prop else None
+    
+    return {"invoices": serialize_docs(invoices)}
+
+
+@v1_router.get("/portal/{token}/service-history")
+async def get_portal_service_history(token: str, limit: int = 20):
+    """Get full service history for customer portal"""
+    customer = await db.customers.find_one({"portal_token": token}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    # Get all jobs for customer
+    jobs = await db.jobs.find(
+        {"customer_id": customer["id"]},
+        {"_id": 0}
+    ).sort("service_window_start", -1).limit(limit).to_list(limit)
+    
+    # Enrich with property, technician, and review info
+    for job in jobs:
+        if job.get("property_id"):
+            prop = await db.properties.find_one({"id": job["property_id"]}, {"_id": 0})
+            job["property"] = serialize_doc(prop) if prop else None
+        if job.get("assigned_technician_id"):
+            tech = await db.technicians.find_one({"id": job["assigned_technician_id"]}, {"_id": 0, "name": 1})
+            job["technician"] = serialize_doc(tech) if tech else None
+        # Check for review
+        review = await db.reviews.find_one({"job_id": job["id"]}, {"_id": 0})
+        job["review"] = serialize_doc(review) if review else None
+        # Check for invoice
+        invoice = await db.invoices.find_one({"job_id": job["id"]}, {"_id": 0, "id": 1, "amount": 1, "status": 1})
+        job["invoice"] = serialize_doc(invoice) if invoice else None
+    
+    return {"service_history": serialize_docs(jobs)}
+
+
+@v1_router.put("/portal/{token}/profile")
+async def update_portal_profile(
+    token: str,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    email: Optional[str] = None,
+    phone: Optional[str] = None
+):
+    """Customer updates their profile from portal"""
+    customer = await db.customers.find_one({"portal_token": token}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Invalid portal link")
+    
+    update_data = {}
+    if first_name:
+        update_data["first_name"] = first_name
+    if last_name:
+        update_data["last_name"] = last_name
+    if email:
+        update_data["email"] = email
+    if phone:
+        # Normalize phone
+        update_data["phone"] = normalize_phone_e164(phone)
+    
+    if update_data:
+        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.customers.update_one(
+            {"id": customer["id"]},
+            {"$set": update_data}
+        )
+    
+    # Return updated customer
+    updated_customer = await db.customers.find_one({"id": customer["id"]}, {"_id": 0})
+    return {
+        "success": True,
+        "customer": {
+            "first_name": updated_customer.get("first_name"),
+            "last_name": updated_customer.get("last_name"),
+            "email": updated_customer.get("email"),
+            "phone": updated_customer.get("phone")
+        }
+    }
+
+
+# ============= SERVICE REQUESTS MANAGEMENT =============
+
+@v1_router.get("/service-requests")
+async def list_service_requests(
+    status: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """List service requests from customer portal"""
+    query = {"tenant_id": tenant_id}
+    if status:
+        query["status"] = status
+    
+    requests = await db.service_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Enrich with customer info
+    for req in requests:
+        customer = await db.customers.find_one({"id": req.get("customer_id")}, {"_id": 0, "first_name": 1, "last_name": 1, "phone": 1})
+        req["customer"] = serialize_doc(customer) if customer else None
+    
+    return serialize_docs(requests)
+
+
+@v1_router.post("/service-requests/{request_id}/convert")
+async def convert_service_request_to_job(
+    request_id: str,
+    job_type: str = "DIAGNOSTIC",
+    scheduled_date: Optional[str] = None,
+    scheduled_time_slot: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Convert a service request to a booked job"""
+    service_request = await db.service_requests.find_one(
+        {"id": request_id, "tenant_id": tenant_id},
+        {"_id": 0}
+    )
+    if not service_request:
+        raise HTTPException(status_code=404, detail="Service request not found")
+    
+    # Get customer
+    customer = await db.customers.find_one({"id": service_request["customer_id"]}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Get or use property
+    property_id = service_request.get("property_id")
+    if not property_id:
+        # Find first property for customer
+        prop = await db.properties.find_one({"customer_id": customer["id"]}, {"_id": 0})
+        if prop:
+            property_id = prop["id"]
+    
+    if not property_id:
+        raise HTTPException(status_code=400, detail="No property found for customer")
+    
+    # Get tenant for timezone
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    import pytz
+    tenant_tz = pytz.timezone(tenant.get("timezone", "America/New_York"))
+    
+    # Determine schedule
+    date_to_use = scheduled_date or service_request.get("preferred_date") or (datetime.now(tenant_tz) + timedelta(days=1)).strftime("%Y-%m-%d")
+    time_slot = scheduled_time_slot or service_request.get("preferred_time_slot") or "morning"
+    
+    # Create time window based on slot
+    from datetime import datetime as dt
+    base_date = dt.strptime(date_to_use, "%Y-%m-%d")
+    
+    slot_times = {
+        "morning": ("08:00", "12:00"),
+        "afternoon": ("12:00", "16:00"),
+        "evening": ("16:00", "19:00")
+    }
+    start_time, end_time = slot_times.get(time_slot, ("08:00", "12:00"))
+    
+    service_window_start = tenant_tz.localize(dt.strptime(f"{date_to_use} {start_time}", "%Y-%m-%d %H:%M"))
+    service_window_end = tenant_tz.localize(dt.strptime(f"{date_to_use} {end_time}", "%Y-%m-%d %H:%M"))
+    
+    # Calculate quote amount
+    urgency = service_request.get("urgency", "ROUTINE")
+    quote_amount = calculate_quote_amount(job_type, urgency)
+    
+    # Find or create lead
+    lead = await db.leads.find_one({
+        "tenant_id": tenant_id,
+        "customer_id": customer["id"],
+        "tags": "portal_request"
+    }, {"_id": 0})
+    
+    lead_id = lead["id"] if lead else None
+    
+    # Create job
+    job = {
+        "id": str(uuid4()),
+        "tenant_id": tenant_id,
+        "customer_id": customer["id"],
+        "property_id": property_id,
+        "lead_id": lead_id,
+        "job_type": job_type,
+        "priority": "EMERGENCY" if urgency == "EMERGENCY" else ("HIGH" if urgency == "URGENT" else "NORMAL"),
+        "service_window_start": service_window_start.isoformat(),
+        "service_window_end": service_window_end.isoformat(),
+        "status": "BOOKED",
+        "created_by": "STAFF",
+        "notes": service_request.get("issue_description"),
+        "quote_amount": quote_amount,
+        "reminder_day_before_sent": False,
+        "reminder_morning_of_sent": False,
+        "en_route_sms_sent": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.jobs.insert_one(job)
+    
+    # Update service request status
+    await db.service_requests.update_one(
+        {"id": request_id},
+        {"$set": {"status": "CONVERTED_TO_LEAD", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Update lead status if exists
+    if lead_id:
+        await db.leads.update_one(
+            {"id": lead_id},
+            {"$set": {"status": "JOB_BOOKED", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    
+    # Create quote
+    quote = {
+        "id": str(uuid4()),
+        "tenant_id": tenant_id,
+        "customer_id": customer["id"],
+        "property_id": property_id,
+        "job_id": job["id"],
+        "amount": quote_amount,
+        "currency": "USD",
+        "description": f"{job_type} service - {service_request.get('issue_description', '')[:100]}",
+        "status": "SENT",
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.quotes.insert_one(quote)
+    
+    # Update job with quote_id
+    await db.jobs.update_one({"id": job["id"]}, {"$set": {"quote_id": quote["id"]}})
+    
+    # Send confirmation SMS
+    from services.twilio_service import twilio_service
+    
+    msg = f"Hi {customer['first_name']}! Your service appointment is confirmed for {base_date.strftime('%A, %B %d')} ({time_slot}). Quote: ${quote_amount:.2f}."
+    if tenant.get("sms_signature"):
+        msg += f" {tenant['sms_signature']}"
+    
+    await twilio_service.send_sms(to_phone=customer["phone"], body=msg)
+    
+    return {
+        "success": True,
+        "job": serialize_doc(job),
+        "quote": serialize_doc(quote)
+    }
+
+
 # ============= HEALTH CHECK =============
 
 @api_router.get("/")
