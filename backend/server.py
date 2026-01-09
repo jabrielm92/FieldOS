@@ -3143,6 +3143,9 @@ RULES:
         action = ai_response.get("action")
         response_text = ai_response.get("response_text", "I understand. What else can you tell me?")
         
+        # Use the confirmed phone or caller ID
+        confirmed_phone = collected_info.get("phone") if collected_info.get("phone_confirmed") else from_phone
+        
         # Update call context
         await db.voice_calls.update_one(
             {"call_sid": call_sid},
@@ -3159,7 +3162,7 @@ RULES:
             # Create lead and book job
             result = await _voice_ai_book_job(
                 tenant_id=tenant_id,
-                from_phone=from_phone,
+                from_phone=confirmed_phone,
                 collected_info=collected_info,
                 customer=customer
             )
@@ -3167,21 +3170,25 @@ RULES:
             if result.get("success"):
                 job = result.get("job", {})
                 quote_amount = job.get("quote_amount", 89)
+                customer_name = collected_info.get('name', '').split()[0] if collected_info.get('name') else ''
                 
-                # Send SMS confirmation
+                # Send SMS confirmation to the confirmed phone
                 from services.twilio_service import twilio_service
-                sms_body = f"Hi{' ' + collected_info.get('name', '').split()[0] if collected_info.get('name') else ''}! Your appointment with {tenant_name} is confirmed. Quote: ${quote_amount:.2f}. We'll send you details shortly."
-                await twilio_service.send_sms(to_phone=from_phone, body=sms_body)
+                sms_body = f"Hi {customer_name}! Your appointment with {tenant_name} is confirmed for tomorrow morning. Quote: ${quote_amount:.2f}. We'll text you when our technician is on the way. Reply STOP to opt out."
+                
+                logger.info(f"Sending confirmation SMS to {confirmed_phone}")
+                sms_result = await twilio_service.send_sms(to_phone=confirmed_phone, body=sms_body)
+                logger.info(f"SMS result: {sms_result}")
                 
                 twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna">{response_text} Your quote is ${quote_amount:.2f}. We've sent you a confirmation text. Thank you for calling {tenant_name}!</Say>
+    <Say voice="Polly.Matthew-Neural">{response_text} Your quote is ${quote_amount:.2f}. I've sent a confirmation text to your phone. Thanks for calling {tenant_name}!</Say>
     <Hangup/>
 </Response>"""
             else:
                 twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna">I apologize, but I wasn't able to complete your booking. One of our team members will call you back shortly. Thank you for calling!</Say>
+    <Say voice="Polly.Matthew-Neural">I apologize, I wasn't able to complete your booking. One of our team members will call you back shortly. Thanks for calling!</Say>
     <Hangup/>
 </Response>"""
             
@@ -3191,7 +3198,7 @@ RULES:
             # Just create a lead without booking
             await _voice_ai_create_lead(
                 tenant_id=tenant_id,
-                from_phone=from_phone,
+                from_phone=confirmed_phone,
                 collected_info=collected_info,
                 customer=customer,
                 speech_transcript=speech_result
@@ -3199,19 +3206,19 @@ RULES:
             
             twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna">{response_text} Thank you for calling {tenant_name}. Goodbye!</Say>
+    <Say voice="Polly.Matthew-Neural">{response_text} Thanks for calling {tenant_name}. Goodbye!</Say>
     <Hangup/>
 </Response>"""
             return Response(content=twiml, media_type="application/xml")
         
         else:
-            # Continue conversation
+            # Continue conversation - use enhanced speech recognition and auto timeout
             twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="3" language="en-US">
-        <Say voice="Polly.Joanna">{response_text}</Say>
+    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
+        <Say voice="Polly.Matthew-Neural">{response_text}</Say>
     </Gather>
-    <Say voice="Polly.Joanna">I didn't catch that. Let me transfer you to leave a message.</Say>
+    <Say voice="Polly.Matthew-Neural">I didn't catch that. Let me transfer you to leave a message.</Say>
     <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
 </Response>"""
             return Response(content=twiml, media_type="application/xml")
