@@ -3039,7 +3039,7 @@ async def voice_process_speech(request: Request):
         logger.error(f"No call context found for {call_sid}")
         twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna">I'm sorry, there was an error. Please call back.</Say>
+    <Say voice="Polly.Matthew-Neural">I'm sorry, there was an error. Please call back.</Say>
     <Hangup/>
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
@@ -3052,7 +3052,7 @@ async def voice_process_speech(request: Request):
     # Get tenant for business context
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     
-    # Try to find existing customer
+    # Try to find existing customer by caller ID
     customer = None
     if from_phone:
         customer = await db.customers.find_one(
@@ -3064,40 +3064,55 @@ async def voice_process_speech(request: Request):
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         
-        system_prompt = f"""You are an AI phone receptionist for {tenant_name}, a field service company.
+        # Build context about what we still need
+        needs_name = not collected_info.get("name")
+        needs_phone = not collected_info.get("phone_confirmed")
+        needs_address = not collected_info.get("address")
+        needs_issue = not collected_info.get("issue")
+        needs_urgency = not collected_info.get("urgency")
+        
+        system_prompt = f"""You are a friendly AI phone receptionist for {tenant_name}.
 
-CURRENT CALL STATE: {conversation_state}
-CALLER PHONE: {from_phone}
-KNOWN CUSTOMER: {'Yes - ' + customer.get('first_name', '') if customer else 'No'}
-INFORMATION COLLECTED SO FAR: {json.dumps(collected_info)}
+CALLER ID: {from_phone}
+KNOWN CUSTOMER: {'Yes - ' + customer.get('first_name', '') + ', ' + (customer.get('properties', [{}])[0].get('address_line1', 'no address') if customer else 'No')}
+INFO COLLECTED: {json.dumps(collected_info)}
 
-Your job is to:
-1. Understand what the caller needs
-2. Collect necessary information (name, issue description, urgency)
-3. Book a service appointment
-4. Confirm details
+STILL NEED TO COLLECT:
+- Name: {"YES" if needs_name else "Got it: " + collected_info.get("name", "")}
+- Phone confirmation: {"YES - ask to confirm " + from_phone if needs_phone else "Confirmed"}
+- Service address: {"YES" if needs_address else "Got it: " + collected_info.get("address", "")}
+- Issue/problem: {"YES" if needs_issue else "Got it: " + collected_info.get("issue", "")}
+- Urgency: {"YES" if needs_urgency else "Got it: " + collected_info.get("urgency", "")}
 
-Based on the caller's input, respond in JSON format with:
+CONVERSATION FLOW:
+1. Get their name first
+2. Confirm phone number (say it back to them)
+3. Get their service address
+4. Ask what issue they're having
+5. Ask how urgent it is
+6. Confirm all details and book
+
+Respond with JSON:
 {{
-    "response_text": "What to say to the caller (keep it SHORT - 1-2 sentences)",
-    "next_state": "collecting_name|collecting_issue|collecting_urgency|confirming_booking|booking_complete|end_call",
-    "collected_data": {{"name": "...", "issue": "...", "urgency": "ROUTINE|URGENT|EMERGENCY"}},
-    "action": null or "book_job" or "create_lead"
+    "response_text": "Your response (VERY SHORT, natural, conversational)",
+    "next_state": "collecting_name|confirming_phone|collecting_address|collecting_issue|collecting_urgency|confirming_all|booking_complete",
+    "collected_data": {{"name": "...", "phone_confirmed": true/false, "address": "...", "issue": "...", "urgency": "ROUTINE|URGENT|EMERGENCY"}},
+    "action": null or "book_job"
 }}
 
 RULES:
-- Keep responses SHORT (this is a phone call)
-- Be friendly and professional
-- Ask ONE question at a time
-- If caller provides multiple pieces of info, acknowledge and move forward
-- Available urgencies: ROUTINE (can wait), URGENT (need soon), EMERGENCY (immediate)
-- Default urgency is ROUTINE unless caller indicates urgency"""
+- Sound natural and human, not robotic
+- Keep responses to 1 SHORT sentence when possible
+- Don't repeat yourself
+- When confirming phone, say the digits naturally (like "five five five, one two three, four five six seven")
+- If they give multiple pieces of info at once, collect them all
+- Only set action="book_job" when you have ALL info AND have confirmed everything"""
 
         chat = LlmChat(
             api_key=os.environ.get('EMERGENT_LLM_KEY'),
             session_id=f"voice-{call_sid}",
             system_message=system_prompt
-        ).with_model("openai", "gpt-4o")
+        ).with_model("openai", "gpt-4o-mini")  # Using mini for faster responses
         
         response = await chat.send_message(UserMessage(text=f"Caller said: {speech_result}"))
         
