@@ -3013,6 +3013,388 @@ async def voice_recording_complete(request: Request):
     return Response(content=twiml, media_type="application/xml")
 
 
+@v1_router.post("/voice/process-speech")
+async def voice_process_speech(request: Request):
+    """
+    Process speech input from caller and generate AI response.
+    Uses OpenAI to understand intent and respond appropriately.
+    """
+    form_data = await request.form()
+    call_sid = form_data.get("CallSid", "")
+    speech_result = form_data.get("SpeechResult", "")
+    from_phone = form_data.get("From", "").strip()
+    
+    # Normalize phone
+    if from_phone and not from_phone.startswith("+"):
+        from_phone = "+" + from_phone.lstrip()
+    
+    logger.info(f"Voice AI processing speech for call {call_sid}: '{speech_result}'")
+    
+    base_url = os.environ.get('APP_BASE_URL', 'https://smart-field-ops.preview.emergentagent.com')
+    
+    # Get call context from database
+    call_context = await db.voice_calls.find_one({"call_sid": call_sid}, {"_id": 0})
+    
+    if not call_context:
+        logger.error(f"No call context found for {call_sid}")
+        twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">I'm sorry, there was an error. Please call back.</Say>
+    <Hangup/>
+</Response>"""
+        return Response(content=twiml, media_type="application/xml")
+    
+    tenant_id = call_context.get("tenant_id")
+    tenant_name = call_context.get("tenant_name", "our company")
+    conversation_state = call_context.get("conversation_state", "greeting")
+    collected_info = call_context.get("collected_info", {})
+    
+    # Get tenant for business context
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    
+    # Try to find existing customer
+    customer = None
+    if from_phone:
+        customer = await db.customers.find_one(
+            {"phone": from_phone, "tenant_id": tenant_id},
+            {"_id": 0}
+        )
+    
+    # Use AI to process the speech and determine next action
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        
+        system_prompt = f"""You are an AI phone receptionist for {tenant_name}, a field service company.
+
+CURRENT CALL STATE: {conversation_state}
+CALLER PHONE: {from_phone}
+KNOWN CUSTOMER: {'Yes - ' + customer.get('first_name', '') if customer else 'No'}
+INFORMATION COLLECTED SO FAR: {json.dumps(collected_info)}
+
+Your job is to:
+1. Understand what the caller needs
+2. Collect necessary information (name, issue description, urgency)
+3. Book a service appointment
+4. Confirm details
+
+Based on the caller's input, respond in JSON format with:
+{{
+    "response_text": "What to say to the caller (keep it SHORT - 1-2 sentences)",
+    "next_state": "collecting_name|collecting_issue|collecting_urgency|confirming_booking|booking_complete|end_call",
+    "collected_data": {{"name": "...", "issue": "...", "urgency": "ROUTINE|URGENT|EMERGENCY"}},
+    "action": null or "book_job" or "create_lead"
+}}
+
+RULES:
+- Keep responses SHORT (this is a phone call)
+- Be friendly and professional
+- Ask ONE question at a time
+- If caller provides multiple pieces of info, acknowledge and move forward
+- Available urgencies: ROUTINE (can wait), URGENT (need soon), EMERGENCY (immediate)
+- Default urgency is ROUTINE unless caller indicates urgency"""
+
+        chat = LlmChat(
+            api_key=os.environ.get('EMERGENT_LLM_KEY'),
+            session_id=f"voice-{call_sid}",
+            system_message=system_prompt
+        ).with_model("openai", "gpt-4o")
+        
+        response = await chat.send_message(UserMessage(text=f"Caller said: {speech_result}"))
+        
+        # Parse AI response
+        try:
+            # Extract JSON from response
+            response_text = response.strip()
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+            
+            ai_response = json.loads(response_text)
+        except json.JSONDecodeError:
+            # If not valid JSON, use the response as text
+            ai_response = {
+                "response_text": response if len(response) < 200 else "I understand. Can you tell me more about what you need?",
+                "next_state": "collecting_issue",
+                "collected_data": {},
+                "action": None
+            }
+        
+        # Update collected info
+        if ai_response.get("collected_data"):
+            collected_info.update(ai_response["collected_data"])
+        
+        next_state = ai_response.get("next_state", conversation_state)
+        action = ai_response.get("action")
+        response_text = ai_response.get("response_text", "I understand. What else can you tell me?")
+        
+        # Update call context
+        await db.voice_calls.update_one(
+            {"call_sid": call_sid},
+            {"$set": {
+                "conversation_state": next_state,
+                "collected_info": collected_info,
+                "last_speech": speech_result,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        # Handle actions
+        if action == "book_job" or next_state == "booking_complete":
+            # Create lead and book job
+            result = await _voice_ai_book_job(
+                tenant_id=tenant_id,
+                from_phone=from_phone,
+                collected_info=collected_info,
+                customer=customer
+            )
+            
+            if result.get("success"):
+                job = result.get("job", {})
+                quote_amount = job.get("quote_amount", 89)
+                
+                # Send SMS confirmation
+                from services.twilio_service import twilio_service
+                sms_body = f"Hi{' ' + collected_info.get('name', '').split()[0] if collected_info.get('name') else ''}! Your appointment with {tenant_name} is confirmed. Quote: ${quote_amount:.2f}. We'll send you details shortly."
+                await twilio_service.send_sms(to_phone=from_phone, body=sms_body)
+                
+                twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">{response_text} Your quote is ${quote_amount:.2f}. We've sent you a confirmation text. Thank you for calling {tenant_name}!</Say>
+    <Hangup/>
+</Response>"""
+            else:
+                twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">I apologize, but I wasn't able to complete your booking. One of our team members will call you back shortly. Thank you for calling!</Say>
+    <Hangup/>
+</Response>"""
+            
+            return Response(content=twiml, media_type="application/xml")
+        
+        elif action == "create_lead" or next_state == "end_call":
+            # Just create a lead without booking
+            await _voice_ai_create_lead(
+                tenant_id=tenant_id,
+                from_phone=from_phone,
+                collected_info=collected_info,
+                customer=customer,
+                speech_transcript=speech_result
+            )
+            
+            twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">{response_text} Thank you for calling {tenant_name}. Goodbye!</Say>
+    <Hangup/>
+</Response>"""
+            return Response(content=twiml, media_type="application/xml")
+        
+        else:
+            # Continue conversation
+            twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="3" language="en-US">
+        <Say voice="Polly.Joanna">{response_text}</Say>
+    </Gather>
+    <Say voice="Polly.Joanna">I didn't catch that. Let me transfer you to leave a message.</Say>
+    <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
+</Response>"""
+            return Response(content=twiml, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Voice AI error: {e}")
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">I apologize, I'm having technical difficulties. Let me transfer you to leave a message.</Say>
+    <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
+</Response>"""
+        return Response(content=twiml, media_type="application/xml")
+
+
+async def _voice_ai_book_job(tenant_id: str, from_phone: str, collected_info: dict, customer: dict = None):
+    """Helper function to create lead, customer, property, and job from voice AI"""
+    try:
+        import pytz
+        
+        tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+        tenant_tz = pytz.timezone(tenant.get("timezone", "America/New_York"))
+        
+        # Create or get customer
+        customer_id = None
+        if customer:
+            customer_id = customer["id"]
+        else:
+            # Create new customer
+            name_parts = collected_info.get("name", "").split() if collected_info.get("name") else [""]
+            first_name = name_parts[0] if name_parts else ""
+            last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+            
+            new_customer = {
+                "id": str(uuid4()),
+                "tenant_id": tenant_id,
+                "first_name": first_name,
+                "last_name": last_name,
+                "phone": from_phone,
+                "preferred_channel": "CALL",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.customers.insert_one(new_customer)
+            customer_id = new_customer["id"]
+            customer = new_customer
+        
+        # Create lead
+        urgency = collected_info.get("urgency", "ROUTINE").upper()
+        if urgency not in ["EMERGENCY", "URGENT", "ROUTINE"]:
+            urgency = "ROUTINE"
+        
+        lead = {
+            "id": str(uuid4()),
+            "tenant_id": tenant_id,
+            "customer_id": customer_id,
+            "source": "SELF_HOSTED_VOICE",
+            "channel": "VOICE",
+            "status": "JOB_BOOKED",
+            "caller_name": collected_info.get("name", ""),
+            "caller_phone": from_phone,
+            "issue_type": collected_info.get("issue", "General Inquiry")[:100],
+            "description": collected_info.get("issue", ""),
+            "urgency": urgency,
+            "tags": ["voice_ai", "self_hosted"],
+            "first_contact_at": datetime.now(timezone.utc).isoformat(),
+            "last_activity_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.leads.insert_one(lead)
+        
+        # Determine job schedule (tomorrow morning by default)
+        tomorrow = datetime.now(tenant_tz) + timedelta(days=1)
+        if urgency == "EMERGENCY":
+            # Same day if possible
+            now = datetime.now(tenant_tz)
+            if now.hour < 16:  # Before 4 PM, schedule for today afternoon
+                service_date = now
+                start_hour, end_hour = 14, 18
+            else:
+                service_date = tomorrow
+                start_hour, end_hour = 8, 12
+        else:
+            service_date = tomorrow
+            start_hour, end_hour = 8, 12
+        
+        service_window_start = tenant_tz.localize(
+            datetime(service_date.year, service_date.month, service_date.day, start_hour, 0)
+        )
+        service_window_end = tenant_tz.localize(
+            datetime(service_date.year, service_date.month, service_date.day, end_hour, 0)
+        )
+        
+        # Calculate quote
+        job_type = "DIAGNOSTIC"
+        quote_amount = calculate_quote_amount(job_type, urgency)
+        
+        # Get or create property
+        property_id = None
+        existing_prop = await db.properties.find_one({"customer_id": customer_id}, {"_id": 0})
+        if existing_prop:
+            property_id = existing_prop["id"]
+        
+        # Create job
+        job = {
+            "id": str(uuid4()),
+            "tenant_id": tenant_id,
+            "customer_id": customer_id,
+            "property_id": property_id,
+            "lead_id": lead["id"],
+            "job_type": job_type,
+            "priority": "EMERGENCY" if urgency == "EMERGENCY" else ("HIGH" if urgency == "URGENT" else "NORMAL"),
+            "service_window_start": service_window_start.isoformat(),
+            "service_window_end": service_window_end.isoformat(),
+            "status": "BOOKED",
+            "created_by": "AI",
+            "notes": collected_info.get("issue", ""),
+            "quote_amount": quote_amount,
+            "reminder_day_before_sent": False,
+            "reminder_morning_of_sent": False,
+            "en_route_sms_sent": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.jobs.insert_one(job)
+        
+        # Create quote
+        quote = {
+            "id": str(uuid4()),
+            "tenant_id": tenant_id,
+            "customer_id": customer_id,
+            "property_id": property_id,
+            "job_id": job["id"],
+            "amount": quote_amount,
+            "currency": "USD",
+            "description": f"{job_type} service - {collected_info.get('issue', 'General service')[:100]}",
+            "status": "SENT",
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.quotes.insert_one(quote)
+        
+        # Update job with quote_id
+        await db.jobs.update_one({"id": job["id"]}, {"$set": {"quote_id": quote["id"]}})
+        
+        logger.info(f"Voice AI booked job {job['id']} for customer {customer_id}")
+        
+        return {
+            "success": True,
+            "job": job,
+            "quote": quote,
+            "lead": lead,
+            "customer_id": customer_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Voice AI booking error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def _voice_ai_create_lead(tenant_id: str, from_phone: str, collected_info: dict, customer: dict = None, speech_transcript: str = ""):
+    """Helper function to create just a lead from voice AI (without booking)"""
+    try:
+        customer_id = customer["id"] if customer else None
+        
+        urgency = collected_info.get("urgency", "ROUTINE").upper()
+        if urgency not in ["EMERGENCY", "URGENT", "ROUTINE"]:
+            urgency = "ROUTINE"
+        
+        lead = {
+            "id": str(uuid4()),
+            "tenant_id": tenant_id,
+            "customer_id": customer_id,
+            "source": "SELF_HOSTED_VOICE",
+            "channel": "VOICE",
+            "status": "NEW",
+            "caller_name": collected_info.get("name", ""),
+            "caller_phone": from_phone,
+            "issue_type": collected_info.get("issue", "General Inquiry")[:100] if collected_info.get("issue") else "Voice Inquiry",
+            "description": f"Voice AI transcript: {speech_transcript}\n\nCollected info: {json.dumps(collected_info)}",
+            "urgency": urgency,
+            "tags": ["voice_ai", "self_hosted", "needs_followup"],
+            "first_contact_at": datetime.now(timezone.utc).isoformat(),
+            "last_activity_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.leads.insert_one(lead)
+        
+        logger.info(f"Voice AI created lead {lead['id']}")
+        return {"success": True, "lead": lead}
+        
+    except Exception as e:
+        logger.error(f"Voice AI lead creation error: {e}")
+        return {"success": False, "error": str(e)}
+
+
 @v1_router.post("/voice/status")
 async def voice_call_status(request: Request):
     """Handle Twilio call status callbacks"""
