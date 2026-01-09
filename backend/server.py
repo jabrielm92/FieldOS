@@ -3316,11 +3316,32 @@ async def _voice_ai_book_job(tenant_id: str, from_phone: str, collected_info: di
         job_type = "DIAGNOSTIC"
         quote_amount = calculate_quote_amount(job_type, urgency)
         
-        # Get or create property
+        # Get or create property with the collected address
         property_id = None
         existing_prop = await db.properties.find_one({"customer_id": customer_id}, {"_id": 0})
+        
         if existing_prop:
             property_id = existing_prop["id"]
+            # Update address if we have a new one
+            if collected_info.get("address"):
+                await db.properties.update_one(
+                    {"id": property_id},
+                    {"$set": {"address_line1": collected_info["address"], "updated_at": datetime.now(timezone.utc).isoformat()}}
+                )
+        elif collected_info.get("address"):
+            # Create new property with the address
+            new_property = {
+                "id": str(uuid4()),
+                "tenant_id": tenant_id,
+                "customer_id": customer_id,
+                "address_line1": collected_info["address"],
+                "property_type": "RESIDENTIAL",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.properties.insert_one(new_property)
+            property_id = new_property["id"]
+            logger.info(f"Created property {property_id} with address: {collected_info['address']}")
         
         # Create job
         job = {
