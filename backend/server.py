@@ -3071,10 +3071,16 @@ async def voice_process_speech(request: Request):
         needs_issue = not collected_info.get("issue")
         needs_urgency = not collected_info.get("urgency")
         
+        # Build customer context safely
+        customer_context = "No"
+        if customer:
+            customer_name = customer.get('first_name', 'Unknown')
+            customer_context = f"Yes - {customer_name}"
+        
         system_prompt = f"""You are a friendly AI phone receptionist for {tenant_name}.
 
 CALLER ID: {from_phone}
-KNOWN CUSTOMER: {'Yes - ' + customer.get('first_name', '') + ', ' + (customer.get('properties', [{}])[0].get('address_line1', 'no address') if customer else 'No')}
+KNOWN CUSTOMER: {customer_context}
 INFO COLLECTED: {json.dumps(collected_info)}
 
 STILL NEED TO COLLECT:
