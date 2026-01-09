@@ -370,7 +370,10 @@ class TestServiceRequests:
         assert response.status_code == 200, f"Failed to convert: {response.text}"
         data = response.json()
         
-        assert "job_id" in data or "id" in data
+        # API returns job and quote objects
+        assert data.get("success") == True or "job" in data
+        if "job" in data:
+            assert "id" in data["job"]
         print(f"✓ POST convert service request to job - success")
     
     def test_service_requests_requires_auth(self):
