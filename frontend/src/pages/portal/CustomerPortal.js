@@ -936,7 +936,7 @@ export default function CustomerPortal() {
           <DialogHeader>
             <DialogTitle>Request Service</DialogTitle>
             <DialogDescription>
-              Tell us what you need and we'll get back to you.
+              Tell us what you need and we&apos;ll get back to you.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1034,7 +1034,7 @@ export default function CustomerPortal() {
           <DialogHeader>
             <DialogTitle>Request Reschedule</DialogTitle>
             <DialogDescription>
-              Let us know your preferred times and we'll get back to you.
+              Let us know your preferred times and we&apos;ll get back to you.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
