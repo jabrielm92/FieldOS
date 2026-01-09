@@ -2919,29 +2919,44 @@ async def voice_inbound(request: Request):
         logger.info(f"Self-hosted voice not enabled for tenant {tenant['id']}, using fallback")
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep and we will call you back shortly.</Say>
+    <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep and we will call you back shortly.</Say>
     <Record maxLength="120" action="/api/v1/voice/recording-complete" />
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    # Generate WebSocket URL for streaming
-    base_url = os.environ.get('APP_BASE_URL', 'http://localhost:8001')
-    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
-    websocket_url = f"{ws_url}/api/v1/voice/stream/{call_sid}"
+    # Use simplified voice AI with Gather (speech-to-text)
+    # This uses Twilio's built-in speech recognition instead of WebSocket streaming
+    base_url = os.environ.get('APP_BASE_URL', 'https://smart-field-ops.preview.emergentagent.com')
     
-    # TwiML to connect to WebSocket for real-time audio
+    # Store call context for the conversation
+    call_context = {
+        "call_sid": call_sid,
+        "tenant_id": tenant["id"],
+        "from_phone": from_phone,
+        "to_phone": to_phone,
+        "tenant_name": tenant.get("name", "our company"),
+        "conversation_state": "greeting"
+    }
+    
+    # Store in database for retrieval during conversation
+    await db.voice_calls.update_one(
+        {"call_sid": call_sid},
+        {"$set": call_context},
+        upsert=True
+    )
+    
+    # Initial greeting with speech gathering
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Connect>
-        <Stream url="{websocket_url}">
-            <Parameter name="tenant_id" value="{tenant['id']}" />
-            <Parameter name="from_phone" value="{from_phone}" />
-            <Parameter name="to_phone" value="{to_phone}" />
-        </Stream>
-    </Connect>
+    <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. How can I help you today?</Say>
+    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="2" language="en-US">
+        <Say voice="Polly.Joanna">Please tell me what you need help with.</Say>
+    </Gather>
+    <Say voice="Polly.Joanna">I didn't hear anything. Let me transfer you to leave a message.</Say>
+    <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
 </Response>"""
     
-    logger.info(f"Returning TwiML with WebSocket URL: {websocket_url}")
+    logger.info(f"Voice AI started for tenant {tenant['id']}, call {call_sid}")
     return Response(content=twiml, media_type="application/xml")
 
 
