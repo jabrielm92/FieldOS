@@ -2945,14 +2945,14 @@ async def voice_inbound(request: Request):
         upsert=True
     )
     
-    # Initial greeting with speech gathering
+    # Initial greeting with speech gathering - use neural voice for natural sound
+    # Using Polly.Matthew-Neural for more natural male voice, or Polly.Joanna-Neural for female
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. How can I help you today?</Say>
-    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="2" language="en-US">
-        <Say voice="Polly.Joanna">Please tell me what you need help with.</Say>
+    <Say voice="Polly.Matthew-Neural">Thanks for calling {tenant.get('name', 'us')}! How can I help you today?</Say>
+    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
     </Gather>
-    <Say voice="Polly.Joanna">I didn't hear anything. Let me transfer you to leave a message.</Say>
+    <Say voice="Polly.Matthew-Neural">I didn't catch that. Please leave a message after the beep.</Say>
     <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
 </Response>"""
     
