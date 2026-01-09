@@ -2878,8 +2878,14 @@ async def voice_inbound(request: Request):
     """
     form_data = await request.form()
     call_sid = form_data.get("CallSid", "")
-    from_phone = form_data.get("From", "")
-    to_phone = form_data.get("To", "")
+    from_phone = form_data.get("From", "").strip()
+    to_phone = form_data.get("To", "").strip()
+    
+    # Normalize phone numbers - handle URL encoding where + becomes space
+    if from_phone and not from_phone.startswith("+"):
+        from_phone = "+" + from_phone.lstrip()
+    if to_phone and not to_phone.startswith("+"):
+        to_phone = "+" + to_phone.lstrip()
     
     logger.info(f"Inbound voice call: {call_sid} from {from_phone} to {to_phone}")
     
@@ -2887,13 +2893,14 @@ async def voice_inbound(request: Request):
     tenant = await db.tenants.find_one({"twilio_phone_number": to_phone}, {"_id": 0})
     
     if not tenant:
-        # Try without + prefix
-        to_phone_clean = to_phone.replace("+", "")
+        # Try various formats
+        to_phone_digits = ''.join(c for c in to_phone if c.isdigit())
         tenant = await db.tenants.find_one({
             "$or": [
                 {"twilio_phone_number": to_phone},
-                {"twilio_phone_number": f"+{to_phone_clean}"},
-                {"twilio_phone_number": to_phone_clean}
+                {"twilio_phone_number": f"+{to_phone_digits}"},
+                {"twilio_phone_number": to_phone_digits},
+                {"twilio_phone_number": f"+1{to_phone_digits[-10:]}"} if len(to_phone_digits) >= 10 else {"twilio_phone_number": "NOMATCH"}
             ]
         }, {"_id": 0})
     
