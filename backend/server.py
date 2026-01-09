@@ -3090,29 +3090,30 @@ STILL NEED TO COLLECT:
 - Issue/problem: {"YES" if needs_issue else "Got it: " + collected_info.get("issue", "")}
 - Urgency: {"YES" if needs_urgency else "Got it: " + collected_info.get("urgency", "")}
 
+ALL INFO COLLECTED: {"YES - PROCEED TO BOOK!" if (not needs_name and not needs_phone and not needs_address and not needs_issue and not needs_urgency) else "NO - keep collecting"}
+
 CONVERSATION FLOW:
 1. Get their name first
-2. Confirm phone number (say it back to them)
+2. Confirm phone number (say it back to them)  
 3. Get their service address
 4. Ask what issue they're having
 5. Ask how urgent it is
-6. Confirm all details and book
+6. When ALL info is collected, set action="book_job" immediately
 
 Respond with JSON:
 {{
     "response_text": "Your response (VERY SHORT, natural, conversational)",
-    "next_state": "collecting_name|confirming_phone|collecting_address|collecting_issue|collecting_urgency|confirming_all|booking_complete",
+    "next_state": "collecting_name|confirming_phone|collecting_address|collecting_issue|collecting_urgency|booking_complete",
     "collected_data": {{"name": "...", "phone_confirmed": true/false, "address": "...", "issue": "...", "urgency": "ROUTINE|URGENT|EMERGENCY"}},
     "action": null or "book_job"
 }}
 
-RULES:
+CRITICAL RULES:
+- When ALL info is collected (name, phone confirmed, address, issue, urgency), IMMEDIATELY set action="book_job"
+- Do NOT ask for confirmation after you have everything - just book it
 - Sound natural and human, not robotic
-- Keep responses to 1 SHORT sentence when possible
-- Don't repeat yourself
-- When confirming phone, say the digits naturally (like "five five five, one two three, four five six seven")
-- If they give multiple pieces of info at once, collect them all
-- Only set action="book_job" when you have ALL info AND have confirmed everything"""
+- Keep responses to 1 SHORT sentence
+- If caller says "yes book it" or similar and you have all info, set action="book_job\""""
 
         chat = LlmChat(
             api_key=os.environ.get('EMERGENT_LLM_KEY'),
