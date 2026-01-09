@@ -2867,6 +2867,246 @@ async def vapi_call_summary(
     return {"success": True, "message_id": msg.id}
 
 
+# ============= SELF-HOSTED VOICE AI (TWILIO) =============
+
+from fastapi import Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import PlainTextResponse
+
+@v1_router.post("/voice/inbound")
+async def voice_inbound(request: Request):
+    """
+    Handle inbound voice call from Twilio.
+    Returns TwiML to connect to WebSocket for streaming.
+    """
+    form_data = await request.form()
+    call_sid = form_data.get("CallSid", "")
+    from_phone = form_data.get("From", "")
+    to_phone = form_data.get("To", "")
+    
+    logger.info(f"Inbound voice call: {call_sid} from {from_phone} to {to_phone}")
+    
+    # Find tenant by phone number
+    tenant = await db.tenants.find_one({"twilio_phone_number": to_phone}, {"_id": 0})
+    
+    if not tenant:
+        # Try without + prefix
+        to_phone_clean = to_phone.replace("+", "")
+        tenant = await db.tenants.find_one({
+            "$or": [
+                {"twilio_phone_number": to_phone},
+                {"twilio_phone_number": f"+{to_phone_clean}"},
+                {"twilio_phone_number": to_phone_clean}
+            ]
+        }, {"_id": 0})
+    
+    if not tenant:
+        logger.warning(f"No tenant found for phone number: {to_phone}")
+        twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>We're sorry, this number is not configured. Please try again later.</Say>
+    <Hangup/>
+</Response>"""
+        return Response(content=twiml, media_type="application/xml")
+    
+    # Check if tenant has self-hosted voice enabled
+    if not tenant.get("use_self_hosted_voice", False):
+        # Fall back to Vapi or simple message
+        logger.info(f"Self-hosted voice not enabled for tenant {tenant['id']}, using fallback")
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep and we will call you back shortly.</Say>
+    <Record maxLength="120" action="/api/v1/voice/recording-complete" />
+</Response>"""
+        return Response(content=twiml, media_type="application/xml")
+    
+    # Generate WebSocket URL for streaming
+    base_url = os.environ.get('APP_BASE_URL', 'http://localhost:8001')
+    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
+    websocket_url = f"{ws_url}/api/v1/voice/stream/{call_sid}"
+    
+    # TwiML to connect to WebSocket for real-time audio
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Connect>
+        <Stream url="{websocket_url}">
+            <Parameter name="tenant_id" value="{tenant['id']}" />
+            <Parameter name="from_phone" value="{from_phone}" />
+            <Parameter name="to_phone" value="{to_phone}" />
+        </Stream>
+    </Connect>
+</Response>"""
+    
+    logger.info(f"Returning TwiML with WebSocket URL: {websocket_url}")
+    return Response(content=twiml, media_type="application/xml")
+
+
+@v1_router.post("/voice/recording-complete")
+async def voice_recording_complete(request: Request):
+    """Handle completed voice recording (fallback when self-hosted not enabled)"""
+    form_data = await request.form()
+    recording_url = form_data.get("RecordingUrl", "")
+    call_sid = form_data.get("CallSid", "")
+    from_phone = form_data.get("From", "")
+    to_phone = form_data.get("To", "")
+    
+    logger.info(f"Voice recording complete: {call_sid}, recording: {recording_url}")
+    
+    # Find tenant
+    tenant = await db.tenants.find_one({
+        "$or": [
+            {"twilio_phone_number": to_phone},
+            {"twilio_phone_number": to_phone.replace("+", "")},
+        ]
+    }, {"_id": 0})
+    
+    if tenant and recording_url:
+        # Create a lead from the voicemail
+        from_phone_normalized = normalize_phone_e164(from_phone)
+        
+        lead = {
+            "id": str(uuid4()),
+            "tenant_id": tenant["id"],
+            "source": "MISSED_CALL_SMS",
+            "channel": "VOICE",
+            "status": "NEW",
+            "caller_phone": from_phone_normalized,
+            "description": f"Voicemail recording: {recording_url}",
+            "urgency": "ROUTINE",
+            "tags": ["voicemail"],
+            "first_contact_at": datetime.now(timezone.utc).isoformat(),
+            "last_activity_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.leads.insert_one(lead)
+        
+        # Send SMS acknowledgment
+        from services.twilio_service import twilio_service
+        sms_msg = f"Hi! Thanks for calling {tenant.get('name')}. We received your voicemail and will call you back shortly."
+        await twilio_service.send_sms(to_phone=from_phone_normalized, body=sms_msg)
+    
+    twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Thank you for your message. We will call you back shortly. Goodbye!</Say>
+    <Hangup/>
+</Response>"""
+    return Response(content=twiml, media_type="application/xml")
+
+
+@v1_router.post("/voice/status")
+async def voice_call_status(request: Request):
+    """Handle Twilio call status callbacks"""
+    form_data = await request.form()
+    call_sid = form_data.get("CallSid", "")
+    call_status = form_data.get("CallStatus", "")
+    
+    logger.info(f"Voice call status: {call_sid} -> {call_status}")
+    
+    # Could update lead/job status based on call outcome
+    return {"received": True}
+
+
+# WebSocket endpoint for real-time audio streaming
+# Note: This would need to be run separately or with a proper WebSocket server
+# For production, consider using a separate service or Twilio's Programmable Voice
+@app.websocket("/api/v1/voice/stream/{call_sid}")
+async def voice_stream_websocket(websocket: WebSocket, call_sid: str):
+    """
+    WebSocket endpoint for Twilio Media Streams.
+    Handles real-time audio streaming for voice AI.
+    """
+    await websocket.accept()
+    
+    from services.voice_ai_service import create_voice_ai_service
+    voice_ai = create_voice_ai_service()
+    
+    tenant_id = None
+    from_phone = None
+    stream_sid = None
+    greeting_sent = False
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            
+            event_type = message.get("event")
+            
+            if event_type == "connected":
+                logger.info(f"WebSocket connected for call {call_sid}")
+                
+            elif event_type == "start":
+                # Extract parameters from stream start
+                start_data = message.get("start", {})
+                stream_sid = start_data.get("streamSid")
+                custom_params = start_data.get("customParameters", {})
+                
+                tenant_id = custom_params.get("tenant_id")
+                from_phone = custom_params.get("from_phone")
+                
+                logger.info(f"Stream started: {stream_sid}, tenant: {tenant_id}")
+                
+                # Initialize voice AI
+                if tenant_id:
+                    await voice_ai.initialize(tenant_id, from_phone, call_sid, db)
+                    
+                    # Send greeting
+                    if not greeting_sent:
+                        greeting_audio = await voice_ai.get_greeting()
+                        if greeting_audio:
+                            await websocket.send_json({
+                                "event": "media",
+                                "streamSid": stream_sid,
+                                "media": {"payload": greeting_audio}
+                            })
+                            greeting_sent = True
+                
+            elif event_type == "media":
+                # Receive audio chunk from caller
+                media_data = message.get("media", {})
+                audio_payload = media_data.get("payload", "")
+                
+                if audio_payload:
+                    import base64
+                    audio_chunk = base64.b64decode(audio_payload)
+                    
+                    # Process audio through STT
+                    transcript = await voice_ai.process_audio(audio_chunk)
+                    
+                    if transcript:
+                        logger.info(f"Transcript: {transcript}")
+                        
+                        # Generate AI response
+                        response_audio, action_data = await voice_ai.generate_response(transcript)
+                        
+                        if response_audio:
+                            await websocket.send_json({
+                                "event": "media",
+                                "streamSid": stream_sid,
+                                "media": {"payload": response_audio}
+                            })
+                        
+                        # Handle actions
+                        if action_data and action_data.get("action") == "end_call":
+                            await websocket.send_json({
+                                "event": "stop",
+                                "streamSid": stream_sid
+                            })
+                            break
+                
+            elif event_type == "stop":
+                logger.info(f"Stream stopped: {stream_sid}")
+                await voice_ai.end_conversation()
+                break
+                
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for call {call_sid}")
+        await voice_ai.end_conversation()
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        await voice_ai.end_conversation()
+
+
 # ============= WEB FORM API (PUBLIC) =============
 
 @v1_router.post("/webform/submit")
