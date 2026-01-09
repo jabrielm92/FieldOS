@@ -184,6 +184,13 @@ class TenantBase(BaseModel):
     twilio_messaging_service_sid: Optional[str] = None
     tone_profile: ToneProfile = ToneProfile.PROFESSIONAL
     sms_signature: Optional[str] = None
+    
+    # White-Label Branding
+    branding: Optional[dict] = None  # Contains BrandingSettings as dict
+    
+    # Voice AI Configuration
+    voice_ai_enabled: bool = False
+    use_self_hosted_voice: bool = False  # If False, use Vapi
 
 
 # ============= BRANDING MODELS =============
@@ -208,9 +215,44 @@ class BrandingSettings(BaseModel):
     # Portal branding
     portal_title: Optional[str] = None
     portal_welcome_message: Optional[str] = None
+    portal_support_email: Optional[str] = None
+    portal_support_phone: Optional[str] = None
+    
+    # Custom domain (placeholder for future)
+    custom_domain: Optional[str] = None
+    custom_domain_verified: bool = False
     
     # White-label toggle
     white_label_enabled: bool = False
+
+
+class CustomerPortalToken(BaseModel):
+    """Token for customer portal access"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=generate_id)
+    tenant_id: str
+    customer_id: str
+    token: str  # Secure random token
+    expires_at: Optional[datetime] = None  # None = never expires
+    last_accessed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class ServiceRequest(BaseModel):
+    """Customer-initiated service request from portal"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=generate_id)
+    tenant_id: str
+    customer_id: str
+    property_id: Optional[str] = None
+    issue_description: str
+    urgency: Urgency = Urgency.ROUTINE
+    preferred_date: Optional[str] = None
+    preferred_time_slot: Optional[str] = None  # morning, afternoon, evening
+    status: str = "PENDING"  # PENDING, REVIEWED, CONVERTED_TO_LEAD, CANCELLED
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class ReviewSettings(BaseModel):
