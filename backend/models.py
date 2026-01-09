@@ -61,6 +61,8 @@ class LeadSource(str, Enum):
     LANDING_PAGE = "LANDING_PAGE"
     FB_LEAD = "FB_LEAD"
     MANUAL = "MANUAL"
+    PORTAL_REQUEST = "PORTAL_REQUEST"
+    SELF_HOSTED_VOICE = "SELF_HOSTED_VOICE"
 
 
 class LeadChannel(str, Enum):
