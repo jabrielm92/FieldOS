@@ -7,82 +7,52 @@ import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { Switch } from "../../components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { toast } from "sonner";
-import { Building2, MessageSquare, Clock, Users, Palette, Globe, Phone, Loader2 } from "lucide-react";
-import axios from "axios";
-
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save } from "lucide-react";
+import { settingsAPI } from "../../lib/api";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
-  // Branding settings
-  const [branding, setBranding] = useState({
-    logo_url: "",
-    favicon_url: "",
-    primary_color: "#0066CC",
-    secondary_color: "#004499",
-    accent_color: "#FF6600",
-    text_on_primary: "#FFFFFF",
-    font_family: "Inter",
-    email_from_name: "",
-    email_reply_to: "",
-    sms_sender_name: "",
-    portal_title: "",
-    portal_welcome_message: "",
-    portal_support_email: "",
-    portal_support_phone: "",
-    custom_domain: "",
-    white_label_enabled: false
-  });
+  const [tenant, setTenant] = useState(null);
 
   useEffect(() => {
-    fetchBrandingSettings();
+    fetchTenantSettings();
   }, []);
 
-  const fetchBrandingSettings = async () => {
+  const fetchTenantSettings = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`${API_URL}/api/v1/settings/branding`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setBranding(prev => ({ ...prev, ...response.data }));
+      const response = await settingsAPI.getTenantSettings();
+      setTenant(response.data);
     } catch (error) {
-      console.error("Error fetching branding:", error);
+      toast.error("Failed to load settings");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveBranding = async () => {
+  const handleSave = async () => {
     setSaving(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(`${API_URL}/api/v1/settings/branding`, branding, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success("Branding settings saved successfully");
+      await settingsAPI.updateTenantSettings(tenant);
+      toast.success("Settings saved successfully");
     } catch (error) {
-      toast.error("Failed to save branding settings");
+      toast.error(error.response?.data?.detail || "Failed to save settings");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleSave = () => {
-    toast.success("Settings saved successfully");
+  const updateField = (field, value) => {
+    setTenant(prev => ({ ...prev, [field]: value }));
   };
 
-  const updateBranding = (key, value) => {
-    setBranding(prev => ({ ...prev, [key]: value }));
+  const updateBranding = (field, value) => {
+    setTenant(prev => ({
+      ...prev,
+      branding: { ...(prev?.branding || {}), [field]: value }
+    }));
   };
 
   if (loading) {
@@ -94,6 +64,8 @@ export default function SettingsPage() {
       </Layout>
     );
   }
+
+  const branding = tenant?.branding || {};
 
   return (
     <Layout title="Settings" subtitle="Configure your company settings">
@@ -109,7 +81,7 @@ export default function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="portal" className="flex items-center gap-2">
             <Globe className="h-4 w-4" />
-            Customer Portal
+            Portal
           </TabsTrigger>
           <TabsTrigger value="messaging" className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
@@ -129,22 +101,23 @@ export default function SettingsPage() {
                 <Building2 className="h-5 w-5" />
                 Company Information
               </CardTitle>
-              <CardDescription>
-                Basic information about your field service company
-              </CardDescription>
+              <CardDescription>Basic information about your field service company</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="company_name">Company Name</Label>
-                  <Input id="company_name" placeholder="Your Company Name" data-testid="settings-company-name" />
+                  <Input 
+                    id="company_name" 
+                    value={tenant?.name || ""} 
+                    onChange={(e) => updateField("name", e.target.value)}
+                    data-testid="settings-company-name" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="timezone">Timezone</Label>
-                  <Select defaultValue="America/New_York">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={tenant?.timezone || "America/New_York"} onValueChange={(v) => updateField("timezone", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="America/New_York">Eastern</SelectItem>
                       <SelectItem value="America/Chicago">Central</SelectItem>
@@ -158,78 +131,43 @@ export default function SettingsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="primary_phone">Primary Phone</Label>
-                  <Input 
-                    id="primary_phone" 
-                    placeholder="+1 (555) 123-4567"
-                  />
+                  <Input id="primary_phone" value={tenant?.primary_phone || ""} onChange={(e) => updateField("primary_phone", e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="primary_email">Primary Email</Label>
-                  <Input 
-                    id="primary_email" 
-                    type="email"
-                    placeholder="contact@yourcompany.com"
-                  />
+                  <Input id="primary_email" type="email" value={tenant?.primary_contact_email || ""} onChange={(e) => updateField("primary_contact_email", e.target.value)} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="contact_name">Contact Name</Label>
+                  <Input id="contact_name" value={tenant?.primary_contact_name || ""} onChange={(e) => updateField("primary_contact_name", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tone Profile</Label>
+                  <Select value={tenant?.tone_profile || "PROFESSIONAL"} onValueChange={(v) => updateField("tone_profile", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PROFESSIONAL">Professional</SelectItem>
+                      <SelectItem value="FRIENDLY">Friendly</SelectItem>
+                      <SelectItem value="BLUE_COLLAR_DIRECT">Blue Collar Direct</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="service_area">Service Area</Label>
-                <Textarea 
-                  id="service_area" 
-                  placeholder="Describe your service area (cities, zip codes, etc.)"
-                  rows={2}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-heading flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Team & Notifications
-              </CardTitle>
-              <CardDescription>
-                Configure team notifications and alerts
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="alert_email">Alert Email</Label>
-                <Input 
-                  id="alert_email" 
-                  type="email"
-                  placeholder="alerts@yourcompany.com"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Receive notifications for new leads, emergencies, and system alerts
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label>Reminder Notifications</Label>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" defaultChecked className="rounded" />
-                    <span className="text-sm">Day before reminders</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" defaultChecked className="rounded" />
-                    <span className="text-sm">Morning of reminders</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" defaultChecked className="rounded" />
-                    <span className="text-sm">En-route alerts</span>
-                  </label>
-                </div>
+                <Textarea id="service_area" value={tenant?.service_area || ""} onChange={(e) => updateField("service_area", e.target.value)} placeholder="Cities, zip codes, or regions you serve" rows={2} />
               </div>
             </CardContent>
           </Card>
 
           <div className="flex justify-end">
-            <Button onClick={handleSave} className="btn-industrial" data-testid="save-company-settings">
-              SAVE CHANGES
+            <Button onClick={handleSave} disabled={saving} className="btn-industrial" data-testid="save-company-settings">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              {saving ? "SAVING..." : "SAVE CHANGES"}
             </Button>
           </div>
         </TabsContent>
@@ -242,194 +180,51 @@ export default function SettingsPage() {
                 <Palette className="h-5 w-5" />
                 Brand Colors & Logo
               </CardTitle>
-              <CardDescription>
-                Customize your brand appearance across all customer touchpoints
-              </CardDescription>
+              <CardDescription>Customize your brand appearance</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
                 <div>
                   <Label className="text-base">Enable White-Label Branding</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Remove FieldOS branding and use your own brand identity
-                  </p>
+                  <p className="text-sm text-muted-foreground">Remove FieldOS branding and use your own</p>
                 </div>
-                <Switch
-                  checked={branding.white_label_enabled}
-                  onCheckedChange={(checked) => updateBranding("white_label_enabled", checked)}
-                  data-testid="white-label-toggle"
-                />
+                <Switch checked={branding.white_label_enabled || false} onCheckedChange={(checked) => updateBranding("white_label_enabled", checked)} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="logo_url">Logo URL</Label>
-                  <Input 
-                    id="logo_url" 
-                    placeholder="https://example.com/logo.png"
-                    value={branding.logo_url || ""}
-                    onChange={(e) => updateBranding("logo_url", e.target.value)}
-                    data-testid="branding-logo-url"
-                  />
-                  <p className="text-xs text-muted-foreground">Recommended size: 200x50px</p>
+                  <Input id="logo_url" placeholder="https://example.com/logo.png" value={branding.logo_url || ""} onChange={(e) => updateBranding("logo_url", e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="favicon_url">Favicon URL</Label>
-                  <Input 
-                    id="favicon_url" 
-                    placeholder="https://example.com/favicon.ico"
-                    value={branding.favicon_url || ""}
-                    onChange={(e) => updateBranding("favicon_url", e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">32x32px .ico or .png</p>
+                  <Input id="favicon_url" placeholder="https://example.com/favicon.ico" value={branding.favicon_url || ""} onChange={(e) => updateBranding("favicon_url", e.target.value)} />
                 </div>
               </div>
 
               <div className="grid grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="primary_color">Primary Color</Label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="color" 
-                      value={branding.primary_color}
-                      onChange={(e) => updateBranding("primary_color", e.target.value)}
-                      className="h-10 w-14 rounded border cursor-pointer"
-                    />
-                    <Input 
-                      id="primary_color"
-                      value={branding.primary_color}
-                      onChange={(e) => updateBranding("primary_color", e.target.value)}
-                      className="flex-1"
-                      data-testid="branding-primary-color"
-                    />
+                {["primary_color", "secondary_color", "accent_color", "text_on_primary"].map((colorField) => (
+                  <div key={colorField} className="space-y-2">
+                    <Label>{colorField.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</Label>
+                    <div className="flex gap-2">
+                      <input type="color" value={branding[colorField] || "#0066CC"} onChange={(e) => updateBranding(colorField, e.target.value)} className="h-10 w-14 rounded border cursor-pointer" />
+                      <Input value={branding[colorField] || ""} onChange={(e) => updateBranding(colorField, e.target.value)} className="flex-1" />
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="secondary_color">Secondary Color</Label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="color" 
-                      value={branding.secondary_color}
-                      onChange={(e) => updateBranding("secondary_color", e.target.value)}
-                      className="h-10 w-14 rounded border cursor-pointer"
-                    />
-                    <Input 
-                      id="secondary_color"
-                      value={branding.secondary_color}
-                      onChange={(e) => updateBranding("secondary_color", e.target.value)}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="accent_color">Accent Color</Label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="color" 
-                      value={branding.accent_color}
-                      onChange={(e) => updateBranding("accent_color", e.target.value)}
-                      className="h-10 w-14 rounded border cursor-pointer"
-                    />
-                    <Input 
-                      id="accent_color"
-                      value={branding.accent_color}
-                      onChange={(e) => updateBranding("accent_color", e.target.value)}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="text_on_primary">Text on Primary</Label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="color" 
-                      value={branding.text_on_primary}
-                      onChange={(e) => updateBranding("text_on_primary", e.target.value)}
-                      className="h-10 w-14 rounded border cursor-pointer"
-                    />
-                    <Input 
-                      id="text_on_primary"
-                      value={branding.text_on_primary}
-                      onChange={(e) => updateBranding("text_on_primary", e.target.value)}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Font Family</Label>
-                <Select 
-                  value={branding.font_family} 
-                  onValueChange={(value) => updateBranding("font_family", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Inter">Inter (Modern)</SelectItem>
-                    <SelectItem value="Roboto">Roboto (Clean)</SelectItem>
-                    <SelectItem value="Open Sans">Open Sans (Friendly)</SelectItem>
-                    <SelectItem value="Lato">Lato (Professional)</SelectItem>
-                    <SelectItem value="Poppins">Poppins (Bold)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Preview */}
-              <div className="mt-6 p-4 border rounded-lg">
-                <Label className="text-sm text-muted-foreground mb-3 block">Preview</Label>
-                <div 
-                  className="p-4 rounded-lg" 
-                  style={{ backgroundColor: branding.primary_color }}
-                >
-                  <h3 
-                    className="text-lg font-semibold mb-2"
-                    style={{ color: branding.text_on_primary, fontFamily: branding.font_family }}
-                  >
-                    Your Company Name
-                  </h3>
-                  <p 
-                    className="text-sm opacity-90"
-                    style={{ color: branding.text_on_primary, fontFamily: branding.font_family }}
-                  >
-                    Welcome to your customer portal
-                  </p>
-                  <button 
-                    className="mt-3 px-4 py-2 rounded text-sm font-medium"
-                    style={{ 
-                      backgroundColor: branding.accent_color, 
-                      color: branding.text_on_primary,
-                      fontFamily: branding.font_family 
-                    }}
-                  >
-                    Book Service
-                  </button>
-                </div>
+                ))}
               </div>
             </CardContent>
           </Card>
 
           <div className="flex justify-end">
-            <Button 
-              onClick={handleSaveBranding} 
-              className="btn-industrial" 
-              disabled={saving}
-              data-testid="save-branding-settings"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  SAVING...
-                </>
-              ) : (
-                "SAVE BRANDING"
-              )}
+            <Button onClick={handleSave} disabled={saving} className="btn-industrial">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              SAVE CHANGES
             </Button>
           </div>
         </TabsContent>
 
-        {/* Customer Portal Tab */}
+        {/* Portal Tab */}
         <TabsContent value="portal" className="space-y-6">
           <Card>
             <CardHeader>
@@ -437,87 +232,33 @@ export default function SettingsPage() {
                 <Globe className="h-5 w-5" />
                 Customer Portal Settings
               </CardTitle>
-              <CardDescription>
-                Configure your self-service customer portal
-              </CardDescription>
+              <CardDescription>Configure your customer-facing portal</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="portal_title">Portal Title</Label>
-                <Input 
-                  id="portal_title" 
-                  placeholder="Your Company Customer Portal"
-                  value={branding.portal_title || ""}
-                  onChange={(e) => updateBranding("portal_title", e.target.value)}
-                  data-testid="portal-title"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="portal_welcome">Welcome Message</Label>
-                <Textarea 
-                  id="portal_welcome" 
-                  placeholder="Welcome to your customer portal. View appointments, pay invoices, and more."
-                  value={branding.portal_welcome_message || ""}
-                  onChange={(e) => updateBranding("portal_welcome_message", e.target.value)}
-                  rows={2}
-                />
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="portal_support_email">Support Email</Label>
-                  <Input 
-                    id="portal_support_email" 
-                    type="email"
-                    placeholder="support@yourcompany.com"
-                    value={branding.portal_support_email || ""}
-                    onChange={(e) => updateBranding("portal_support_email", e.target.value)}
-                  />
+                  <Label>Portal Title</Label>
+                  <Input value={branding.portal_title || ""} onChange={(e) => updateBranding("portal_title", e.target.value)} placeholder="Customer Portal" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="portal_support_phone">Support Phone</Label>
-                  <Input 
-                    id="portal_support_phone" 
-                    placeholder="+1 (555) 123-4567"
-                    value={branding.portal_support_phone || ""}
-                    onChange={(e) => updateBranding("portal_support_phone", e.target.value)}
-                  />
+                  <Label>Support Phone</Label>
+                  <Input value={branding.portal_support_phone || ""} onChange={(e) => updateBranding("portal_support_phone", e.target.value)} placeholder="+1 (555) 123-4567" />
                 </div>
               </div>
-
-              <div className="space-y-2 pt-4 border-t">
-                <Label htmlFor="custom_domain">Custom Domain</Label>
-                <Input 
-                  id="custom_domain" 
-                  placeholder="portal.yourcompany.com"
-                  value={branding.custom_domain || ""}
-                  onChange={(e) => updateBranding("custom_domain", e.target.value)}
-                  data-testid="custom-domain"
-                />
-                <p className="text-xs text-muted-foreground">
-                  To use a custom domain, add a CNAME record pointing to <code className="bg-muted px-1 rounded">portal.fieldos.com</code>.
-                  Contact support for verification.
-                </p>
+              <div className="space-y-2">
+                <Label>Support Email</Label>
+                <Input type="email" value={branding.portal_support_email || ""} onChange={(e) => updateBranding("portal_support_email", e.target.value)} placeholder="support@company.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>Welcome Message</Label>
+                <Textarea value={branding.portal_welcome_message || ""} onChange={(e) => updateBranding("portal_welcome_message", e.target.value)} placeholder="Welcome to our customer portal..." rows={3} />
               </div>
             </CardContent>
           </Card>
-
           <div className="flex justify-end">
-            <Button 
-              onClick={handleSaveBranding} 
-              className="btn-industrial" 
-              disabled={saving}
-              data-testid="save-portal-settings"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  SAVING...
-                </>
-              ) : (
-                "SAVE PORTAL SETTINGS"
-              )}
+            <Button onClick={handleSave} disabled={saving} className="btn-industrial">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              SAVE CHANGES
             </Button>
           </div>
         </TabsContent>
@@ -527,62 +268,20 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="font-heading flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Messaging Style
+                <Phone className="h-5 w-5" />
+                Twilio SMS Settings
               </CardTitle>
-              <CardDescription>
-                Configure how AI responds to your customers
-              </CardDescription>
+              <CardDescription>Your SMS messaging configuration (managed by admin)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Tone Profile</Label>
-                <Select defaultValue="PROFESSIONAL">
-                  <SelectTrigger data-testid="settings-tone">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PROFESSIONAL">Professional</SelectItem>
-                    <SelectItem value="FRIENDLY">Friendly</SelectItem>
-                    <SelectItem value="BLUE_COLLAR_DIRECT">Blue Collar Direct</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  This affects how AI generates SMS responses
-                </p>
+                <Label>Twilio Phone Number</Label>
+                <Input value={tenant?.twilio_phone_number || ""} disabled className="bg-muted" />
+                <p className="text-xs text-muted-foreground">Contact admin to change</p>
               </div>
-              
               <div className="space-y-2">
-                <Label htmlFor="sms_signature">SMS Signature</Label>
-                <Input 
-                  id="sms_signature" 
-                  placeholder="– Your Company Team"
-                  data-testid="settings-signature"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Added to the end of outbound messages
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email_from_name">Email From Name</Label>
-                <Input 
-                  id="email_from_name" 
-                  placeholder="Your Company"
-                  value={branding.email_from_name || ""}
-                  onChange={(e) => updateBranding("email_from_name", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email_reply_to">Email Reply-To</Label>
-                <Input 
-                  id="email_reply_to" 
-                  type="email"
-                  placeholder="support@yourcompany.com"
-                  value={branding.email_reply_to || ""}
-                  onChange={(e) => updateBranding("email_reply_to", e.target.value)}
-                />
+                <Label>SMS Signature</Label>
+                <Input value={tenant?.sms_signature || ""} onChange={(e) => updateField("sms_signature", e.target.value)} placeholder="- Your Company Name" />
               </div>
             </CardContent>
           </Card>
@@ -590,34 +289,27 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="font-heading flex items-center gap-2">
-                <Phone className="h-5 w-5" />
-                Voice AI Settings
+                <MessageSquare className="h-5 w-5" />
+                Email Settings
               </CardTitle>
-              <CardDescription>
-                Configure your AI phone receptionist
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
-                <div>
-                  <Label className="text-base">Enable Self-Hosted Voice AI</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Use our cost-optimized voice AI instead of third-party services (saves ~70%)
-                  </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>From Name</Label>
+                  <Input value={branding.email_from_name || ""} onChange={(e) => updateBranding("email_from_name", e.target.value)} placeholder="Your Company" />
                 </div>
-                <Switch data-testid="self-hosted-voice-toggle" />
+                <div className="space-y-2">
+                  <Label>Reply-To Email</Label>
+                  <Input type="email" value={branding.email_reply_to || ""} onChange={(e) => updateBranding("email_reply_to", e.target.value)} placeholder="reply@company.com" />
+                </div>
               </div>
-              
-              <p className="text-sm text-muted-foreground">
-                Voice AI automatically answers calls, collects customer information, and books appointments.
-                When enabled, calls to your Twilio number will be handled by our AI receptionist.
-              </p>
             </CardContent>
           </Card>
-
           <div className="flex justify-end">
-            <Button onClick={handleSaveBranding} className="btn-industrial" disabled={saving}>
-              {saving ? "SAVING..." : "SAVE MESSAGING SETTINGS"}
+            <Button onClick={handleSave} disabled={saving} className="btn-industrial">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              SAVE CHANGES
             </Button>
           </div>
         </TabsContent>
@@ -628,62 +320,31 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="font-heading flex items-center gap-2">
                 <Clock className="h-5 w-5" />
-                Scheduling
+                Scheduling Preferences
               </CardTitle>
-              <CardDescription>
-                Configure booking and scheduling options
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Booking Mode</Label>
-                <Select defaultValue="TIME_WINDOWS">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={tenant?.booking_mode || "TIME_WINDOWS"} onValueChange={(v) => updateField("booking_mode", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="TIME_WINDOWS">Time Windows (8am-12pm, etc.)</SelectItem>
-                    <SelectItem value="EXACT_TIMES">Exact Times</SelectItem>
+                    <SelectItem value="TIME_WINDOWS">Time Windows (e.g., 8am-12pm)</SelectItem>
+                    <SelectItem value="EXACT_TIME">Exact Time Slots</SelectItem>
+                    <SelectItem value="CALLBACK">Callback Only</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Morning Window</Label>
-                  <div className="flex gap-2">
-                    <Input type="time" defaultValue="08:00" className="flex-1" />
-                    <span className="flex items-center text-muted-foreground">to</span>
-                    <Input type="time" defaultValue="12:00" className="flex-1" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Afternoon Window</Label>
-                  <div className="flex gap-2">
-                    <Input type="time" defaultValue="12:00" className="flex-1" />
-                    <span className="flex items-center text-muted-foreground">to</span>
-                    <Input type="time" defaultValue="17:00" className="flex-1" />
-                  </div>
-                </div>
-              </div>
-              
               <div className="space-y-2">
-                <Label htmlFor="emergency_rules">Emergency Rules</Label>
-                <Textarea 
-                  id="emergency_rules" 
-                  placeholder="Describe how emergencies should be handled..."
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Instructions for handling emergency service requests
-                </p>
+                <Label>Emergency Rules</Label>
+                <Textarea value={tenant?.emergency_rules || ""} onChange={(e) => updateField("emergency_rules", e.target.value)} placeholder="Define what constitutes an emergency and how to handle them..." rows={3} />
               </div>
             </CardContent>
           </Card>
-
           <div className="flex justify-end">
-            <Button onClick={handleSave} className="btn-industrial" data-testid="save-scheduling-settings">
-              SAVE SCHEDULING SETTINGS
+            <Button onClick={handleSave} disabled={saving} className="btn-industrial">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              SAVE CHANGES
             </Button>
           </div>
         </TabsContent>
