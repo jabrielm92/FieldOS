@@ -2924,8 +2924,7 @@ async def voice_inbound(request: Request):
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    # Use simplified voice AI with Gather (speech-to-text)
-    # This uses Twilio's built-in speech recognition instead of WebSocket streaming
+    # Use ElevenLabs for natural voice
     base_url = os.environ.get('APP_BASE_URL', 'https://smart-field-ops.preview.emergentagent.com')
     
     # Store call context for the conversation
@@ -2945,11 +2944,21 @@ async def voice_inbound(request: Request):
         upsert=True
     )
     
-    # Initial greeting with speech gathering - use neural voice for natural sound
-    # Using Polly.Matthew-Neural for more natural male voice, or Polly.Joanna-Neural for female
+    # Generate greeting with ElevenLabs
+    greeting_text = f"Thanks for calling {tenant.get('name', 'us')}! How can I help you today?"
+    audio_id = f"greeting_{call_sid}"
+    
+    # Store the text to generate audio on-demand
+    await db.voice_audio.update_one(
+        {"audio_id": audio_id},
+        {"$set": {"text": greeting_text, "created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+    
+    # TwiML with Play for ElevenLabs audio + Gather for speech input
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Matthew-Neural">Thanks for calling {tenant.get('name', 'us')}! How can I help you today?</Say>
+    <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
     <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
     </Gather>
     <Say voice="Polly.Matthew-Neural">I didn't catch that. Please leave a message after the beep.</Say>
