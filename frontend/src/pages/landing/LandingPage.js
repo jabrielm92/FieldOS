@@ -462,6 +462,140 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Contact Form Section */}
+      <section id="contact" className="py-20 md:py-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-6">
+                Let's Talk About
+                <span className="block text-blue-400">Your Business</span>
+              </h2>
+              <p className="text-lg text-gray-400 mb-8">
+                Every field service business is unique. Tell us about your challenges and goals, 
+                and we'll show you how FieldOS can be tailored to fit your needs perfectly.
+              </p>
+              
+              <div className="space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <Clock className="h-5 w-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">Quick Response</h4>
+                    <p className="text-sm text-gray-400">We respond to all inquiries within 24 hours</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <Shield className="h-5 w-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">No Pressure</h4>
+                    <p className="text-sm text-gray-400">Honest conversation about whether we're the right fit</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <Target className="h-5 w-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">Custom Solutions</h4>
+                    <p className="text-sm text-gray-400">We adapt FieldOS to match your workflow</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#0d1424] border border-white/10 rounded-2xl p-8">
+              <form onSubmit={handleContactSubmit} className="space-y-5">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Name *</label>
+                    <Input
+                      required
+                      value={contactForm.name}
+                      onChange={(e) => setContactForm({...contactForm, name: e.target.value})}
+                      placeholder="John Smith"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Email *</label>
+                    <Input
+                      required
+                      type="email"
+                      value={contactForm.email}
+                      onChange={(e) => setContactForm({...contactForm, email: e.target.value})}
+                      placeholder="john@company.com"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Phone</label>
+                    <Input
+                      value={contactForm.phone}
+                      onChange={(e) => setContactForm({...contactForm, phone: e.target.value})}
+                      placeholder="(555) 123-4567"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Company</label>
+                    <Input
+                      value={contactForm.company}
+                      onChange={(e) => setContactForm({...contactForm, company: e.target.value})}
+                      placeholder="Your Company"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Message *</label>
+                  <Textarea
+                    required
+                    rows={4}
+                    value={contactForm.message}
+                    onChange={(e) => setContactForm({...contactForm, message: e.target.value})}
+                    placeholder="Tell us about your business and what you're looking to achieve..."
+                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500 resize-none"
+                  />
+                </div>
+                
+                <Button 
+                  type="submit" 
+                  disabled={submitting}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 text-base font-semibold rounded-xl"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-5 w-5" />
+                      Send Message
+                    </>
+                  )}
+                </Button>
+                
+                <p className="text-center text-sm text-gray-500">
+                  Or email us directly at{" "}
+                  <a href="mailto:fieldos@arisolutionsinc.com" className="text-blue-400 hover:text-blue-300">
+                    fieldos@arisolutionsinc.com
+                  </a>
+                </p>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 md:py-32">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
