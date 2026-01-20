@@ -1202,6 +1202,94 @@ async def mark_job_en_route(
     return {"message": "Job marked en-route", "sms_sent": True}
 
 
+class OnMyWayRequest(BaseModel):
+    eta_minutes: int = 30
+    custom_message: Optional[str] = None
+
+
+@v1_router.post("/jobs/{job_id}/on-my-way")
+async def send_on_my_way(
+    job_id: str,
+    data: OnMyWayRequest,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Send 'On My Way' SMS with custom ETA"""
+    job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    customer = await db.customers.find_one({"id": job.get("customer_id")}, {"_id": 0})
+    if not customer or not customer.get("phone"):
+        raise HTTPException(status_code=400, detail="Customer phone not found")
+    
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant or not tenant.get("twilio_phone_number"):
+        raise HTTPException(status_code=400, detail="SMS not configured")
+    
+    tech = await db.technicians.find_one({"id": job.get("assigned_technician_id")}, {"_id": 0}) if job.get("assigned_technician_id") else None
+    tech_name = tech.get("name", "Your technician") if tech else "Your technician"
+    
+    if data.custom_message:
+        message = data.custom_message
+    else:
+        message = f"Hi {customer.get('first_name', 'there')}! {tech_name} from {tenant['name']} is on the way and will arrive in approximately {data.eta_minutes} minutes."
+        if tenant.get("sms_signature"):
+            message += f" {tenant['sms_signature']}"
+    
+    from services.twilio_service import twilio_service
+    await twilio_service.send_sms(to_phone=customer["phone"], message=message, from_phone=tenant["twilio_phone_number"])
+    
+    await db.jobs.update_one({"id": job_id}, {"$set": {"status": JobStatus.EN_ROUTE.value, "en_route_at": datetime.now(timezone.utc).isoformat(), "eta_minutes": data.eta_minutes}})
+    
+    return {"success": True, "message": "On My Way notification sent"}
+
+
+class ReviewRequestPayload(BaseModel):
+    platform: str = "google"
+
+
+@v1_router.post("/jobs/{job_id}/request-review")
+async def request_review(
+    job_id: str,
+    data: ReviewRequestPayload,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Send review request SMS after job completion"""
+    job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.get("status") != JobStatus.COMPLETED.value:
+        raise HTTPException(status_code=400, detail="Job must be completed")
+    
+    customer = await db.customers.find_one({"id": job.get("customer_id")}, {"_id": 0})
+    if not customer or not customer.get("phone"):
+        raise HTTPException(status_code=400, detail="Customer phone not found")
+    
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant or not tenant.get("twilio_phone_number"):
+        raise HTTPException(status_code=400, detail="SMS not configured")
+    
+    branding = tenant.get("branding", {})
+    review_urls = {"google": branding.get("google_review_url", ""), "yelp": branding.get("yelp_review_url", ""), "facebook": branding.get("facebook_review_url", "")}
+    review_url = review_urls.get(data.platform, "")
+    
+    message = f"Hi {customer.get('first_name', 'there')}! Thank you for choosing {tenant['name']}. We hope you're satisfied with our service!"
+    if review_url:
+        message += f" We'd love your feedback: {review_url}"
+    if tenant.get("sms_signature"):
+        message += f" {tenant['sms_signature']}"
+    
+    from services.twilio_service import twilio_service
+    await twilio_service.send_sms(to_phone=customer["phone"], message=message, from_phone=tenant["twilio_phone_number"])
+    
+    await db.jobs.update_one({"id": job_id}, {"$set": {"review_requested_at": datetime.now(timezone.utc).isoformat(), "review_platform": data.platform}})
+    
+    return {"success": True, "message": "Review request sent"}
+
+
 @v1_router.post("/jobs/bulk-delete")
 async def bulk_delete_jobs(
     job_ids: List[str],
