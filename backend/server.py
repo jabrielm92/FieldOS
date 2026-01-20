@@ -5699,6 +5699,70 @@ async def convert_service_request_to_job(
     }
 
 
+# ============= CONTACT FORM API (PUBLIC) =============
+
+class ContactFormRequest(BaseModel):
+    name: str
+    email: str
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    message: str
+
+@api_router.post("/contact")
+async def submit_contact_form(request: ContactFormRequest):
+    """
+    Handle contact form submissions from landing page.
+    Saves to MongoDB and sends email notification via Resend.
+    """
+    import resend
+    
+    # Save to MongoDB
+    contact_id = str(uuid4())
+    contact = {
+        "id": contact_id,
+        "name": request.name,
+        "email": request.email,
+        "phone": request.phone,
+        "company": request.company,
+        "message": request.message,
+        "status": "NEW",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.contact_submissions.insert_one(contact)
+    logger.info(f"Contact form submitted: {contact_id} from {request.email}")
+    
+    # Send email notification via Resend
+    resend_key = os.environ.get('RESEND_API_KEY')
+    if resend_key:
+        try:
+            resend.api_key = resend_key
+            
+            email_html = f"""
+            <h2>New FieldOS Contact Form Submission</h2>
+            <p><strong>Name:</strong> {request.name}</p>
+            <p><strong>Email:</strong> {request.email}</p>
+            <p><strong>Phone:</strong> {request.phone or 'Not provided'}</p>
+            <p><strong>Company:</strong> {request.company or 'Not provided'}</p>
+            <p><strong>Message:</strong></p>
+            <p>{request.message}</p>
+            <hr>
+            <p><small>Submitted at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</small></p>
+            """
+            
+            resend.Emails.send({
+                "from": "FieldOS <noreply@arisolutionsinc.com>",
+                "to": ["fieldos@arisolutionsinc.com"],
+                "subject": f"New Contact: {request.name} - {request.company or 'FieldOS Inquiry'}",
+                "html": email_html
+            })
+            logger.info(f"Contact notification email sent for {contact_id}")
+        except Exception as e:
+            logger.error(f"Failed to send contact notification email: {e}")
+    
+    return {"success": True, "message": "Thank you! We'll be in touch soon."}
+
+
 # ============= HEALTH CHECK =============
 
 @api_router.get("/")
