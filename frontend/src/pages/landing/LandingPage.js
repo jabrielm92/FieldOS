@@ -150,7 +150,7 @@ export default function LandingPage() {
               <Link to="/login">
                 <Button variant="ghost" className="text-gray-300 hover:text-white">Sign In</Button>
               </Link>
-              <a href="https://calendly.com/arisolutionsinc/fieldos-demo" target="_blank" rel="noopener noreferrer">
+              <a href="https://calendly.com/jabriel-arisolutionsinc/30min" target="_blank" rel="noopener noreferrer">
                 <Button className="bg-blue-600 hover:bg-blue-700 text-white">Book a Demo</Button>
               </a>
             </div>
@@ -169,7 +169,7 @@ export default function LandingPage() {
               <a href="#testimonials" className="text-gray-300 hover:text-white py-2">Testimonials</a>
               <a href="#pricing" className="text-gray-300 hover:text-white py-2">Pricing</a>
               <Link to="/login" className="text-gray-300 hover:text-white py-2">Sign In</Link>
-              <a href="https://calendly.com/arisolutionsinc/fieldos-demo" target="_blank" rel="noopener noreferrer">
+              <a href="https://calendly.com/jabriel-arisolutionsinc/30min" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-blue-600 hover:bg-blue-700">Book a Demo</Button>
               </a>
             </div>
@@ -203,7 +203,7 @@ export default function LandingPage() {
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a href="https://calendly.com/arisolutionsinc/fieldos-demo" target="_blank" rel="noopener noreferrer">
+              <a href="https://calendly.com/jabriel-arisolutionsinc/30min" target="_blank" rel="noopener noreferrer">
                 <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-lg rounded-xl">
                   Schedule Your Demo
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -409,7 +409,7 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <a href="https://calendly.com/arisolutionsinc/fieldos-demo" target="_blank" rel="noopener noreferrer" className="block">
+                <a href="https://calendly.com/jabriel-arisolutionsinc/30min" target="_blank" rel="noopener noreferrer" className="block">
                   <Button className={`w-full ${plan.popular ? 'bg-blue-600 hover:bg-blue-700' : 'bg-white/10 hover:bg-white/20'}`}>
                     Book a Call
                     <ChevronRight className="ml-2 h-4 w-4" />
@@ -436,7 +436,7 @@ export default function LandingPage() {
             Join hundreds of field service companies using FieldOS to capture more leads, 
             close more jobs, and grow their revenue.
           </p>
-          <a href="https://calendly.com/arisolutionsinc/fieldos-demo" target="_blank" rel="noopener noreferrer">
+          <a href="https://calendly.com/jabriel-arisolutionsinc/30min" target="_blank" rel="noopener noreferrer">
             <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-6 text-lg rounded-xl">
               Schedule Your Free Demo
               <ArrowRight className="ml-2 h-5 w-5" />
@@ -490,7 +490,7 @@ export default function LandingPage() {
                   </a>
                 </li>
                 <li>
-                  <a href="https://calendly.com/arisolutionsinc/fieldos-demo" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                  <a href="https://calendly.com/jabriel-arisolutionsinc/30min" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
                     Book a Demo
                   </a>
                 </li>
