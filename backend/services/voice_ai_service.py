@@ -80,7 +80,7 @@ class VoiceAIService:
     """
     
     def __init__(self, db_client=None):
-        self.api_key = os.environ.get('EMERGENT_LLM_KEY') or os.environ.get('OPENAI_API_KEY')
+        self.api_key = os.environ.get('OPENAI_API_KEY')
         self.db = db_client
         self.conversation_history: List[Dict] = []
         self.tenant: Optional[Dict] = None
@@ -92,9 +92,6 @@ class VoiceAIService:
         self.is_processing = False
         self.silence_threshold = 0.5  # seconds of silence to detect end of speech
         self.last_audio_time = datetime.now(timezone.utc)
-        
-        # For emergent integration
-        self.use_emergent = bool(os.environ.get('EMERGENT_LLM_KEY'))
         
     async def initialize(self, tenant_id: str, from_phone: str, call_sid: str, db):
         """Initialize conversation context for a new call"""
