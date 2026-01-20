@@ -2951,23 +2951,25 @@ async def voice_inbound(request: Request):
         upsert=True
     )
     
-    # Welcome greeting for ConversationRelay
-    welcome_greeting = f"Thank you for calling {tenant.get('name', 'us')}, this is the scheduling desk. How can I help you today?"
+    # Welcome greeting for ConversationRelay - shorter for faster response
+    welcome_greeting = f"Hi, thanks for calling {tenant.get('name', 'us')}. How can I help you?"
     
     # TwiML with ConversationRelay - real-time WebSocket streaming
-    # Using Google TTS for natural voice (included with ConversationRelay at no extra cost)
+    # Using Google TTS with Standard voice for more natural speech
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
         <ConversationRelay 
             url="{ws_url}/api/v1/voice/conversation/{call_sid}"
             welcomeGreeting="{welcome_greeting}"
-            voice="en-US-Casual-K"
+            voice="en-US-Standard-J"
             language="en-US"
             ttsProvider="google"
             interruptible="true"
             dtmfDetection="true"
             speechModel="phone_call"
+            transcriptionProvider="google"
+            hints="HVAC,heating,cooling,air conditioning,furnace,appointment,schedule,emergency,urgent,address,phone number"
         />
     </Connect>
 </Response>"""
