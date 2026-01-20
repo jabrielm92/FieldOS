@@ -210,33 +210,18 @@ KNOWN CUSTOMER INFO:
             return None
         
         try:
-            if self.use_emergent:
-                # Use emergent integrations
-                from emergentintegrations.llm.transcription import transcribe_audio
-                
-                # Convert raw audio to proper format
-                audio_file = BytesIO(self.audio_buffer)
-                audio_file.name = "audio.wav"
-                
-                result = await transcribe_audio(
-                    api_key=self.api_key,
-                    audio_source=audio_file,
-                    model="whisper-1"
-                )
-                return result.get("text", "")
-            else:
-                # Use OpenAI directly
-                import openai
-                client = openai.AsyncOpenAI(api_key=self.api_key)
-                
-                audio_file = BytesIO(self.audio_buffer)
-                audio_file.name = "audio.wav"
-                
-                transcript = await client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file
-                )
-                return transcript.text
+            # Use OpenAI directly
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=self.api_key)
+            
+            audio_file = BytesIO(self.audio_buffer)
+            audio_file.name = "audio.wav"
+            
+            transcript = await client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file
+            )
+            return transcript.text
                 
         except Exception as e:
             logger.error(f"Transcription error: {e}")
@@ -259,11 +244,7 @@ KNOWN CUSTOMER INFO:
         try:
             # Get available tools
             tools = self._get_available_tools()
-            
-            if self.use_emergent:
-                response_text, action_data = await self._generate_with_emergent(tools)
-            else:
-                response_text, action_data = await self._generate_with_openai(tools)
+            response_text, action_data = await self._generate_with_openai(tools)
             
             # Add response to history
             self.conversation_history.append({
@@ -280,24 +261,6 @@ KNOWN CUSTOMER INFO:
             logger.error(f"Response generation error: {e}")
             fallback = "I apologize, I'm having technical difficulties. Let me transfer you to a team member."
             return await self._text_to_speech(fallback), {"action": "transfer"}
-    
-    async def _generate_with_emergent(self, tools: List[Dict]) -> tuple[str, Optional[Dict]]:
-        """Generate response using emergent integrations"""
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        
-        # Build message history
-        history_text = ""
-        for msg in self.conversation_history[-10:]:
-            role = "Caller" if msg["role"] == "user" else "You"
-            history_text += f"{role}: {msg['content']}\n"
-        
-        system_prompt = self._get_system_prompt()
-        
-        chat = LlmChat(
-            api_key=self.api_key,
-            session_id=f"voice-{self.call_sid}",
-            system_message=system_prompt + f"\n\nConversation so far:\n{history_text}"
-        ).with_model("openai", "gpt-4o")
         
         # Get response
         last_user_msg = self.conversation_history[-1]["content"]
