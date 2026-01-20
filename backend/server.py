@@ -333,8 +333,6 @@ async def create_tenant(data: TenantCreate, current_user: dict = Depends(require
     )
     
     tenant_dict = tenant.model_dump(mode='json')
-    tenant_dict["created_at"] = tenant_dict["created_at"].isoformat()
-    tenant_dict["updated_at"] = tenant_dict["updated_at"].isoformat()
     await db.tenants.insert_one(tenant_dict)
     
     # Create owner user
