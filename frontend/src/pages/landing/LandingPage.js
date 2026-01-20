@@ -184,6 +184,7 @@ export default function LandingPage() {
               <a href="#features" className="text-sm text-gray-300 hover:text-white transition-colors">Features</a>
               <a href="#testimonials" className="text-sm text-gray-300 hover:text-white transition-colors">Testimonials</a>
               <a href="#pricing" className="text-sm text-gray-300 hover:text-white transition-colors">Pricing</a>
+              <a href="#contact" className="text-sm text-gray-300 hover:text-white transition-colors">Contact</a>
               <Link to="/login">
                 <Button variant="ghost" className="text-gray-300 hover:text-white">Sign In</Button>
               </Link>
