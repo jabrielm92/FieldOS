@@ -3319,6 +3319,10 @@ async def _voice_ai_book_job(tenant_id: str, from_phone: str, collected_info: di
         import pytz
         
         tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+        if not tenant:
+            logger.error(f"Tenant not found: {tenant_id}")
+            return {"success": False, "error": "Tenant not found"}
+        
         tenant_tz = pytz.timezone(tenant.get("timezone", "America/New_York"))
         
         # Create or get customer
