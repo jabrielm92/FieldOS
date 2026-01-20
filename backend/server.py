@@ -3180,12 +3180,16 @@ async def voice_process_speech(request: Request):
         if not collected_info.get("phone"):
             collected_info["phone"] = from_phone
         
-        # Update call context
+        # Save AI response to history
+        conversation_history.append({"role": "assistant", "content": response_text})
+        
+        # Update call context with history
         await db.voice_calls.update_one(
             {"call_sid": call_sid},
             {"$set": {
                 "conversation_state": next_state,
                 "collected_info": collected_info,
+                "conversation_history": conversation_history,
                 "last_speech": speech_result,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
