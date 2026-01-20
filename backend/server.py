@@ -2934,35 +2934,39 @@ async def voice_inbound(request: Request):
         "from_phone": from_phone,
         "to_phone": to_phone,
         "tenant_name": tenant.get("name", "our company"),
-        "conversation_state": "greeting"
+        "conversation_state": "greeting",
+        "collected_info": {}
     }
     
-    # Store in database for retrieval during conversation
+    # Store in database
     await db.voice_calls.update_one(
         {"call_sid": call_sid},
         {"$set": call_context},
         upsert=True
     )
     
-    # Generate greeting with ElevenLabs
-    greeting_text = f"Thanks for calling {tenant.get('name', 'us')}! How can I help you today?"
+    # Professional receptionist greeting (matches Vapi prompt)
+    greeting_text = f"Thank you for calling {tenant.get('name', 'us')}, this is the scheduling desk. How can I help you today?"
     audio_id = f"greeting_{call_sid}"
     
-    # Store the text to generate audio on-demand
     await db.voice_audio.update_one(
         {"audio_id": audio_id},
-        {"$set": {"text": greeting_text, "created_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {"text": greeting_text}},
         upsert=True
     )
     
-    # TwiML with Play for ElevenLabs audio + Gather for speech input
+    # TwiML - Play greeting then listen
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
     <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
+        <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
     </Gather>
-    <Say voice="Polly.Matthew-Neural">I didn't catch that. Please leave a message after the beep.</Say>
-    <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
+    <Say voice="Polly.Matthew-Neural">I didn't catch that. Are you still there?</Say>
+    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
+        <Say voice="Polly.Matthew-Neural">Hello?</Say>
+    </Gather>
+    <Say voice="Polly.Matthew-Neural">I'll have someone call you back. Goodbye.</Say>
+    <Hangup/>
 </Response>"""
     
     logger.info(f"Voice AI started for tenant {tenant['id']}, call {call_sid}")
