@@ -216,6 +216,14 @@ class TenantBase(BaseModel):
     voice_collect_fields: List[str] = ["name", "phone", "address", "issue", "urgency"]
     voice_business_hours: Optional[dict] = None  # {"start": "08:00", "end": "18:00", "days": [0,1,2,3,4]}
     voice_after_hours_message: Optional[str] = None
+    
+    # Industry Template
+    industry_template: str = "hvac"  # hvac, plumbing, electrical, landscaping, cleaning, general
+    
+    # Automation Settings
+    auto_review_request_days: int = 3  # Days after job completion to send review request
+    auto_payment_reminder_days: int = 7  # Days after invoice due date to send reminder
+    stripe_secret_key: Optional[str] = None
 
 
 # ============= BRANDING MODELS =============
@@ -242,6 +250,11 @@ class BrandingSettings(BaseModel):
     portal_welcome_message: Optional[str] = None
     portal_support_email: Optional[str] = None
     portal_support_phone: Optional[str] = None
+    
+    # Review URLs
+    google_review_url: Optional[str] = None
+    yelp_review_url: Optional[str] = None
+    facebook_review_url: Optional[str] = None
     
     # Custom domain (placeholder for future)
     custom_domain: Optional[str] = None
