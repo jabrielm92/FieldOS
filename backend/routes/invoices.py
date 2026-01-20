@@ -11,18 +11,24 @@ logger = logging.getLogger(__name__)
 
 # Injected dependencies
 db = None
-get_tenant_id = None
-get_current_user = None
+_get_tenant_id = None
+_get_current_user = None
 serialize_doc = None
 serialize_docs = None
 
-def init_invoice_routes(_db, _get_tenant_id, _get_current_user, _serialize_doc, _serialize_docs):
-    global db, get_tenant_id, get_current_user, serialize_doc, serialize_docs
+def init_invoice_routes(_db, get_tenant_id_fn, get_current_user_fn, _serialize_doc, _serialize_docs):
+    global db, _get_tenant_id, _get_current_user, serialize_doc, serialize_docs
     db = _db
-    get_tenant_id = _get_tenant_id
-    get_current_user = _get_current_user
+    _get_tenant_id = get_tenant_id_fn
+    _get_current_user = get_current_user_fn
     serialize_doc = _serialize_doc
     serialize_docs = _serialize_docs
+
+def get_tenant_id():
+    return Depends(_get_tenant_id)
+
+def get_current_user():
+    return Depends(_get_current_user)
 
 
 class CreatePaymentLinkRequest(BaseModel):
