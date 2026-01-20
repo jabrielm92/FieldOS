@@ -94,6 +94,7 @@ Create a premium "AI-First & Multi-Industry" platform that justifies a ~$500/mon
   - [x] Customize greeting message and system prompt per tenant
   - [x] Set after-hours message per tenant
   - [x] Enable/disable Voice AI per tenant
+  - [x] **Test Voice AI button** - initiate test call to verify configuration
 
 - [x] **Tenant Settings Page (Owner View)**
   - [x] Company settings auto-populated from tenant data
@@ -101,6 +102,32 @@ Create a premium "AI-First & Multi-Industry" platform that justifies a ~$500/mon
   - [x] Customer portal configuration
   - [x] Messaging settings (SMS signature, email from name)
   - [x] Scheduling preferences (booking mode, emergency rules)
+
+### Phase 1: Revenue Loop (Complete - January 2026)
+- [x] **Stripe Payment Integration**
+  - [x] Create Stripe payment links for invoices
+  - [x] Send payment link to customer via SMS
+  - [x] Stripe webhook to auto-mark invoices as paid
+  - [x] Overdue invoice detection and status update
+
+### Phase 2: Customer Experience (Complete - January 2026)
+- [x] **"On My Way" Notifications**
+  - [x] Send SMS with technician ETA
+  - [x] Custom message support
+  - [x] Auto-update job status to EN_ROUTE
+
+- [x] **Review Request System**
+  - [x] Send review request SMS after job completion
+  - [x] Support for Google, Yelp, Facebook review URLs
+  - [x] Track review request timestamp
+
+### Code Architecture (Refactored - January 2026)
+- [x] Created modular route structure in `/backend/routes/`
+  - `admin.py` - Test voice AI, tenant management extensions
+  - `jobs.py` - On My Way, Review Request endpoints
+  - `invoices.py` - Stripe payment links, webhooks
+- [x] Main server.py imports and initializes route modules
+- [x] Dependency injection pattern for database and auth
 
 ---
 
