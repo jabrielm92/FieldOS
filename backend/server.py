@@ -891,7 +891,6 @@ async def create_job(
     )
     
     job_dict = job.model_dump(mode='json')
-    if job_dict.get("exact_arrival_time"):
     await db.jobs.insert_one(job_dict)
     
     # Create a Quote record linked to the job (if quote_amount exists)
