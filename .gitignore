@@ -152,3 +152,6 @@ frontend/node_modules/.cache/default-development/9.pack
 # Environment files
 *.env
 *.env.*
+
+# Emergent platform files
+.emergent/
