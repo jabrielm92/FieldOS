@@ -9,26 +9,26 @@ import logging
 router = APIRouter(tags=["invoices"])
 logger = logging.getLogger(__name__)
 
-# Injected dependencies
-db = None
-_get_tenant_id = None
-_get_current_user = None
-serialize_doc = None
-serialize_docs = None
+# These will be set by init
+_db = None
+_get_tenant_id_fn = None
+_get_current_user_fn = None
+_serialize_doc = None
+_serialize_docs = None
 
-def init_invoice_routes(_db, get_tenant_id_fn, get_current_user_fn, _serialize_doc, _serialize_docs):
-    global db, _get_tenant_id, _get_current_user, serialize_doc, serialize_docs
-    db = _db
-    _get_tenant_id = get_tenant_id_fn
-    _get_current_user = get_current_user_fn
-    serialize_doc = _serialize_doc
-    serialize_docs = _serialize_docs
+def init_invoice_routes(db, get_tenant_id_fn, get_current_user_fn, serialize_doc, serialize_docs):
+    global _db, _get_tenant_id_fn, _get_current_user_fn, _serialize_doc, _serialize_docs
+    _db = db
+    _get_tenant_id_fn = get_tenant_id_fn
+    _get_current_user_fn = get_current_user_fn
+    _serialize_doc = serialize_doc
+    _serialize_docs = serialize_docs
 
-def get_tenant_id():
-    return Depends(_get_tenant_id)
+async def get_tenant():
+    return await _get_tenant_id_fn()
 
-def get_current_user():
-    return Depends(_get_current_user)
+async def get_user():
+    return await _get_current_user_fn()
 
 
 class CreatePaymentLinkRequest(BaseModel):
