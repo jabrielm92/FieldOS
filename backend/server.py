@@ -5895,6 +5895,85 @@ async def submit_contact_form(request: ContactFormRequest):
     return {"success": True, "message": "Thank you! We'll be in touch soon."}
 
 
+# ============= REVENUE REPORTS =============
+
+@v1_router.get("/reports/revenue")
+async def get_revenue_report(
+    start_date: str = None,
+    end_date: str = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get revenue report with payment tracking"""
+    if not end_date:
+        end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    if not start_date:
+        start_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%d')
+    
+    invoices = await db.invoices.find({
+        "tenant_id": tenant_id,
+        "created_at": {"$gte": start_date, "$lte": end_date + "T23:59:59"}
+    }, {"_id": 0}).to_list(10000)
+    
+    total_invoiced = sum(float(inv.get('total', 0)) for inv in invoices)
+    total_paid = sum(float(inv.get('total', 0)) for inv in invoices if inv.get('status') == 'PAID')
+    total_outstanding = sum(float(inv.get('total', 0)) for inv in invoices if inv.get('status') in ['SENT', 'PENDING'])
+    total_overdue = sum(float(inv.get('total', 0)) for inv in invoices if inv.get('status') == 'OVERDUE')
+    
+    jobs = await db.jobs.find({"tenant_id": tenant_id, "created_at": {"$gte": start_date}}, {"_id": 0}).to_list(10000)
+    revenue_by_type = {}
+    for job in jobs:
+        jtype = job.get('job_type', 'OTHER')
+        revenue_by_type[jtype] = revenue_by_type.get(jtype, 0) + float(job.get('quoted_amount', 0))
+    
+    daily_revenue = {}
+    for inv in invoices:
+        if inv.get('status') == 'PAID' and inv.get('paid_at'):
+            day = inv['paid_at'][:10]
+            daily_revenue[day] = daily_revenue.get(day, 0) + float(inv.get('total', 0))
+    
+    return {
+        "period": {"start": start_date, "end": end_date},
+        "summary": {
+            "total_invoiced": round(total_invoiced, 2),
+            "total_paid": round(total_paid, 2),
+            "total_outstanding": round(total_outstanding, 2),
+            "total_overdue": round(total_overdue, 2),
+            "collection_rate": round(total_paid / total_invoiced * 100, 1) if total_invoiced > 0 else 0
+        },
+        "invoices_count": {
+            "total": len(invoices),
+            "paid": len([i for i in invoices if i.get('status') == 'PAID']),
+            "outstanding": len([i for i in invoices if i.get('status') in ['SENT', 'PENDING']]),
+            "overdue": len([i for i in invoices if i.get('status') == 'OVERDUE'])
+        },
+        "revenue_by_job_type": revenue_by_type,
+        "daily_revenue": dict(sorted(daily_revenue.items()))
+    }
+
+
+# ============= INDUSTRY TEMPLATES =============
+
+INDUSTRY_TEMPLATES = {
+    "hvac": {"name": "HVAC", "job_types": ["AC Repair", "Heating Repair", "AC Installation", "Furnace Installation", "Maintenance", "Duct Cleaning"], "default_greeting": "Thank you for calling. How can I help with your heating or cooling needs today?"},
+    "plumbing": {"name": "Plumbing", "job_types": ["Leak Repair", "Drain Cleaning", "Water Heater", "Toilet Repair", "Faucet Install", "Pipe Repair"], "default_greeting": "Thank you for calling. What plumbing issue can I help you with today?"},
+    "electrical": {"name": "Electrical", "job_types": ["Outlet Repair", "Panel Upgrade", "Wiring", "Lighting Install", "Generator", "EV Charger"], "default_greeting": "Thank you for calling. What electrical issue can I help you with?"},
+    "landscaping": {"name": "Landscaping", "job_types": ["Lawn Care", "Tree Service", "Irrigation", "Hardscape", "Design", "Seasonal Cleanup"], "default_greeting": "Thank you for calling. How can I help with your landscaping needs?"},
+    "cleaning": {"name": "Cleaning", "job_types": ["Regular Cleaning", "Deep Clean", "Move-In/Out", "Post-Construction", "Carpet Cleaning"], "default_greeting": "Thank you for calling. What type of cleaning service are you looking for?"},
+    "general": {"name": "General Contractor", "job_types": ["Repair", "Installation", "Maintenance", "Inspection", "Consultation"], "default_greeting": "Thank you for calling. How can I help you today?"}
+}
+
+@v1_router.get("/templates/industries")
+async def get_industry_templates():
+    return INDUSTRY_TEMPLATES
+
+@v1_router.get("/templates/industries/{industry}")
+async def get_industry_template(industry: str):
+    if industry not in INDUSTRY_TEMPLATES:
+        raise HTTPException(status_code=404, detail="Industry template not found")
+    return INDUSTRY_TEMPLATES[industry]
+
+
 # ============= HEALTH CHECK =============
 
 @api_router.get("/")
