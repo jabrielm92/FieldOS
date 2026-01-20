@@ -13,7 +13,13 @@ Create a premium "AI-First & Multi-Industry" platform that justifies a ~$500/mon
 - **Backend:** FastAPI (Python) on port 8001
 - **Frontend:** React with Shadcn/UI on port 3000
 - **Database:** MongoDB
-- **Integrations:** Twilio (SMS/Voice), OpenAI (via Emergent LLM Key), Vapi (Voice AI)
+- **Integrations:** Twilio (SMS/Voice + ConversationRelay), OpenAI (via Emergent LLM Key)
+
+## Deployment
+- **Backend:** Railway (supports WebSockets for ConversationRelay)
+- **Frontend:** Vercel
+- **Database:** MongoDB Atlas
+- See `/backend/DEPLOY_RAILWAY.md` and `/frontend/DEPLOY_VERCEL.md`
 
 ---
 
