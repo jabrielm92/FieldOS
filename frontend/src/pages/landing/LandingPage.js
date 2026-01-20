@@ -1,12 +1,17 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
+import { toast } from "sonner";
 import { 
   Phone, Calendar, Users, BarChart3, MessageSquare, Zap, 
   Shield, Clock, DollarSign, ChevronRight, Star, Check,
   Headphones, Bot, FileText, Send, Target, TrendingUp,
-  Menu, X, ArrowRight
+  Menu, X, ArrowRight, Mail, Loader2
 } from "lucide-react";
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const features = [
   {
