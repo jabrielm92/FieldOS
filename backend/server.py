@@ -3247,15 +3247,32 @@ CRITICAL RULES:
                 sms_result = await twilio_service.send_sms(to_phone=confirmed_phone, body=sms_body)
                 logger.info(f"SMS result: {sms_result}")
                 
+                # Generate final message with ElevenLabs
+                final_text = f"{response_text} Your quote is ${quote_amount:.2f}. I've sent a confirmation text to your phone. Thanks for calling {tenant_name}!"
+                audio_id = f"final_{call_sid}"
+                await db.voice_audio.update_one(
+                    {"audio_id": audio_id},
+                    {"$set": {"text": final_text, "created_at": datetime.now(timezone.utc).isoformat()}},
+                    upsert=True
+                )
+                
                 twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Matthew-Neural">{response_text} Your quote is ${quote_amount:.2f}. I've sent a confirmation text to your phone. Thanks for calling {tenant_name}!</Say>
+    <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
     <Hangup/>
 </Response>"""
             else:
+                error_text = "I apologize, I wasn't able to complete your booking. One of our team members will call you back shortly. Thanks for calling!"
+                audio_id = f"error_{call_sid}"
+                await db.voice_audio.update_one(
+                    {"audio_id": audio_id},
+                    {"$set": {"text": error_text, "created_at": datetime.now(timezone.utc).isoformat()}},
+                    upsert=True
+                )
+                
                 twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Matthew-Neural">I apologize, I wasn't able to complete your booking. One of our team members will call you back shortly. Thanks for calling!</Say>
+    <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
     <Hangup/>
 </Response>"""
             
@@ -3271,19 +3288,34 @@ CRITICAL RULES:
                 speech_transcript=speech_result
             )
             
+            goodbye_text = f"{response_text} Thanks for calling {tenant_name}. Goodbye!"
+            audio_id = f"goodbye_{call_sid}"
+            await db.voice_audio.update_one(
+                {"audio_id": audio_id},
+                {"$set": {"text": goodbye_text, "created_at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True
+            )
+            
             twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Matthew-Neural">{response_text} Thanks for calling {tenant_name}. Goodbye!</Say>
+    <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
     <Hangup/>
 </Response>"""
             return Response(content=twiml, media_type="application/xml")
         
         else:
-            # Continue conversation - use enhanced speech recognition and auto timeout
+            # Continue conversation - use ElevenLabs for response
+            audio_id = f"response_{call_sid}_{next_state}"
+            await db.voice_audio.update_one(
+                {"audio_id": audio_id},
+                {"$set": {"text": response_text, "created_at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True
+            )
+            
             twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
-        <Say voice="Polly.Matthew-Neural">{response_text}</Say>
+        <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
     </Gather>
     <Say voice="Polly.Matthew-Neural">I didn't catch that. Let me transfer you to leave a message.</Say>
     <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
