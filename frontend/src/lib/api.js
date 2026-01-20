@@ -102,6 +102,8 @@ export const jobAPI = {
   update: (id, data) => api.put(`/jobs/${id}`, data),
   markEnRoute: (id) => api.post(`/jobs/${id}/en-route`),
   bulkDelete: (ids) => api.post('/jobs/bulk-delete', ids),
+  sendOnMyWay: (id, data) => api.post(`/jobs/${id}/on-my-way`, data),
+  requestReview: (id, data) => api.post(`/jobs/${id}/request-review`, data),
 };
 
 // Quote APIs
