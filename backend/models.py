@@ -192,7 +192,30 @@ class TenantBase(BaseModel):
     
     # Voice AI Configuration
     voice_ai_enabled: bool = False
-    use_self_hosted_voice: bool = False  # If False, use Vapi
+    use_self_hosted_voice: bool = True  # Self-hosted by default
+    
+    # Twilio Voice Credentials (per-tenant)
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_api_key_sid: Optional[str] = None
+    twilio_api_key_secret: Optional[str] = None
+    
+    # OpenAI Configuration (per-tenant)
+    openai_api_key: Optional[str] = None
+    
+    # ElevenLabs Configuration (per-tenant) 
+    elevenlabs_api_key: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None
+    
+    # Voice AI Settings
+    voice_provider: str = "elevenlabs"  # elevenlabs, twilio
+    voice_model: str = "eleven_turbo_v2_5"
+    voice_name: Optional[str] = None
+    voice_greeting: Optional[str] = None
+    voice_system_prompt: Optional[str] = None
+    voice_collect_fields: List[str] = ["name", "phone", "address", "issue", "urgency"]
+    voice_business_hours: Optional[dict] = None  # {"start": "08:00", "end": "18:00", "days": [0,1,2,3,4]}
+    voice_after_hours_message: Optional[str] = None
 
 
 # ============= BRANDING MODELS =============
