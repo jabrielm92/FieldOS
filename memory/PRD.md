@@ -79,6 +79,29 @@ Create a premium "AI-First & Multi-Industry" platform that justifies a ~$500/mon
   - [x] Auto-create lead and quote on conversion
   - [x] SMS confirmation sent to customer
 
+### Superadmin Dashboard (Complete - January 2026)
+- [x] **Tenant Management**
+  - [x] Create tenants with owner accounts
+  - [x] Edit tenant settings (name, contact, timezone, tone profile)
+  - [x] Delete tenants with all associated data
+  - [x] View storage/document usage per tenant
+
+- [x] **Voice AI Onboarding (Admin)**
+  - [x] Configure Twilio credentials per tenant (Account SID, Auth Token, API Keys)
+  - [x] Configure OpenAI API key per tenant
+  - [x] Configure ElevenLabs API key and Voice ID per tenant
+  - [x] Set voice provider (ElevenLabs or Twilio TTS)
+  - [x] Customize greeting message and system prompt per tenant
+  - [x] Set after-hours message per tenant
+  - [x] Enable/disable Voice AI per tenant
+
+- [x] **Tenant Settings Page (Owner View)**
+  - [x] Company settings auto-populated from tenant data
+  - [x] Branding customization (logo, colors, fonts)
+  - [x] Customer portal configuration
+  - [x] Messaging settings (SMS signature, email from name)
+  - [x] Scheduling preferences (booking mode, emergency rules)
+
 ---
 
 ## PENDING FEATURES
