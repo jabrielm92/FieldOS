@@ -110,24 +110,41 @@ Create a premium "AI-First & Multi-Industry" platform that justifies a ~$500/mon
   - [x] Stripe webhook to auto-mark invoices as paid
   - [x] Overdue invoice detection and status update
 
+- [x] **Revenue Reports**
+  - [x] GET /reports/revenue - comprehensive revenue analytics
+  - [x] Total invoiced, paid, outstanding, overdue amounts
+  - [x] Collection rate percentage
+  - [x] Revenue breakdown by job type
+  - [x] Daily revenue tracking
+
 ### Phase 2: Customer Experience (Complete - January 2026)
 - [x] **"On My Way" Notifications**
-  - [x] Send SMS with technician ETA
+  - [x] POST /jobs/{id}/on-my-way - Send SMS with custom ETA
   - [x] Custom message support
   - [x] Auto-update job status to EN_ROUTE
 
 - [x] **Review Request System**
-  - [x] Send review request SMS after job completion
+  - [x] POST /jobs/{id}/request-review - Send review request SMS
   - [x] Support for Google, Yelp, Facebook review URLs
+  - [x] Review URLs stored in tenant branding settings
   - [x] Track review request timestamp
+
+### Phase 4: Multi-Industry & Automation (Complete - January 2026)
+- [x] **Industry Templates**
+  - [x] GET /templates/industries - list all templates
+  - [x] Templates: HVAC, Plumbing, Electrical, Landscaping, Cleaning, General
+  - [x] Each template includes: job types, default greeting, collect fields
+
+- [x] **Automation Features**
+  - [x] Auto review request scheduling (configurable days after job completion)
+  - [x] Auto payment reminder for overdue invoices (configurable days)
+  - [x] Scheduler jobs run daily for both features
 
 ### Code Architecture (Refactored - January 2026)
 - [x] Created modular route structure in `/backend/routes/`
   - `admin.py` - Test voice AI, tenant management extensions
-  - `jobs.py` - On My Way, Review Request endpoints
-  - `invoices.py` - Stripe payment links, webhooks
-- [x] Main server.py imports and initializes route modules
-- [x] Dependency injection pattern for database and auth
+- [x] Main server.py contains core endpoints with inline feature additions
+- [x] Scheduler.py handles all automated background jobs
 
 ---
 
