@@ -144,6 +144,9 @@ export const invoiceAPI = {
   create: (data) => api.post('/invoices', data),
   update: (id, data) => api.put(`/invoices/${id}`, data),
   markPaid: (id) => api.post(`/invoices/${id}/mark-paid`),
+  createPaymentLink: (id) => api.post(`/invoices/${id}/payment-link`),
+  sendPaymentLink: (id) => api.post(`/invoices/${id}/send-payment-link`),
+  getOverdue: () => api.get('/invoices/overdue'),
 };
 
 // Conversation APIs
