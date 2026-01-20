@@ -50,6 +50,12 @@ export const adminAPI = {
   getTenantStorage: (tenantId) => api.get(`/admin/tenants/${tenantId}/storage`),
 };
 
+// Settings APIs
+export const settingsAPI = {
+  getTenantSettings: () => api.get('/settings/tenant'),
+  updateTenantSettings: (data) => api.put('/settings/tenant', data),
+};
+
 // Customer APIs
 export const customerAPI = {
   list: (filters = {}) => api.get('/customers', { params: filters }),
