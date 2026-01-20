@@ -63,7 +63,7 @@ railway variables set APP_BASE_URL="https://your-railway-url.up.railway.app"
 | MONGO_URL | MongoDB Atlas connection string |
 | DB_NAME | Database name (fieldos) |
 | JWT_SECRET | Secret for JWT tokens |
-| EMERGENT_LLM_KEY | Emergent universal LLM key |
+| OPENAI_API_KEY | Your OpenAI API key |
 | TWILIO_ACCOUNT_SID | Twilio Account SID |
 | TWILIO_AUTH_TOKEN | Twilio Auth Token |
 | TWILIO_MESSAGING_SERVICE_SID | Twilio Messaging Service |
