@@ -3176,6 +3176,22 @@ async def voice_process_speech(request: Request):
         action = ai_response.get("action")
         response_text = ai_response.get("response_text", "Got it.")
         
+        # Auto-detect if we should book when all info is collected
+        has_name = bool(collected_info.get("name"))
+        has_phone = collected_info.get("phone_confirmed", False) or bool(collected_info.get("phone"))
+        has_address = collected_info.get("address_confirmed", False) or bool(collected_info.get("address"))
+        has_issue = bool(collected_info.get("issue"))
+        has_urgency = bool(collected_info.get("urgency"))
+        
+        # If all info collected and user confirmed/agreed, trigger booking
+        all_info_collected = has_name and has_phone and has_address and has_issue and has_urgency
+        user_confirmed = any(word in speech_result.lower() for word in ["yes", "yeah", "works", "good", "okay", "ok", "sure", "fine", "correct", "right"])
+        
+        if all_info_collected and user_confirmed and action != "book_job":
+            logger.info(f"Auto-triggering booking - all info collected and user confirmed")
+            action = "book_job"
+            next_state = "booking_complete"
+        
         # Ensure we have phone from caller ID if not provided differently
         if not collected_info.get("phone"):
             collected_info["phone"] = from_phone
