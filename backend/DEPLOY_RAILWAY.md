@@ -32,7 +32,7 @@ railway link
 railway variables set MONGO_URL="mongodb+srv://user:pass@cluster.mongodb.net/fieldos"
 railway variables set DB_NAME="fieldos"
 railway variables set JWT_SECRET="your-secure-secret-key"
-railway variables set EMERGENT_LLM_KEY="sk-emergent-xxx"
+railway variables set OPENAI_API_KEY="sk-your-openai-key"
 railway variables set TWILIO_ACCOUNT_SID="ACxxx"
 railway variables set TWILIO_AUTH_TOKEN="xxx"
 railway variables set TWILIO_MESSAGING_SERVICE_SID="MGxxx"
