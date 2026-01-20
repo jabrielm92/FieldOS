@@ -264,8 +264,8 @@ KNOWN CUSTOMER INFO:
     
     async def _generate_with_openai(self, tools: List[Dict]) -> tuple[str, Optional[Dict]]:
         """Generate response using OpenAI directly with function calling"""
-        import openai
-        client = openai.AsyncOpenAI(api_key=self.api_key)
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=self.api_key)
         
         messages = [
             {"role": "system", "content": self._get_system_prompt()},
