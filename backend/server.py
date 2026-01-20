@@ -340,7 +340,7 @@ async def create_tenant(data: TenantCreate, current_user: dict = Depends(require
         sms_signature=data.sms_signature
     )
     
-    tenant_dict = tenant.model_dump()
+    tenant_dict = tenant.model_dump(mode='json')
     tenant_dict["created_at"] = tenant_dict["created_at"].isoformat()
     tenant_dict["updated_at"] = tenant_dict["updated_at"].isoformat()
     await db.tenants.insert_one(tenant_dict)
@@ -443,10 +443,10 @@ async def create_customer(
     
     customer = Customer(
         tenant_id=tenant_id,
-        **data.model_dump()
+        **data.model_dump(mode='json')
     )
     
-    customer_dict = customer.model_dump()
+    customer_dict = customer.model_dump(mode='json')
     customer_dict["created_at"] = customer_dict["created_at"].isoformat()
     customer_dict["updated_at"] = customer_dict["updated_at"].isoformat()
     await db.customers.insert_one(customer_dict)
@@ -462,7 +462,7 @@ async def update_customer(
     current_user: dict = Depends(get_current_user)
 ):
     """Update customer"""
-    update_data = data.model_dump()
+    update_data = data.model_dump(mode='json')
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     result = await db.customers.update_one(
@@ -562,10 +562,10 @@ async def create_property(
     
     prop = Property(
         tenant_id=tenant_id,
-        **data.model_dump()
+        **data.model_dump(mode='json')
     )
     
-    prop_dict = prop.model_dump()
+    prop_dict = prop.model_dump(mode='json')
     prop_dict["created_at"] = prop_dict["created_at"].isoformat()
     prop_dict["updated_at"] = prop_dict["updated_at"].isoformat()
     await db.properties.insert_one(prop_dict)
@@ -581,7 +581,7 @@ async def update_property(
     current_user: dict = Depends(get_current_user)
 ):
     """Update property"""
-    update_data = data.model_dump()
+    update_data = data.model_dump(mode='json')
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     result = await db.properties.update_one(
@@ -619,10 +619,10 @@ async def create_technician(
     """Create a new technician"""
     tech = Technician(
         tenant_id=tenant_id,
-        **data.model_dump()
+        **data.model_dump(mode='json')
     )
     
-    tech_dict = tech.model_dump()
+    tech_dict = tech.model_dump(mode='json')
     tech_dict["created_at"] = tech_dict["created_at"].isoformat()
     tech_dict["updated_at"] = tech_dict["updated_at"].isoformat()
     await db.technicians.insert_one(tech_dict)
@@ -638,7 +638,7 @@ async def update_technician(
     current_user: dict = Depends(get_current_user)
 ):
     """Update technician"""
-    update_data = data.model_dump()
+    update_data = data.model_dump(mode='json')
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     result = await db.technicians.update_one(
@@ -742,10 +742,10 @@ async def create_lead(
     
     lead = Lead(
         tenant_id=tenant_id,
-        **data.model_dump()
+        **data.model_dump(mode='json')
     )
     
-    lead_dict = lead.model_dump()
+    lead_dict = lead.model_dump(mode='json')
     lead_dict["created_at"] = lead_dict["created_at"].isoformat()
     lead_dict["updated_at"] = lead_dict["updated_at"].isoformat()
     lead_dict["first_contact_at"] = lead_dict["first_contact_at"].isoformat()
@@ -763,7 +763,7 @@ async def update_lead(
     current_user: dict = Depends(get_current_user)
 ):
     """Update lead"""
-    update_data = data.model_dump()
+    update_data = data.model_dump(mode='json')
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     update_data["last_activity_at"] = datetime.now(timezone.utc).isoformat()
     
@@ -894,7 +894,7 @@ async def create_job(
         raise HTTPException(status_code=404, detail="Property not found")
     
     # Get lead urgency for quote calculation if not already provided
-    job_data = data.model_dump()
+    job_data = data.model_dump(mode='json')
     if not job_data.get("quote_amount") and data.lead_id:
         lead = await db.leads.find_one({"id": data.lead_id}, {"_id": 0, "urgency": 1})
         lead_urgency = lead.get("urgency") if lead else None
@@ -910,7 +910,7 @@ async def create_job(
         **job_data
     )
     
-    job_dict = job.model_dump()
+    job_dict = job.model_dump(mode='json')
     job_dict["created_at"] = job_dict["created_at"].isoformat()
     job_dict["updated_at"] = job_dict["updated_at"].isoformat()
     job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
@@ -942,7 +942,7 @@ async def create_job(
             status=QuoteStatus.SENT
         )
         
-        quote_dict = quote.model_dump()
+        quote_dict = quote.model_dump(mode='json')
         quote_dict["created_at"] = quote_dict["created_at"].isoformat()
         quote_dict["updated_at"] = quote_dict["updated_at"].isoformat()
         quote_dict["sent_at"] = datetime.now(timezone.utc).isoformat()
@@ -988,7 +988,7 @@ async def update_job(
     current_user: dict = Depends(get_current_user)
 ):
     """Update job"""
-    update_data = data.model_dump()
+    update_data = data.model_dump(mode='json')
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     update_data["service_window_start"] = update_data["service_window_start"].isoformat()
     update_data["service_window_end"] = update_data["service_window_end"].isoformat()
@@ -1059,7 +1059,7 @@ async def mark_job_en_route(
                 content=message,
                 metadata={"twilio_sid": result.get("provider_message_id")}
             )
-            msg_dict = msg.model_dump()
+            msg_dict = msg.model_dump(mode='json')
             msg_dict["created_at"] = msg_dict["created_at"].isoformat()
             await db.messages.insert_one(msg_dict)
     
@@ -1112,10 +1112,10 @@ async def create_quote(
     """Create a new quote"""
     quote = Quote(
         tenant_id=tenant_id,
-        **data.model_dump()
+        **data.model_dump(mode='json')
     )
     
-    quote_dict = quote.model_dump()
+    quote_dict = quote.model_dump(mode='json')
     quote_dict["created_at"] = quote_dict["created_at"].isoformat()
     quote_dict["updated_at"] = quote_dict["updated_at"].isoformat()
     await db.quotes.insert_one(quote_dict)
@@ -1131,7 +1131,7 @@ async def update_quote(
     current_user: dict = Depends(get_current_user)
 ):
     """Update quote"""
-    update_data = data.model_dump()
+    update_data = data.model_dump(mode='json')
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     result = await db.quotes.update_one(
@@ -1215,10 +1215,10 @@ async def create_invoice(
     
     invoice = Invoice(
         tenant_id=tenant_id,
-        **data.model_dump()
+        **data.model_dump(mode='json')
     )
     
-    invoice_dict = invoice.model_dump()
+    invoice_dict = invoice.model_dump(mode='json')
     invoice_dict["created_at"] = invoice_dict["created_at"].isoformat()
     invoice_dict["updated_at"] = invoice_dict["updated_at"].isoformat()
     await db.invoices.insert_one(invoice_dict)
@@ -1234,7 +1234,7 @@ async def update_invoice(
     current_user: dict = Depends(get_current_user)
 ):
     """Update invoice"""
-    update_data = data.model_dump()
+    update_data = data.model_dump(mode='json')
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     result = await db.invoices.update_one(
@@ -1414,7 +1414,7 @@ async def send_message(
         metadata={"twilio_sid": twilio_result.get("provider_message_id") if twilio_result else None}
     )
     
-    msg_dict = msg.model_dump()
+    msg_dict = msg.model_dump(mode='json')
     msg_dict["created_at"] = msg_dict["created_at"].isoformat()
     await db.messages.insert_one(msg_dict)
     
@@ -1458,10 +1458,10 @@ async def create_campaign(
     
     campaign = Campaign(
         tenant_id=tenant_id,
-        **data.model_dump()
+        **data.model_dump(mode='json')
     )
     
-    campaign_dict = campaign.model_dump()
+    campaign_dict = campaign.model_dump(mode='json')
     campaign_dict["created_at"] = campaign_dict["created_at"].isoformat()
     campaign_dict["updated_at"] = campaign_dict["updated_at"].isoformat()
     await db.campaigns.insert_one(campaign_dict)
@@ -1477,7 +1477,7 @@ async def update_campaign(
     current_user: dict = Depends(get_current_user)
 ):
     """Update campaign"""
-    update_data = data.model_dump()
+    update_data = data.model_dump(mode='json')
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     result = await db.campaigns.update_one(
@@ -1682,7 +1682,7 @@ async def start_campaign(
             customer_id=customer["id"],
             status=RecipientStatus.PENDING
         )
-        recipient_dict = recipient.model_dump()
+        recipient_dict = recipient.model_dump(mode='json')
         await db.campaign_recipients.insert_one(recipient_dict)
         recipients_created += 1
     
@@ -1805,7 +1805,7 @@ async def send_campaign_batch(
                     channel=PreferredChannel.SMS,
                     content=message
                 )
-                msg_dict = msg.model_dump()
+                msg_dict = msg.model_dump(mode='json')
                 msg_dict["created_at"] = msg_dict["created_at"].isoformat()
                 msg_dict["metadata"] = {"campaign_id": campaign_id, "twilio_sid": result.get("provider_message_id")}
                 await db.messages.insert_one(msg_dict)
@@ -2097,7 +2097,7 @@ async def start_campaign_with_selected_customers(
             customer_id=customer["id"],
             status=RecipientStatus.PENDING
         )
-        recipient_dict = recipient.model_dump()
+        recipient_dict = recipient.model_dump(mode='json')
         await db.campaign_recipients.insert_one(recipient_dict)
         recipients_created += 1
     
@@ -2251,7 +2251,7 @@ async def vapi_create_lead(
 ):
     """Create lead from Vapi call"""
     try:
-        logger.info(f"Vapi create-lead called with data: {data.model_dump()}")
+        logger.info(f"Vapi create-lead called with data: {data.model_dump(mode='json')}")
         
         # Get tenant by slug
         tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
@@ -2318,7 +2318,7 @@ async def vapi_create_lead(
                 phone=phone,
                 email=email
             )
-            customer_dict = customer.model_dump()
+            customer_dict = customer.model_dump(mode='json')
             customer_dict["created_at"] = customer_dict["created_at"].isoformat()
             customer_dict["updated_at"] = customer_dict["updated_at"].isoformat()
             await db.customers.insert_one(customer_dict)
@@ -2335,7 +2335,7 @@ async def vapi_create_lead(
                 state=state or "",
                 postal_code=postal_code or ""
             )
-            prop_dict = prop.model_dump()
+            prop_dict = prop.model_dump(mode='json')
             prop_dict["created_at"] = prop_dict["created_at"].isoformat()
             prop_dict["updated_at"] = prop_dict["updated_at"].isoformat()
             await db.properties.insert_one(prop_dict)
@@ -2360,7 +2360,7 @@ async def vapi_create_lead(
             urgency=urgency_value,
             description=description
         )
-        lead_dict = lead.model_dump()
+        lead_dict = lead.model_dump(mode='json')
         lead_dict["caller_name"] = name  # Store caller name directly on lead
         lead_dict["caller_phone"] = phone  # Store caller phone directly on lead
         lead_dict["created_at"] = lead_dict["created_at"].isoformat()
@@ -2382,7 +2382,7 @@ async def vapi_create_lead(
                 lead_id=lead.id,
                 primary_channel=PreferredChannel.SMS
             )
-            conv_dict = new_conv.model_dump()
+            conv_dict = new_conv.model_dump(mode='json')
             conv_dict["created_at"] = conv_dict["created_at"].isoformat()
             conv_dict["updated_at"] = conv_dict["updated_at"].isoformat()
             await db.conversations.insert_one(conv_dict)
@@ -2658,7 +2658,7 @@ async def vapi_book_job(
         quote_amount=quote_amount
     )
     
-    job_dict = job.model_dump()
+    job_dict = job.model_dump(mode='json')
     job_dict["created_at"] = job_dict["created_at"].isoformat()
     job_dict["updated_at"] = job_dict["updated_at"].isoformat()
     job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
@@ -2687,7 +2687,7 @@ async def vapi_book_job(
         status=QuoteStatus.SENT  # Auto-sent since job is booked
     )
     
-    quote_dict = quote.model_dump()
+    quote_dict = quote.model_dump(mode='json')
     quote_dict["created_at"] = quote_dict["created_at"].isoformat()
     quote_dict["updated_at"] = quote_dict["updated_at"].isoformat()
     quote_dict["sent_at"] = datetime.now(timezone.utc).isoformat()
@@ -2739,7 +2739,7 @@ async def vapi_book_job(
                 channel=PreferredChannel.SMS,
                 content=message
             )
-            msg_dict = msg.model_dump()
+            msg_dict = msg.model_dump(mode='json')
             msg_dict["created_at"] = msg_dict["created_at"].isoformat()
             msg_dict["metadata"] = {"twilio_sid": sms_result.get("provider_message_id"), "job_id": job.id}
             await db.messages.insert_one(msg_dict)
@@ -2775,7 +2775,7 @@ async def vapi_book_job(
                 channel=PreferredChannel.SMS,
                 content=quote_message
             )
-            quote_msg_dict = quote_msg.model_dump()
+            quote_msg_dict = quote_msg.model_dump(mode='json')
             quote_msg_dict["created_at"] = quote_msg_dict["created_at"].isoformat()
             quote_msg_dict["metadata"] = {"twilio_sid": quote_sms_result.get("provider_message_id"), "quote_id": quote.id}
             await db.messages.insert_one(quote_msg_dict)
@@ -2868,7 +2868,7 @@ async def vapi_call_summary(
         metadata={"vapi_session_id": data.vapi_session_id}
     )
     
-    msg_dict = msg.model_dump()
+    msg_dict = msg.model_dump(mode='json')
     msg_dict["created_at"] = msg_dict["created_at"].isoformat()
     await db.messages.insert_one(msg_dict)
     
@@ -3810,7 +3810,7 @@ async def submit_web_form(data: WebFormLeadRequest):
         caller_name=data.name,
         caller_phone=phone
     )
-    lead_dict = lead.model_dump()
+    lead_dict = lead.model_dump(mode='json')
     lead_dict["id"] = lead_id
     lead_dict["created_at"] = lead_dict["created_at"].isoformat()
     lead_dict["updated_at"] = lead_dict["updated_at"].isoformat()
@@ -3879,7 +3879,7 @@ async def submit_web_form(data: WebFormLeadRequest):
                 channel=PreferredChannel.SMS,
                 content=initial_msg
             )
-            msg_dict = msg.model_dump()
+            msg_dict = msg.model_dump(mode='json')
             msg_dict["created_at"] = msg_dict["created_at"].isoformat()
             msg_dict["metadata"] = {
                 "source": "web_form_ai_booking",
@@ -3990,7 +3990,7 @@ async def sms_inbound(request: Request):
             last_name="",
             phone=from_phone
         )
-        customer_dict = customer.model_dump()
+        customer_dict = customer.model_dump(mode='json')
         customer_dict["created_at"] = customer_dict["created_at"].isoformat()
         customer_dict["updated_at"] = customer_dict["updated_at"].isoformat()
         await db.customers.insert_one(customer_dict)
@@ -4010,7 +4010,7 @@ async def sms_inbound(request: Request):
             primary_channel=PreferredChannel.SMS,
             status=ConversationStatus.OPEN
         )
-        conv_dict = conv.model_dump()
+        conv_dict = conv.model_dump(mode='json')
         conv_dict["created_at"] = conv_dict["created_at"].isoformat()
         conv_dict["updated_at"] = conv_dict["updated_at"].isoformat()
         await db.conversations.insert_one(conv_dict)
@@ -4026,7 +4026,7 @@ async def sms_inbound(request: Request):
         channel=PreferredChannel.SMS,
         content=body
     )
-    msg_dict = msg.model_dump()
+    msg_dict = msg.model_dump(mode='json')
     msg_dict["created_at"] = msg_dict["created_at"].isoformat()
     await db.messages.insert_one(msg_dict)
     
@@ -4120,7 +4120,7 @@ async def sms_inbound(request: Request):
                     content=ai_result["response_text"],
                     metadata={"twilio_sid": sms_result.get("provider_message_id"), "ai_booking": True}
                 )
-                ai_msg_dict = ai_msg.model_dump()
+                ai_msg_dict = ai_msg.model_dump(mode='json')
                 ai_msg_dict["created_at"] = ai_msg_dict["created_at"].isoformat()
                 await db.messages.insert_one(ai_msg_dict)
                 
@@ -4180,7 +4180,7 @@ async def sms_inbound(request: Request):
                                 quote_amount=quote_amount
                             )
                             
-                            job_dict = job.model_dump()
+                            job_dict = job.model_dump(mode='json')
                             job_dict["created_at"] = job_dict["created_at"].isoformat()
                             job_dict["updated_at"] = job_dict["updated_at"].isoformat()
                             job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
@@ -4197,7 +4197,7 @@ async def sms_inbound(request: Request):
                                 description=f"{job_type_str} - {booking_context.get('issue_description', 'Service')}",
                                 status=QuoteStatus.SENT
                             )
-                            quote_dict = quote.model_dump()
+                            quote_dict = quote.model_dump(mode='json')
                             quote_dict["created_at"] = quote_dict["created_at"].isoformat()
                             quote_dict["updated_at"] = quote_dict["updated_at"].isoformat()
                             quote_dict["sent_at"] = datetime.now(timezone.utc).isoformat()
@@ -4233,7 +4233,7 @@ async def sms_inbound(request: Request):
                                 content=quote_msg,
                                 metadata={"quote_id": quote.id, "job_id": job.id}
                             )
-                            quote_sms_dict = quote_sms_msg.model_dump()
+                            quote_sms_dict = quote_sms_msg.model_dump(mode='json')
                             quote_sms_dict["created_at"] = quote_sms_dict["created_at"].isoformat()
                             await db.messages.insert_one(quote_sms_dict)
                             
@@ -4311,7 +4311,7 @@ async def sms_inbound(request: Request):
                     content=ai_response,
                     metadata={"twilio_sid": result.get("provider_message_id")}
                 )
-                ai_msg_dict = ai_msg.model_dump()
+                ai_msg_dict = ai_msg.model_dump(mode='json')
                 ai_msg_dict["created_at"] = ai_msg_dict["created_at"].isoformat()
                 await db.messages.insert_one(ai_msg_dict)
                 
