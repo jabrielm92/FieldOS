@@ -5700,6 +5700,41 @@ async def convert_service_request_to_job(
     }
 
 
+# ============= INITIAL SETUP (ONE-TIME) =============
+
+@api_router.post("/setup/admin")
+async def setup_admin_user():
+    """
+    One-time setup to create the superadmin user.
+    Only works if no superadmin exists.
+    """
+    # Check if superadmin already exists
+    existing = await db.users.find_one({"role": "SUPERADMIN"}, {"_id": 0})
+    if existing:
+        return {"success": False, "message": "Admin user already exists"}
+    
+    # Create superadmin
+    user_id = str(uuid4())
+    password_hash = pwd_context.hash("Finao028!")
+    
+    admin_user = {
+        "id": user_id,
+        "email": "jabriel@arisolutionsinc.com",
+        "password_hash": password_hash,
+        "name": "Jabriel Martinez",
+        "role": "SUPERADMIN",
+        "tenant_id": None,
+        "status": "ACTIVE",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.insert_one(admin_user)
+    logger.info(f"Created superadmin user: {admin_user['email']}")
+    
+    return {"success": True, "message": "Admin user created successfully", "email": admin_user["email"]}
+
+
 # ============= CONTACT FORM API (PUBLIC) =============
 
 class ContactFormRequest(BaseModel):
