@@ -2868,13 +2868,16 @@ async def vapi_call_summary(
     return {"success": True, "message_id": msg.id}
 
 
-# ============= SELF-HOSTED VOICE AI (TWILIO) =============
+# ============= SELF-HOSTED VOICE AI (TWILIO CONVERSATIONRELAY) =============
+
+# Store active ConversationRelay handlers
+conversation_relay_handlers = {}
 
 @v1_router.post("/voice/inbound")
 async def voice_inbound(request: Request):
     """
     Handle inbound voice call from Twilio.
-    Returns TwiML to connect to WebSocket for streaming.
+    Returns TwiML with ConversationRelay for real-time WebSocket streaming.
     """
     form_data = await request.form()
     call_sid = form_data.get("CallSid", "")
@@ -2915,17 +2918,21 @@ async def voice_inbound(request: Request):
     
     # Check if tenant has self-hosted voice enabled
     if not tenant.get("use_self_hosted_voice", False):
-        # Fall back to Vapi or simple message
+        # Fall back to voicemail
         logger.info(f"Self-hosted voice not enabled for tenant {tenant['id']}, using fallback")
+        base_url = os.environ.get('APP_BASE_URL', 'https://voice-receptionist-4.preview.emergentagent.com')
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep and we will call you back shortly.</Say>
-    <Record maxLength="120" action="/api/v1/voice/recording-complete" />
+    <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    # Use ElevenLabs for natural voice
+    # Use ConversationRelay for real-time streaming
     base_url = os.environ.get('APP_BASE_URL', 'https://voice-receptionist-4.preview.emergentagent.com')
+    
+    # Convert https to wss for WebSocket URL
+    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
     
     # Store call context for the conversation
     call_context = {
@@ -2934,8 +2941,7 @@ async def voice_inbound(request: Request):
         "from_phone": from_phone,
         "to_phone": to_phone,
         "tenant_name": tenant.get("name", "our company"),
-        "conversation_state": "greeting",
-        "collected_info": {}
+        "started_at": datetime.now(timezone.utc).isoformat()
     }
     
     # Store in database
@@ -2945,32 +2951,135 @@ async def voice_inbound(request: Request):
         upsert=True
     )
     
-    # Professional receptionist greeting (matches Vapi prompt)
-    greeting_text = f"Thank you for calling {tenant.get('name', 'us')}, this is the scheduling desk. How can I help you today?"
-    audio_id = f"greeting_{call_sid}"
+    # Welcome greeting for ConversationRelay
+    welcome_greeting = f"Thank you for calling {tenant.get('name', 'us')}, this is the scheduling desk. How can I help you today?"
     
-    await db.voice_audio.update_one(
-        {"audio_id": audio_id},
-        {"$set": {"text": greeting_text}},
-        upsert=True
-    )
-    
-    # TwiML - Play greeting then listen
+    # TwiML with ConversationRelay - real-time WebSocket streaming
+    # Using Google TTS for natural voice (included with ConversationRelay at no extra cost)
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
-        <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
-    </Gather>
-    <Say voice="Polly.Matthew-Neural">I didn't catch that. Are you still there?</Say>
-    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
-        <Say voice="Polly.Matthew-Neural">Hello?</Say>
-    </Gather>
-    <Say voice="Polly.Matthew-Neural">I'll have someone call you back. Goodbye.</Say>
-    <Hangup/>
+    <Connect>
+        <ConversationRelay 
+            url="{ws_url}/api/v1/voice/conversation/{call_sid}"
+            welcomeGreeting="{welcome_greeting}"
+            voice="en-US-Casual-K"
+            language="en-US"
+            ttsProvider="google"
+            interruptible="true"
+            dtmfDetection="true"
+            speechModel="phone_call"
+        />
+    </Connect>
 </Response>"""
     
-    logger.info(f"Voice AI started for tenant {tenant['id']}, call {call_sid}")
+    logger.info(f"ConversationRelay started for tenant {tenant['id']}, call {call_sid}")
     return Response(content=twiml, media_type="application/xml")
+
+
+@app.websocket("/api/v1/voice/conversation/{call_sid}")
+async def voice_conversation_websocket(websocket: WebSocket, call_sid: str):
+    """
+    WebSocket endpoint for Twilio ConversationRelay.
+    Handles real-time voice conversation with AI.
+    """
+    await websocket.accept()
+    logger.info(f"ConversationRelay WebSocket connected for call {call_sid}")
+    
+    from services.conversation_relay import ConversationRelayHandler
+    
+    handler = None
+    
+    try:
+        # Get call context from database
+        call_context = await db.voice_calls.find_one({"call_sid": call_sid}, {"_id": 0})
+        
+        if not call_context:
+            logger.error(f"No call context found for {call_sid}")
+            await websocket.close()
+            return
+        
+        tenant_id = call_context.get("tenant_id")
+        tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+        
+        if not tenant:
+            logger.error(f"Tenant not found: {tenant_id}")
+            await websocket.close()
+            return
+        
+        # Initialize conversation handler
+        handler = ConversationRelayHandler(
+            db=db,
+            call_sid=call_sid,
+            tenant=tenant,
+            caller_phone=call_context.get("from_phone", "")
+        )
+        
+        # Store handler reference
+        conversation_relay_handlers[call_sid] = handler
+        
+        while True:
+            # Receive message from Twilio ConversationRelay
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            
+            event_type = message.get("type")
+            logger.debug(f"ConversationRelay event: {event_type}")
+            
+            if event_type == "setup":
+                # Initial setup message
+                await handler.handle_setup(message)
+                
+            elif event_type == "prompt":
+                # Caller spoke - process their speech
+                response_text = await handler.handle_prompt(message)
+                
+                if response_text:
+                    # Send response back to be spoken
+                    # Stream as tokens for lower latency
+                    words = response_text.split()
+                    for i, word in enumerate(words):
+                        is_last = (i == len(words) - 1)
+                        token = word + (" " if not is_last else "")
+                        
+                        await websocket.send_text(json.dumps({
+                            "type": "text",
+                            "token": token,
+                            "last": is_last
+                        }))
+                
+            elif event_type == "interrupt":
+                # Caller interrupted during TTS
+                await handler.handle_interrupt(message)
+                
+            elif event_type == "dtmf":
+                # DTMF key press
+                response_text = await handler.handle_dtmf(message)
+                if response_text:
+                    await websocket.send_text(json.dumps({
+                        "type": "text",
+                        "token": response_text,
+                        "last": True
+                    }))
+                
+            elif event_type == "error":
+                # Error from ConversationRelay
+                await handler.handle_error(message)
+                
+            elif event_type == "end":
+                # Call is ending
+                logger.info(f"ConversationRelay call ending: {call_sid}")
+                break
+                
+    except WebSocketDisconnect:
+        logger.info(f"ConversationRelay WebSocket disconnected: {call_sid}")
+    except Exception as e:
+        logger.error(f"ConversationRelay error for {call_sid}: {e}")
+    finally:
+        # Cleanup
+        if handler:
+            await handler.handle_end()
+        if call_sid in conversation_relay_handlers:
+            del conversation_relay_handlers[call_sid]
 
 
 @v1_router.get("/voice/audio/{audio_id}")
