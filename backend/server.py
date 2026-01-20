@@ -3171,8 +3171,10 @@ async def voice_process_speech(request: Request):
         )
     
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from openai import AsyncOpenAI
         from services.voice_ai_prompt import get_voice_ai_prompt
+        
+        client = AsyncOpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
         
         # Get conversation history from call context
         conversation_history = call_context.get("conversation_history", [])
@@ -3185,21 +3187,20 @@ async def voice_process_speech(request: Request):
             conversation_state=conversation_state
         )
         
-        # Build full context including history
-        history_context = "\n\n## Recent Conversation:\n"
-        for msg in conversation_history[-6:]:  # Last 6 exchanges
-            role = "Caller" if msg["role"] == "user" else "You"
-            history_context += f"{role}: {msg['content']}\n"
+        # Build messages
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in conversation_history[-6:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": "Respond to the caller. Follow the order: Name → Phone → Address → Issue → Urgency → Book"})
         
-        full_prompt = system_prompt + history_context
+        response_obj = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=300
+        )
         
-        chat = LlmChat(
-            api_key=os.environ.get('EMERGENT_LLM_KEY'),
-            session_id=f"voice-{call_sid}-{len(conversation_history)}",  # Unique per turn
-            system_message=full_prompt
-        ).with_model("openai", "gpt-4o-mini")
-        
-        response = await chat.send_message(UserMessage(text=f"Respond to the caller. Remember to follow the EXACT order: Name → Phone → Address → Issue → Urgency → Book"))
+        response = response_obj.choices[0].message.content
         
         # Parse AI response
         try:
