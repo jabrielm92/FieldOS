@@ -45,6 +45,9 @@ export const adminAPI = {
   getTenants: () => api.get('/admin/tenants'),
   createTenant: (data) => api.post('/admin/tenants', data),
   getTenantDetail: (tenantId) => api.get(`/admin/tenants/${tenantId}`),
+  updateTenant: (tenantId, data) => api.put(`/admin/tenants/${tenantId}`, data),
+  deleteTenant: (tenantId) => api.delete(`/admin/tenants/${tenantId}`),
+  getTenantStorage: (tenantId) => api.get(`/admin/tenants/${tenantId}/storage`),
 };
 
 // Customer APIs
