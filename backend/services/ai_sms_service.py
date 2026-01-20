@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
+from openai import AsyncOpenAI
 
 load_dotenv()
 
@@ -61,9 +62,9 @@ class AiSmsService:
     """Service for AI-powered SMS conversations"""
     
     def __init__(self):
-        self.api_key = os.environ.get('EMERGENT_LLM_KEY')
+        self.api_key = os.environ.get('OPENAI_API_KEY')
         if not self.api_key:
-            logger.warning("EMERGENT_LLM_KEY not found in environment")
+            logger.warning("OPENAI_API_KEY not found in environment")
     
     async def process_sms_reply(
         self,
@@ -81,14 +82,14 @@ class AiSmsService:
                 "booking_data": dict or None  # Job booking details if action is book_job
             }
         """
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        
         if not self.api_key:
             return {
                 "response_text": "Thanks for your message! A team member will reach out shortly.",
                 "action": None,
                 "booking_data": None
             }
+        
+        client = AsyncOpenAI(api_key=self.api_key)
         
         # Build system prompt with context
         import pytz
@@ -104,34 +105,25 @@ class AiSmsService:
             current_datetime=current_time.strftime("%A, %B %d, %Y at %I:%M %p")
         )
         
-        # Initialize chat with session ID based on conversation
-        session_id = f"sms-booking-{conversation_context.get('conversation_id', 'unknown')}"
-        
-        # Build conversation history string for context
+        # Build conversation history
         history = conversation_context.get("message_history", [])
-        history_str = ""
-        for msg in history[-8:]:  # Last 8 messages for context
-            role = "Customer" if msg.get("direction") == "INBOUND" else "Assistant"
-            history_str += f"{role}: {msg.get('content', '')}\n"
+        messages = [{"role": "system", "content": system_prompt}]
         
-        # Include history in the prompt
-        full_prompt = system_prompt
-        if history_str:
-            full_prompt += f"\n\nCONVERSATION SO FAR:\n{history_str}"
+        for msg in history[-8:]:
+            role = "user" if msg.get("direction") == "INBOUND" else "assistant"
+            messages.append({"role": role, "content": msg.get("content", "")})
         
-        chat = LlmChat(
-            api_key=self.api_key,
-            session_id=session_id,
-            system_message=full_prompt
-        ).with_model("openai", "gpt-4o")
+        messages.append({"role": "user", "content": customer_message})
         
-        # Send current message and get response
         try:
-            user_msg = UserMessage(text=f"Customer says: {customer_message}")
-            ai_response = await chat.send_message(user_msg)
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=200
+            )
             
-            # Check if response contains booking JSON
-            response_text = ai_response.strip()
+            response_text = response.choices[0].message.content.strip()
             action = None
             booking_data = None
             
@@ -141,8 +133,7 @@ class AiSmsService:
                     booking_data = json.loads(response_text)
                     if booking_data.get("action") == "book_job" and booking_data.get("confirmed"):
                         action = "book_job"
-                        # Generate confirmation message
-                        response_text = f"Perfect! I've booked your {booking_data.get('job_type', 'service').lower()} appointment for {booking_data.get('date')} in the {booking_data.get('time_slot', 'morning')}. You'll receive a confirmation with your quote shortly!"
+                        response_text = f"Perfect! I've booked your {booking_data.get('job_type', 'service').lower()} appointment for {booking_data.get('date')} in the {booking_data.get('time_slot', 'morning')}. You'll receive a confirmation shortly!"
                 except json.JSONDecodeError:
                     pass
             
@@ -155,7 +146,7 @@ class AiSmsService:
         except Exception as e:
             logger.error(f"AI SMS processing error: {e}")
             return {
-                "response_text": "Thanks for your message! A team member will follow up with you shortly.",
+                "response_text": "Thanks for your message! A team member will follow up shortly.",
                 "action": None,
                 "booking_data": None
             }
@@ -167,29 +158,30 @@ class AiSmsService:
         company_name: str
     ) -> str:
         """Generate the initial AI greeting message for webform leads"""
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        
         if not self.api_key:
-            return f"Hi {customer_name}! Thanks for reaching out to {company_name} about: {issue_description[:50]}. When would be a good time for us to come take a look? We have morning, afternoon, or evening slots available."
+            return f"Hi {customer_name}! Thanks for reaching out to {company_name} about: {issue_description[:50]}. When would be a good time for us to come take a look?"
         
         try:
-            chat = LlmChat(
-                api_key=self.api_key,
-                session_id=f"initial-{datetime.now().timestamp()}",
-                system_message=f"""You are a friendly SMS assistant for {company_name}. Generate a SHORT (under 160 chars) greeting for a new customer inquiry. Be warm but professional. Ask about their availability for an appointment.
-
-Customer: {customer_name}
-Their issue: {issue_description}
-
-Generate ONLY the SMS message text, nothing else."""
-            ).with_model("openai", "gpt-4o")
+            client = AsyncOpenAI(api_key=self.api_key)
             
-            response = await chat.send_message(UserMessage(text="Generate the greeting"))
-            return response.strip()
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": f"""Generate a SHORT (under 160 chars) SMS greeting for {company_name}. Be warm but professional. Ask about availability.
+Customer: {customer_name}
+Issue: {issue_description}
+Output ONLY the SMS text."""},
+                    {"role": "user", "content": "Generate the greeting"}
+                ],
+                temperature=0.7,
+                max_tokens=100
+            )
+            
+            return response.choices[0].message.content.strip()
             
         except Exception as e:
             logger.error(f"Error generating initial message: {e}")
-            return f"Hi {customer_name}! Thanks for contacting {company_name}. We received your request about: {issue_description[:40]}. When works best for an appointment - morning, afternoon, or evening?"
+            return f"Hi {customer_name}! Thanks for contacting {company_name}. When works best for an appointment - morning, afternoon, or evening?"
 
 
 # Singleton instance
