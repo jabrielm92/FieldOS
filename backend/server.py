@@ -240,14 +240,6 @@ async def login(request: LoginRequest):
     """Authenticate user and return JWT token"""
     user = await db.users.find_one({"email": request.email}, {"_id": 0})
     
-    # Debug logging
-    if user:
-        logger.info(f"Login attempt for {request.email} - user found, role: {user.get('role')}")
-        has_hash = bool(user.get("password_hash"))
-        logger.info(f"Has password_hash: {has_hash}")
-    else:
-        logger.info(f"Login attempt for {request.email} - user NOT found")
-    
     if not user or not verify_password(request.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
