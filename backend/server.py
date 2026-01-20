@@ -375,9 +375,103 @@ async def get_tenant_detail(tenant_id: str, current_user: dict = Depends(require
         "customers_total": await db.customers.count_documents({"tenant_id": tenant_id}),
         "technicians_total": await db.technicians.count_documents({"tenant_id": tenant_id}),
         "quotes_total": await db.quotes.count_documents({"tenant_id": tenant_id}),
+        "invoices_total": await db.invoices.count_documents({"tenant_id": tenant_id}),
+        "campaigns_total": await db.campaigns.count_documents({"tenant_id": tenant_id}),
+        "conversations_total": await db.conversations.count_documents({"tenant_id": tenant_id}),
+        "messages_total": await db.messages.count_documents({"tenant_id": tenant_id}),
     }
     
     return {**serialize_doc(tenant), "stats": stats}
+
+
+class TenantUpdate(BaseModel):
+    name: Optional[str] = None
+    timezone: Optional[str] = None
+    primary_contact_name: Optional[str] = None
+    primary_contact_email: Optional[str] = None
+    primary_phone: Optional[str] = None
+    booking_mode: Optional[str] = None
+    tone_profile: Optional[str] = None
+    twilio_phone_number: Optional[str] = None
+    twilio_messaging_service_sid: Optional[str] = None
+    sms_signature: Optional[str] = None
+    service_area: Optional[List[str]] = None
+
+
+@v1_router.put("/admin/tenants/{tenant_id}")
+async def update_tenant(tenant_id: str, data: TenantUpdate, current_user: dict = Depends(require_superadmin)):
+    """Update tenant details"""
+    tenant = await db.tenants.find_one({"id": tenant_id})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    update_data = {k: v for k, v in data.model_dump(mode='json').items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.tenants.update_one({"id": tenant_id}, {"$set": update_data})
+    
+    updated = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    return serialize_doc(updated)
+
+
+@v1_router.delete("/admin/tenants/{tenant_id}")
+async def delete_tenant(tenant_id: str, current_user: dict = Depends(require_superadmin)):
+    """Delete tenant and ALL associated data"""
+    tenant = await db.tenants.find_one({"id": tenant_id})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    # Delete all tenant data
+    await db.users.delete_many({"tenant_id": tenant_id})
+    await db.customers.delete_many({"tenant_id": tenant_id})
+    await db.properties.delete_many({"tenant_id": tenant_id})
+    await db.technicians.delete_many({"tenant_id": tenant_id})
+    await db.leads.delete_many({"tenant_id": tenant_id})
+    await db.jobs.delete_many({"tenant_id": tenant_id})
+    await db.quotes.delete_many({"tenant_id": tenant_id})
+    await db.invoices.delete_many({"tenant_id": tenant_id})
+    await db.conversations.delete_many({"tenant_id": tenant_id})
+    await db.messages.delete_many({"tenant_id": tenant_id})
+    await db.campaigns.delete_many({"tenant_id": tenant_id})
+    await db.campaign_recipients.delete_many({"tenant_id": tenant_id})
+    
+    # Delete tenant
+    await db.tenants.delete_one({"id": tenant_id})
+    
+    return {"success": True, "message": f"Tenant {tenant['name']} and all data deleted"}
+
+
+@v1_router.get("/admin/tenants/{tenant_id}/storage")
+async def get_tenant_storage(tenant_id: str, current_user: dict = Depends(require_superadmin)):
+    """Get detailed storage/data usage for a tenant"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    # Count documents in each collection
+    collections = {
+        "users": await db.users.count_documents({"tenant_id": tenant_id}),
+        "customers": await db.customers.count_documents({"tenant_id": tenant_id}),
+        "properties": await db.properties.count_documents({"tenant_id": tenant_id}),
+        "technicians": await db.technicians.count_documents({"tenant_id": tenant_id}),
+        "leads": await db.leads.count_documents({"tenant_id": tenant_id}),
+        "jobs": await db.jobs.count_documents({"tenant_id": tenant_id}),
+        "quotes": await db.quotes.count_documents({"tenant_id": tenant_id}),
+        "invoices": await db.invoices.count_documents({"tenant_id": tenant_id}),
+        "conversations": await db.conversations.count_documents({"tenant_id": tenant_id}),
+        "messages": await db.messages.count_documents({"tenant_id": tenant_id}),
+        "campaigns": await db.campaigns.count_documents({"tenant_id": tenant_id}),
+        "campaign_recipients": await db.campaign_recipients.count_documents({"tenant_id": tenant_id}),
+    }
+    
+    total_documents = sum(collections.values())
+    
+    return {
+        "tenant_id": tenant_id,
+        "tenant_name": tenant["name"],
+        "collections": collections,
+        "total_documents": total_documents,
+    }
 
 
 # ============= CUSTOMERS ENDPOINTS =============
