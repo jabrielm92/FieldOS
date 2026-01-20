@@ -261,15 +261,6 @@ KNOWN CUSTOMER INFO:
             logger.error(f"Response generation error: {e}")
             fallback = "I apologize, I'm having technical difficulties. Let me transfer you to a team member."
             return await self._text_to_speech(fallback), {"action": "transfer"}
-        
-        # Get response
-        last_user_msg = self.conversation_history[-1]["content"]
-        response = await chat.send_message(UserMessage(text=f"Caller says: {last_user_msg}"))
-        
-        # Check for JSON action commands
-        action_data = self._parse_action(response)
-        
-        return response.strip(), action_data
     
     async def _generate_with_openai(self, tools: List[Dict]) -> tuple[str, Optional[Dict]]:
         """Generate response using OpenAI directly with function calling"""
