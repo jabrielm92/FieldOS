@@ -471,9 +471,14 @@ Keep responses concise and conversational. Ask one question at a time.`;
             </Tabs>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={loading}>{loading ? "Saving..." : "Save Configuration"}</Button>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button type="button" variant="outline" onClick={handleTestCall} disabled={testingCall || !formData.voice_ai_enabled}>
+              {testingCall ? "Calling..." : "Test Voice AI"}
+            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="submit" disabled={loading}>{loading ? "Saving..." : "Save Configuration"}</Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
