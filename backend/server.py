@@ -3138,7 +3138,7 @@ async def voice_process_speech(request: Request):
     
     logger.info(f"Voice AI processing: '{speech_result}' from {from_phone}")
     
-    base_url = os.environ.get('APP_BASE_URL', 'https://voice-receptionist-4.preview.emergentagent.com')
+    base_url = os.environ.get('APP_BASE_URL', 'https://ops-service.preview.emergentagent.com')
     
     # Get call context
     call_context = await db.voice_calls.find_one({"call_sid": call_sid}, {"_id": 0})
