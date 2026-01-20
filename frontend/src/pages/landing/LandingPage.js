@@ -206,6 +206,7 @@ export default function LandingPage() {
               <a href="#features" className="text-gray-300 hover:text-white py-2">Features</a>
               <a href="#testimonials" className="text-gray-300 hover:text-white py-2">Testimonials</a>
               <a href="#pricing" className="text-gray-300 hover:text-white py-2">Pricing</a>
+              <a href="#contact" className="text-gray-300 hover:text-white py-2">Contact</a>
               <Link to="/login" className="text-gray-300 hover:text-white py-2">Sign In</Link>
               <a href="https://calendly.com/jabriel-arisolutionsinc/30min" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-blue-600 hover:bg-blue-700">Book a Demo</Button>
