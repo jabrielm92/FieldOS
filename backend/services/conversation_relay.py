@@ -138,35 +138,33 @@ async def get_ai_response(
     conversation_history: list
 ) -> Dict[str, Any]:
     """
-    Get AI response using OpenAI via Emergent LLM Key.
+    Get AI response using OpenAI directly.
     Returns structured response with text and state updates.
     """
-    from emergentintegrations.llm.chat import chat, Message, Model
+    from openai import AsyncOpenAI
     
+    client = AsyncOpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     system_prompt = get_system_prompt(company_name, caller_phone, collected_info, state)
     
     # Build messages
-    messages = [Message(role="system", content=system_prompt)]
+    messages = [{"role": "system", "content": system_prompt}]
     
     # Add conversation history (last 10 exchanges max)
     for msg in conversation_history[-20:]:
-        messages.append(Message(role=msg["role"], content=msg["content"]))
+        messages.append({"role": msg["role"], "content": msg["content"]})
     
     # Add current user input
-    messages.append(Message(role="user", content=user_input))
+    messages.append({"role": "user", "content": user_input})
     
     try:
-        emergent_key = os.environ.get('EMERGENT_LLM_KEY')
-        
-        response = await chat(
-            api_key=emergent_key,
-            model=Model.OPENAI_GPT4O_MINI,
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=messages,
             temperature=0.7,
             max_tokens=300
         )
         
-        response_text = response.message.content.strip()
+        response_text = response.choices[0].message.content.strip()
         logger.info(f"AI raw response: {response_text}")
         
         # Parse JSON response
@@ -186,7 +184,6 @@ async def get_ai_response(
             }
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse AI JSON: {e}. Raw: {response_text}")
-            # Return raw text as response if JSON parsing fails
             return {
                 "response_text": response_text if len(response_text) < 200 else "I'm sorry, could you repeat that?",
                 "next_state": state,
