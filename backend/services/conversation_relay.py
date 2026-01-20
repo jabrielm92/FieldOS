@@ -5,8 +5,9 @@ Real-time WebSocket streaming for natural voice conversations
 import os
 import json
 import logging
+import re
 from typing import Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -15,94 +16,117 @@ logger = logging.getLogger(__name__)
 STATE_GREETING = "greeting"
 STATE_COLLECTING_NAME = "collecting_name"
 STATE_CONFIRMING_PHONE = "confirming_phone"
+STATE_COLLECTING_NEW_PHONE = "collecting_new_phone"
 STATE_COLLECTING_ADDRESS = "collecting_address"
 STATE_CONFIRMING_ADDRESS = "confirming_address"
 STATE_COLLECTING_ISSUE = "collecting_issue"
 STATE_COLLECTING_URGENCY = "collecting_urgency"
 STATE_OFFERING_TIMES = "offering_times"
+STATE_CONFIRMING_TIME = "confirming_time"
 STATE_BOOKING_COMPLETE = "booking_complete"
 STATE_ENDED = "ended"
 
 
+def format_phone_for_speech(phone: str) -> str:
+    """Format phone number for natural speech with pauses"""
+    if not phone:
+        return ""
+    # Remove non-digits
+    digits = re.sub(r'\D', '', phone)
+    if len(digits) == 10:
+        # Format as: 2 1 5, 8 0 5, 0 5 9 4 (with pauses)
+        return f"{digits[0]} {digits[1]} {digits[2]}, {digits[3]} {digits[4]} {digits[5]}, {digits[6]} {digits[7]} {digits[8]} {digits[9]}"
+    elif len(digits) == 11 and digits[0] == '1':
+        # Skip the 1
+        digits = digits[1:]
+        return f"{digits[0]} {digits[1]} {digits[2]}, {digits[3]} {digits[4]} {digits[5]}, {digits[6]} {digits[7]} {digits[8]} {digits[9]}"
+    return phone
+
+
 def get_system_prompt(company_name: str, caller_phone: str, collected_info: Dict, state: str) -> str:
     """Generate the AI system prompt based on current conversation state"""
+    
+    # Format phone for display in prompt
+    phone_display = format_phone_for_speech(caller_phone)
+    
+    # Get the updated phone if different from caller ID
+    current_phone = collected_info.get("phone", caller_phone)
+    phone_to_confirm = format_phone_for_speech(current_phone)
+    
     return f"""## Identity & Purpose
 
-You are the receptionist and scheduling assistant for {company_name}. You answer inbound calls, capture caller details, classify urgency, and book service appointments.
+You are the receptionist for {company_name}. Capture caller details, classify urgency, and book appointments.
 
-You do NOT diagnose equipment or quote detailed prices. You are the front door to the schedule.
+## Voice Style
 
-## Voice & Persona
+- Friendly, calm, professional
+- SHORT responses - one sentence max
+- Use natural contractions
+- NEVER say you are AI
+- When saying phone numbers, say each digit separately with pauses
 
-- **Tone**: friendly, calm, blue-collar professional, competent and organized
-- Be patient with stressed callers (no heat / no cooling)
-- Use clear, simple language with natural contractions
-- Use short practical phrases like:
-  - "Let me grab a few details from you."
-  - "One moment while I check the schedule."
-  - "Got it."
-  - "Perfect."
-- NEVER say you are AI. You are "the scheduling assistant" or "front desk"
-- Keep responses SHORT - this is a phone call, not a chat. One or two sentences max.
+## Current Call
 
-## Current Call Context
+CALLER ID: {phone_display}
+COLLECTED: {json.dumps(collected_info)}
+STATE: {state}
 
-CALLER PHONE: {caller_phone}
-INFO COLLECTED: {json.dumps(collected_info)}
-CURRENT STATE: {state}
+## Call Flow - ONE question at a time
 
-## REQUIRED Call Flow - FOLLOW THIS EXACT ORDER
-
-Collect information in this order. Do not skip steps. Ask ONE question at a time.
-
-1. **Get Name FIRST** - If no name collected:
+1. **Name** (if not collected):
    → "Can I get your name please?"
 
-2. **Confirm Phone** - After you have name:
-   → "Is {caller_phone} the best number to reach you?"
-   → If they say yes: mark phone_confirmed=true
-   → If they give a different number: capture it and confirm
+2. **Phone** (after name):
+   → If phone not confirmed: "Is {phone_to_confirm} the best number to reach you?"
+   → If they say NO or give new number: capture it, then confirm: "Got it, [new number]. Is that correct?"
 
-3. **Get Address** - After phone confirmed:
-   → "And what's the service address?"
-   → After they give it, repeat back to confirm: "Got it, [address]. Is that correct?"
+3. **Address** (after phone confirmed):
+   → "What's the service address?"
+   → After they give it: "Got it, [address]. Is that correct?"
 
-4. **Get Issue** - After address confirmed:
+4. **Issue** (after address confirmed):
    → "What's going on with your system?"
 
-5. **Get Urgency** - After issue collected:
-   → "Is this an emergency for today, something that needs attention in a day or two, or more routine?"
-   → Map to: EMERGENCY, URGENT, or ROUTINE
+5. **Urgency** (after issue):
+   → "Is this an emergency, urgent in the next day or two, or more routine?"
 
-6. **Book Appointment** - When ALL info collected:
-   → "We'll get you on the schedule. I have tomorrow morning available, does that work?"
-   → When they confirm, complete the booking
+6. **Day preference** (after urgency):
+   → "What day works best - today, tomorrow, or another day this week?"
 
-## Response Rules
+7. **Time slot** (after day):
+   → Based on their day choice, offer: "I have morning 9 to 12, or afternoon 1 to 5. Which works better?"
 
-1. Respond with ONE short sentence - this is a phone call
-2. Follow the exact order: Name → Phone → Address → Issue → Urgency → Book
-3. If caller gives info for a future step, acknowledge it but still collect missing earlier steps
-4. Be natural and conversational
-5. If caller seems confused, reassure them: "No problem, let me help you with that."
+8. **Confirm booking** (when all collected):
+   → "Perfect, I'll book you for [day] [time slot] at [address]. Sound good?"
+   → When they confirm: action="book_job"
 
-## JSON Response Format
+## Response Format
 
-Return ONLY valid JSON:
+Return ONLY this JSON:
 {{
-    "response_text": "Your response (one short sentence)",
-    "next_state": "{STATE_COLLECTING_NAME}|{STATE_CONFIRMING_PHONE}|{STATE_COLLECTING_ADDRESS}|{STATE_CONFIRMING_ADDRESS}|{STATE_COLLECTING_ISSUE}|{STATE_COLLECTING_URGENCY}|{STATE_OFFERING_TIMES}|{STATE_BOOKING_COMPLETE}",
+    "response_text": "One short sentence",
+    "next_state": "collecting_name|confirming_phone|collecting_new_phone|collecting_address|confirming_address|collecting_issue|collecting_urgency|offering_times|confirming_time|booking_complete",
     "collected_data": {{
         "name": "string or null",
-        "phone": "string or null", 
+        "phone": "string or null",
         "phone_confirmed": true/false,
         "address": "string or null",
         "address_confirmed": true/false,
         "issue": "string or null",
-        "urgency": "EMERGENCY|URGENT|ROUTINE or null"
+        "urgency": "EMERGENCY|URGENT|ROUTINE or null",
+        "preferred_day": "string or null",
+        "preferred_time": "morning|afternoon or null"
     }},
     "action": null or "book_job"
-}}"""
+}}
+
+## Rules
+
+1. ONE sentence responses only
+2. Follow exact order
+3. If they give a NEW phone number, update phone field and set phone_confirmed=false, then confirm it
+4. Say phone numbers digit by digit: "2 1 5, 8 0 5, 0 5 9 4"
+5. Set action="book_job" ONLY when they confirm the final booking"""
 
 
 async def get_ai_response(
@@ -173,7 +197,7 @@ async def get_ai_response(
     except Exception as e:
         logger.error(f"AI response error: {e}")
         return {
-            "response_text": "I'm sorry, I'm having trouble understanding. Could you repeat that?",
+            "response_text": "I'm sorry, I'm having trouble. Could you repeat that?",
             "next_state": state,
             "collected_data": collected_info,
             "action": None
@@ -189,15 +213,17 @@ class ConversationRelayHandler:
         self.tenant = tenant
         self.caller_phone = caller_phone
         self.company_name = tenant.get("name", "our company")
-        self.state = STATE_GREETING
+        self.state = STATE_COLLECTING_NAME  # Start collecting name after greeting
         self.collected_info = {
             "name": None,
-            "phone": caller_phone,
+            "phone": caller_phone,  # Start with caller ID
             "phone_confirmed": False,
             "address": None,
             "address_confirmed": False,
             "issue": None,
-            "urgency": None
+            "urgency": None,
+            "preferred_day": None,
+            "preferred_time": None
         }
         self.conversation_history = []
         self.call_started_at = datetime.now(timezone.utc)
@@ -258,6 +284,9 @@ class ConversationRelayHandler:
         response_text = ai_result.get("response_text", "")
         action = ai_result.get("action")
         
+        # Format phone numbers in response for natural speech
+        response_text = self._format_response_for_speech(response_text)
+        
         # Add assistant response to history
         self.conversation_history.append({
             "role": "assistant",
@@ -281,6 +310,18 @@ class ConversationRelayHandler:
         
         return response_text
     
+    def _format_response_for_speech(self, text: str) -> str:
+        """Format text for natural speech - add pauses for numbers"""
+        # Find phone numbers and format them
+        phone_pattern = r'\+?1?\d{10,11}|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}'
+        
+        def format_match(match):
+            phone = match.group()
+            return format_phone_for_speech(phone)
+        
+        text = re.sub(phone_pattern, format_match, text)
+        return text
+    
     async def handle_interrupt(self, message: Dict) -> None:
         """Handle interruption (caller spoke during TTS)"""
         utterance = message.get("utteranceUntilInterrupt", "")
@@ -292,11 +333,8 @@ class ConversationRelayHandler:
         digit = message.get("digit", "")
         logger.info(f"DTMF digit pressed: {digit}")
         
-        # Map common DTMF usage
         if digit == "0":
-            return "Let me connect you to a live representative. One moment please."
-        elif digit == "1":
-            return "You pressed one. How can I help you today?"
+            return "Let me connect you to someone. One moment please."
         
         return None
     
@@ -306,7 +344,7 @@ class ConversationRelayHandler:
         logger.error(f"ConversationRelay error: {description}")
     
     async def handle_end(self) -> None:
-        """Handle call end - save summary"""
+        """Handle call end - save summary and create lead/message"""
         logger.info(f"Call ended: {self.call_sid}")
         
         # Generate call summary
@@ -325,6 +363,9 @@ class ConversationRelayHandler:
         # Create lead if we have useful info
         if self.collected_info.get("name") or self.collected_info.get("issue"):
             await self._create_lead()
+        
+        # Create a message record for the inbox
+        await self._create_inbox_message()
     
     def _generate_summary(self) -> str:
         """Generate a summary of the call"""
@@ -342,9 +383,83 @@ class ConversationRelayHandler:
         
         return " | ".join(parts) if parts else "No information collected"
     
+    async def _create_inbox_message(self) -> None:
+        """Create a message in the inbox for this call"""
+        # Find or create customer
+        phone = self.collected_info.get("phone") or self.caller_phone
+        customer = await self.db.customers.find_one({
+            "tenant_id": self.tenant["id"],
+            "phone": phone
+        }, {"_id": 0})
+        
+        if not customer:
+            return
+        
+        # Find or create conversation
+        conversation = await self.db.conversations.find_one({
+            "tenant_id": self.tenant["id"],
+            "customer_id": customer["id"]
+        }, {"_id": 0})
+        
+        if not conversation:
+            conversation_id = str(uuid4())
+            conversation = {
+                "id": conversation_id,
+                "tenant_id": self.tenant["id"],
+                "customer_id": customer["id"],
+                "status": "ACTIVE",
+                "preferred_channel": "CALL",
+                "last_message_from": "CUSTOMER",
+                "last_message_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            await self.db.conversations.insert_one(conversation)
+        else:
+            conversation_id = conversation["id"]
+            # Update conversation
+            await self.db.conversations.update_one(
+                {"id": conversation_id},
+                {"$set": {
+                    "last_message_from": "CUSTOMER",
+                    "last_message_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+        
+        # Create message for the voice call
+        call_summary = self._generate_summary()
+        transcript = "\n".join([
+            f"{'Caller' if m['role'] == 'user' else 'AI'}: {m['content']}"
+            for m in self.conversation_history
+        ])
+        
+        message = {
+            "id": str(uuid4()),
+            "tenant_id": self.tenant["id"],
+            "conversation_id": conversation_id,
+            "customer_id": customer["id"],
+            "direction": "INBOUND",
+            "sender_type": "CUSTOMER",
+            "channel": "VOICE",
+            "content": f"📞 Voice Call\n\n{call_summary}\n\n--- Transcript ---\n{transcript}",
+            "metadata": {
+                "call_sid": self.call_sid,
+                "duration_seconds": (datetime.now(timezone.utc) - self.call_started_at).total_seconds(),
+                "collected_info": self.collected_info
+            },
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await self.db.messages.insert_one(message)
+        logger.info(f"Created inbox message for call {self.call_sid}")
+    
     async def _create_lead(self) -> Optional[str]:
         """Create a lead from call information"""
         lead_id = str(uuid4())
+        
+        # Use the confirmed phone, not caller ID
+        phone = self.collected_info.get("phone") or self.caller_phone
         
         lead = {
             "id": lead_id,
@@ -353,7 +468,7 @@ class ConversationRelayHandler:
             "channel": "VOICE",
             "status": "NEW",
             "caller_name": self.collected_info.get("name"),
-            "caller_phone": self.collected_info.get("phone") or self.caller_phone,
+            "caller_phone": phone,
             "captured_address": self.collected_info.get("address"),
             "issue_type": self.collected_info.get("issue", "")[:100] if self.collected_info.get("issue") else None,
             "description": self.collected_info.get("issue"),
@@ -375,6 +490,9 @@ class ConversationRelayHandler:
         """Create a job booking from collected information"""
         from services.twilio_service import twilio_service
         
+        # Use the confirmed phone number
+        phone = self.collected_info.get("phone") or self.caller_phone
+        
         # First create/find customer
         customer = await self._find_or_create_customer()
         if not customer:
@@ -388,11 +506,29 @@ class ConversationRelayHandler:
         # Create the job
         job_id = str(uuid4())
         
-        # Default to tomorrow morning 9-12
-        from datetime import timedelta
-        tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
-        window_start = tomorrow.replace(hour=9, minute=0, second=0, microsecond=0)
-        window_end = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0)
+        # Determine the booking time based on collected preferences
+        preferred_day = self.collected_info.get("preferred_day", "").lower()
+        preferred_time = self.collected_info.get("preferred_time", "morning").lower()
+        
+        # Calculate the actual date
+        now = datetime.now(timezone.utc)
+        if "today" in preferred_day:
+            job_date = now
+        elif "tomorrow" in preferred_day:
+            job_date = now + timedelta(days=1)
+        else:
+            # Default to tomorrow
+            job_date = now + timedelta(days=1)
+        
+        # Set time window based on preference
+        if "afternoon" in preferred_time or "pm" in preferred_time:
+            window_start = job_date.replace(hour=13, minute=0, second=0, microsecond=0)
+            window_end = job_date.replace(hour=17, minute=0, second=0, microsecond=0)
+            time_label = "1 PM to 5 PM"
+        else:
+            window_start = job_date.replace(hour=9, minute=0, second=0, microsecond=0)
+            window_end = job_date.replace(hour=12, minute=0, second=0, microsecond=0)
+            time_label = "9 AM to 12 PM"
         
         job = {
             "id": job_id,
@@ -404,7 +540,7 @@ class ConversationRelayHandler:
             "status": "SCHEDULED",
             "created_by": "AI_PHONE",
             "description": self.collected_info.get("issue", "Service call scheduled via phone"),
-            "notes": f"Booked via AI phone assistant. Urgency: {self.collected_info.get('urgency', 'ROUTINE')}",
+            "notes": f"Booked via AI phone. Urgency: {self.collected_info.get('urgency', 'ROUTINE')}",
             "service_window_start": window_start.isoformat(),
             "service_window_end": window_end.isoformat(),
             "tags": ["voice_ai_booking"],
@@ -415,22 +551,62 @@ class ConversationRelayHandler:
         await self.db.jobs.insert_one(job)
         logger.info(f"Created job {job_id} from voice booking")
         
-        # Send SMS confirmation
-        phone = self.collected_info.get("phone") or self.caller_phone
+        # Send SMS confirmation to the CONFIRMED phone number
         if phone:
             date_str = window_start.strftime("%A, %B %d")
-            time_str = "9 AM - 12 PM"
+            address = self.collected_info.get('address', 'your location')
+            name = self.collected_info.get('name', '').split()[0] if self.collected_info.get('name') else 'there'
             
-            sms_msg = f"Hi {self.collected_info.get('name', 'there')}! Your appointment with {self.company_name} is confirmed for {date_str}, {time_str}. We'll text you when our tech is on the way!"
+            sms_msg = f"Hi {name}! Your appointment with {self.company_name} is confirmed for {date_str}, {time_label} at {address}. We'll text you when our tech is on the way!"
             
             try:
                 await twilio_service.send_sms(to_phone=phone, body=sms_msg)
                 logger.info(f"Sent booking confirmation SMS to {phone}")
+                
+                # Also create a message record for the SMS
+                await self._create_sms_message(customer["id"], sms_msg)
             except Exception as e:
                 logger.error(f"Failed to send SMS confirmation: {e}")
     
+    async def _create_sms_message(self, customer_id: str, content: str) -> None:
+        """Create a message record for the SMS confirmation"""
+        # Find conversation
+        conversation = await self.db.conversations.find_one({
+            "tenant_id": self.tenant["id"],
+            "customer_id": customer_id
+        }, {"_id": 0})
+        
+        if not conversation:
+            return
+        
+        message = {
+            "id": str(uuid4()),
+            "tenant_id": self.tenant["id"],
+            "conversation_id": conversation["id"],
+            "customer_id": customer_id,
+            "direction": "OUTBOUND",
+            "sender_type": "SYSTEM",
+            "channel": "SMS",
+            "content": content,
+            "metadata": {"source": "voice_ai_booking_confirmation"},
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await self.db.messages.insert_one(message)
+        
+        # Update conversation
+        await self.db.conversations.update_one(
+            {"id": conversation["id"]},
+            {"$set": {
+                "last_message_from": "SYSTEM",
+                "last_message_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+    
     async def _find_or_create_customer(self) -> Optional[Dict]:
-        """Find existing customer or create new one"""
+        """Find existing customer or create new one using CONFIRMED phone"""
+        # Use the confirmed phone, not caller ID
         phone = self.collected_info.get("phone") or self.caller_phone
         
         # Try to find by phone
@@ -453,7 +629,7 @@ class ConversationRelayHandler:
                 )
             return customer
         
-        # Create new customer
+        # Create new customer with confirmed phone
         customer_id = str(uuid4())
         name_parts = (self.collected_info.get("name") or "").split(" ", 1)
         
