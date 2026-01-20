@@ -395,7 +395,25 @@ class TenantUpdate(BaseModel):
     twilio_phone_number: Optional[str] = None
     twilio_messaging_service_sid: Optional[str] = None
     sms_signature: Optional[str] = None
-    service_area: Optional[List[str]] = None
+    service_area: Optional[str] = None
+    # Voice AI Configuration
+    voice_ai_enabled: Optional[bool] = None
+    use_self_hosted_voice: Optional[bool] = None
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_api_key_sid: Optional[str] = None
+    twilio_api_key_secret: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    elevenlabs_api_key: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None
+    voice_provider: Optional[str] = None
+    voice_model: Optional[str] = None
+    voice_name: Optional[str] = None
+    voice_greeting: Optional[str] = None
+    voice_system_prompt: Optional[str] = None
+    voice_collect_fields: Optional[List[str]] = None
+    voice_business_hours: Optional[dict] = None
+    voice_after_hours_message: Optional[str] = None
 
 
 @v1_router.put("/admin/tenants/{tenant_id}")
