@@ -16,9 +16,11 @@ import TechniciansPage from "./pages/technicians/TechniciansPage";
 import QuotesPage from "./pages/quotes/QuotesPage";
 import CampaignsPage from "./pages/campaigns/CampaignsPage";
 import SettingsPage from "./pages/settings/SettingsPage";
+import WorkflowBuilderPage from "./pages/settings/WorkflowBuilderPage";
 import AdminTenantsPage from "./pages/admin/AdminTenantsPage";
 import DispatchBoard from "./pages/dispatch/DispatchBoard";
 import ReportsPage from "./pages/reports/ReportsPage";
+import RevenueReportsPage from "./pages/reports/RevenueReportsPage";
 import CustomerPortal from "./pages/portal/CustomerPortal";
 import CalendarPage from "./pages/calendar/CalendarPage";
 
