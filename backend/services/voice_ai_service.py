@@ -535,31 +535,18 @@ KNOWN CUSTOMER INFO:
             return ""
         
         try:
-            if self.use_emergent:
-                # Use emergent integrations
-                from emergentintegrations.llm.tts import text_to_speech
-                
-                audio_bytes = await text_to_speech(
-                    api_key=self.api_key,
-                    text=text,
-                    model="tts-1",
-                    voice="alloy"
-                )
-                return base64.b64encode(audio_bytes).decode()
-            else:
-                # Use OpenAI directly
-                import openai
-                client = openai.AsyncOpenAI(api_key=self.api_key)
-                
-                response = await client.audio.speech.create(
-                    model="tts-1",
-                    voice="alloy",
-                    input=text,
-                    response_format="pcm"  # Raw PCM for Twilio
-                )
-                
-                audio_bytes = response.content
-                return base64.b64encode(audio_bytes).decode()
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=self.api_key)
+            
+            response = await client.audio.speech.create(
+                model="tts-1",
+                voice="alloy",
+                input=text,
+                response_format="pcm"  # Raw PCM for Twilio
+            )
+            
+            audio_bytes = response.content
+            return base64.b64encode(audio_bytes).decode()
                 
         except Exception as e:
             logger.error(f"TTS error: {e}")
