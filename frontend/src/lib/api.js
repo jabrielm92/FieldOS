@@ -48,12 +48,38 @@ export const adminAPI = {
   updateTenant: (tenantId, data) => api.put(`/admin/tenants/${tenantId}`, data),
   deleteTenant: (tenantId) => api.delete(`/admin/tenants/${tenantId}`),
   getTenantStorage: (tenantId) => api.get(`/admin/tenants/${tenantId}/storage`),
+  testVoiceAI: (tenantId) => api.post(`/admin/tenants/${tenantId}/test-voice`),
 };
 
 // Settings APIs
 export const settingsAPI = {
   getTenantSettings: () => api.get('/settings/tenant'),
   updateTenantSettings: (data) => api.put('/settings/tenant', data),
+};
+
+// Jobs APIs (extended)
+export const jobsAPI = {
+  list: (filters = {}) => api.get('/jobs', { params: filters }),
+  get: (id) => api.get(`/jobs/${id}`),
+  create: (data) => api.post('/jobs', data),
+  update: (id, data) => api.put(`/jobs/${id}`, data),
+  delete: (id) => api.delete(`/jobs/${id}`),
+  bulkDelete: (ids) => api.post('/jobs/bulk-delete', ids),
+  sendOnMyWay: (jobId, data) => api.post(`/jobs/${jobId}/on-my-way`, data),
+  requestReview: (jobId, data) => api.post(`/jobs/${jobId}/request-review`, data),
+  markEnRoute: (jobId) => api.post(`/jobs/${jobId}/en-route`),
+};
+
+// Invoice APIs (extended)
+export const invoiceAPI = {
+  list: (filters = {}) => api.get('/invoices', { params: filters }),
+  get: (id) => api.get(`/invoices/${id}`),
+  create: (data) => api.post('/invoices', data),
+  update: (id, data) => api.put(`/invoices/${id}`, data),
+  markPaid: (id) => api.post(`/invoices/${id}/mark-paid`),
+  createPaymentLink: (id) => api.post(`/invoices/${id}/payment-link`),
+  sendPaymentLink: (id) => api.post(`/invoices/${id}/send-payment-link`),
+  getOverdue: () => api.get('/invoices/overdue'),
 };
 
 // Customer APIs
