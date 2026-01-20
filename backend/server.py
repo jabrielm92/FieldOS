@@ -3124,6 +3124,10 @@ async def voice_process_speech(request: Request):
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         from services.voice_ai_prompt import get_voice_ai_prompt
         
+        # Get conversation history from call context
+        conversation_history = call_context.get("conversation_history", [])
+        conversation_history.append({"role": "user", "content": speech_result})
+        
         system_prompt = get_voice_ai_prompt(
             company_name=tenant_name,
             caller_phone=from_phone,
@@ -3131,13 +3135,21 @@ async def voice_process_speech(request: Request):
             conversation_state=conversation_state
         )
         
+        # Build full context including history
+        history_context = "\n\n## Recent Conversation:\n"
+        for msg in conversation_history[-6:]:  # Last 6 exchanges
+            role = "Caller" if msg["role"] == "user" else "You"
+            history_context += f"{role}: {msg['content']}\n"
+        
+        full_prompt = system_prompt + history_context
+        
         chat = LlmChat(
             api_key=os.environ.get('EMERGENT_LLM_KEY'),
-            session_id=f"voice-{call_sid}",
-            system_message=system_prompt
-        ).with_model("openai", "gpt-4o-mini")  # Fast model for low latency
+            session_id=f"voice-{call_sid}-{len(conversation_history)}",  # Unique per turn
+            system_message=full_prompt
+        ).with_model("openai", "gpt-4o-mini")
         
-        response = await chat.send_message(UserMessage(text=f"Caller said: {speech_result}"))
+        response = await chat.send_message(UserMessage(text=f"Respond to the caller. Remember to follow the EXACT order: Name → Phone → Address → Issue → Urgency → Book"))
         
         # Parse AI response
         try:
