@@ -56,12 +56,16 @@ Create a premium "AI-First & Multi-Industry" platform that justifies a ~$500/mon
   - [x] Message history view
   - [x] Profile editing (name, email, phone)
 
-- [x] **Self-Hosted Voice AI (Backend Ready)**
-  - [x] Voice AI service using OpenAI Whisper (STT) and TTS
-  - [x] Twilio Voice webhooks: /voice/inbound, /voice/recording-complete, /voice/status
-  - [x] WebSocket endpoint for real-time audio streaming
-  - [x] AI conversation with function calling (create_lead, book_job, check_availability)
-  - [x] Note: Requires Twilio Voice configuration to activate
+- [x] **Self-Hosted Voice AI with ConversationRelay (January 2026)**
+  - [x] Twilio ConversationRelay for real-time WebSocket streaming
+  - [x] Google TTS (en-US-Casual-K voice) - natural, conversational
+  - [x] OpenAI GPT-4o-mini for NLU via Emergent LLM Key
+  - [x] Real-time speech processing (no HTTP round-trip latency)
+  - [x] Interruptible TTS (barge-in support)
+  - [x] Conversation flow: Name → Phone → Address → Issue → Urgency → Book
+  - [x] Auto-create customer, property, lead, and job on booking
+  - [x] SMS confirmation sent automatically
+  - [x] Cost: $0.07/min (ConversationRelay) + OpenAI tokens (~70% cheaper than Vapi)
 
 - [x] **Service Requests Management**
   - [x] List service requests from customer portal
