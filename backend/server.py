@@ -4,6 +4,7 @@ Multi-tenant Revenue & Operations OS for field service companies
 """
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request, Form, WebSocket, WebSocketDisconnect, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
