@@ -3070,7 +3070,7 @@ async def voice_recording_complete(request: Request):
 async def voice_process_speech(request: Request):
     """
     Process speech input from caller and generate AI response.
-    Uses OpenAI to understand intent and respond appropriately.
+    Uses the professional receptionist prompt for natural conversation.
     """
     form_data = await request.form()
     call_sid = form_data.get("CallSid", "")
@@ -3081,15 +3081,15 @@ async def voice_process_speech(request: Request):
     if from_phone and not from_phone.startswith("+"):
         from_phone = "+" + from_phone.lstrip()
     
-    logger.info(f"Voice AI processing speech for call {call_sid}: '{speech_result}'")
+    logger.info(f"Voice AI processing: '{speech_result}' from {from_phone}")
     
     base_url = os.environ.get('APP_BASE_URL', 'https://smart-field-ops.preview.emergentagent.com')
     
-    # Get call context from database
+    # Get call context
     call_context = await db.voice_calls.find_one({"call_sid": call_sid}, {"_id": 0})
     
     if not call_context:
-        logger.error(f"No call context found for {call_sid}")
+        logger.error(f"No call context for {call_sid}")
         twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Matthew-Neural">I'm sorry, there was an error. Please call back.</Say>
@@ -3102,10 +3102,13 @@ async def voice_process_speech(request: Request):
     conversation_state = call_context.get("conversation_state", "greeting")
     collected_info = call_context.get("collected_info", {})
     
-    # Get tenant for business context
+    # Get from_phone from context if not in form
+    if not from_phone:
+        from_phone = call_context.get("from_phone", "")
+    
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     
-    # Try to find existing customer by caller ID
+    # Find existing customer
     customer = None
     if from_phone:
         customer = await db.customers.find_one(
@@ -3113,11 +3116,165 @@ async def voice_process_speech(request: Request):
             {"_id": 0}
         )
     
-    # Use AI to process the speech and determine next action
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from services.voice_ai_prompt import get_voice_ai_prompt
         
-        # Build context about what we still need
+        system_prompt = get_voice_ai_prompt(
+            company_name=tenant_name,
+            caller_phone=from_phone,
+            collected_info=collected_info,
+            conversation_state=conversation_state
+        )
+        
+        chat = LlmChat(
+            api_key=os.environ.get('EMERGENT_LLM_KEY'),
+            session_id=f"voice-{call_sid}",
+            system_message=system_prompt
+        ).with_model("openai", "gpt-4o-mini")  # Fast model for low latency
+        
+        response = await chat.send_message(UserMessage(text=f"Caller said: {speech_result}"))
+        
+        # Parse AI response
+        try:
+            response_text = response.strip()
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+            
+            ai_response = json.loads(response_text)
+        except json.JSONDecodeError:
+            ai_response = {
+                "response_text": response[:150] if len(response) < 150 else "Got it. What else can you tell me?",
+                "next_state": conversation_state,
+                "collected_data": {},
+                "action": None
+            }
+        
+        # Update collected info
+        if ai_response.get("collected_data"):
+            collected_info.update({k: v for k, v in ai_response["collected_data"].items() if v})
+        
+        next_state = ai_response.get("next_state", conversation_state)
+        action = ai_response.get("action")
+        response_text = ai_response.get("response_text", "Got it.")
+        
+        # Ensure we have phone from caller ID if not provided differently
+        if not collected_info.get("phone"):
+            collected_info["phone"] = from_phone
+        
+        # Update call context
+        await db.voice_calls.update_one(
+            {"call_sid": call_sid},
+            {"$set": {
+                "conversation_state": next_state,
+                "collected_info": collected_info,
+                "last_speech": speech_result,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        # Handle booking action
+        if action == "book_job" or next_state == "booking_complete":
+            confirmed_phone = collected_info.get("phone") or from_phone
+            
+            result = await _voice_ai_book_job(
+                tenant_id=tenant_id,
+                from_phone=confirmed_phone,
+                collected_info=collected_info,
+                customer=customer
+            )
+            
+            if result.get("success"):
+                job = result.get("job", {})
+                quote_amount = job.get("quote_amount", 89)
+                customer_name = collected_info.get('name', '').split()[0] if collected_info.get('name') else ''
+                address = collected_info.get('address', 'your location')
+                
+                # Send SMS
+                from services.twilio_service import twilio_service
+                sms_body = f"Hi {customer_name}! Your appointment with {tenant_name} is confirmed for tomorrow morning at {address}. Quote: ${quote_amount:.2f}. We'll text when the tech is on the way."
+                await twilio_service.send_sms(to_phone=confirmed_phone, body=sms_body)
+                
+                # Final confirmation message
+                final_text = f"Perfect, you're all set for tomorrow morning at {address}. You'll get a text confirmation shortly. Thanks for calling {tenant_name}!"
+                audio_id = f"final_{call_sid}"
+                await db.voice_audio.update_one(
+                    {"audio_id": audio_id},
+                    {"$set": {"text": final_text}},
+                    upsert=True
+                )
+                
+                twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
+    <Hangup/>
+</Response>"""
+            else:
+                twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Matthew-Neural">I apologize, I couldn't complete your booking. Someone will call you back shortly.</Say>
+    <Hangup/>
+</Response>"""
+            
+            return Response(content=twiml, media_type="application/xml")
+        
+        elif next_state == "end_call":
+            await _voice_ai_create_lead(
+                tenant_id=tenant_id,
+                from_phone=collected_info.get("phone") or from_phone,
+                collected_info=collected_info,
+                customer=customer,
+                speech_transcript=speech_result
+            )
+            
+            goodbye_text = f"{response_text} Thanks for calling {tenant_name}!"
+            audio_id = f"goodbye_{call_sid}"
+            await db.voice_audio.update_one(
+                {"audio_id": audio_id},
+                {"$set": {"text": goodbye_text}},
+                upsert=True
+            )
+            
+            twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
+    <Hangup/>
+</Response>"""
+            return Response(content=twiml, media_type="application/xml")
+        
+        else:
+            # Continue conversation
+            audio_id = f"resp_{call_sid}_{hash(response_text) % 10000}"
+            await db.voice_audio.update_one(
+                {"audio_id": audio_id},
+                {"$set": {"text": response_text}},
+                upsert=True
+            )
+            
+            twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
+        <Play>{base_url}/api/v1/voice/audio/{audio_id}</Play>
+    </Gather>
+    <Say voice="Polly.Matthew-Neural">I didn't catch that.</Say>
+    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
+        <Say voice="Polly.Matthew-Neural">Are you still there?</Say>
+    </Gather>
+    <Say voice="Polly.Matthew-Neural">I'll have someone call you back. Goodbye.</Say>
+    <Hangup/>
+</Response>"""
+            return Response(content=twiml, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Voice AI error: {e}")
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Matthew-Neural">I apologize for the technical difficulty. Let me transfer you.</Say>
+    <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
+</Response>"""
+        return Response(content=twiml, media_type="application/xml")
         needs_name = not collected_info.get("name")
         needs_phone = not collected_info.get("phone_confirmed")
         needs_address = not collected_info.get("address")
