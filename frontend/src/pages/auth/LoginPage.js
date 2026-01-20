@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { toast } from "sonner";
-import { Wrench, Loader2 } from "lucide-react";
+import { Zap, Loader2, ArrowLeft } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -36,40 +35,51 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      {/* Background pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px]" />
+    <div className="min-h-screen bg-[#0a0f1a] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background effects */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 via-transparent to-purple-600/5" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.1),transparent_50%)]" />
       
-      <Card className="w-full max-w-md relative z-10 animate-fade-in" data-testid="login-card">
-        <CardHeader className="text-center pb-2">
-          <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center mx-auto mb-4">
-            <Wrench className="h-8 w-8 text-primary-foreground" />
-          </div>
-          <CardTitle className="font-heading text-3xl font-black tracking-tight">
-            FieldOS
-          </CardTitle>
-          <CardDescription className="text-base">
-            Revenue & Operations OS for Field Service
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Back to home */}
+      <Link 
+        to="/" 
+        className="absolute top-6 left-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors z-20"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        <span className="text-sm">Back to Home</span>
+      </Link>
+      
+      <div className="w-full max-w-md relative z-10">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-flex items-center gap-3 mb-4">
+            <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+              <Zap className="h-8 w-8 text-white" />
+            </div>
+            <span className="text-3xl font-black text-white tracking-tight">FieldOS</span>
+          </Link>
+          <p className="text-gray-400">Sign in to your account</p>
+        </div>
+
+        {/* Login Card */}
+        <div className="bg-[#0d1424] border border-white/10 rounded-2xl p-8 shadow-2xl" data-testid="login-card">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-gray-300">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@fieldos.app"
+                placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 data-testid="login-email"
+                className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500 focus:ring-blue-500/20 h-12"
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-gray-300">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -78,41 +88,51 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 data-testid="login-password"
+                className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500 focus:ring-blue-500/20 h-12"
               />
             </div>
             
             <Button 
               type="submit" 
-              className="w-full btn-industrial"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-base font-semibold rounded-xl"
               disabled={loading}
               data-testid="login-submit"
             >
               {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Signing in...
                 </>
               ) : (
-                "SIGN IN"
+                "Sign In"
               )}
             </Button>
           </form>
           
-          <div className="mt-6 p-4 bg-muted rounded-md space-y-2">
-            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Demo Credentials:</p>
-            <div className="space-y-1">
-              <p className="text-sm">
-                <span className="text-muted-foreground">Superadmin:</span>{" "}
-                <span className="font-mono">admin@fieldos.app / admin123</span>
-              </p>
-              <p className="text-sm">
-                <span className="text-muted-foreground">Tenant Owner:</span>{" "}
-                <span className="font-mono">owner@radiancehvac.com / owner123</span>
-              </p>
-            </div>
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-500">
+              Don't have an account?{" "}
+              <a 
+                href="https://calendly.com/arisolutionsinc/fieldos-demo" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 font-medium"
+              >
+                Book a demo
+              </a>
+            </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 text-center text-sm text-gray-500">
+          <p>© {new Date().getFullYear()} Ari Solutions Inc.</p>
+          <div className="mt-2 flex items-center justify-center gap-4">
+            <Link to="/privacy" className="hover:text-gray-300 transition-colors">Privacy</Link>
+            <Link to="/terms" className="hover:text-gray-300 transition-colors">Terms</Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
