@@ -128,12 +128,44 @@ const pricingPlans = [
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    company: "",
+    message: ""
+  });
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    
+    try {
+      const response = await fetch(`${API_URL}/api/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contactForm)
+      });
+      
+      if (response.ok) {
+        toast.success("Thanks! We'll be in touch within 24 hours.");
+        setContactForm({ name: "", email: "", phone: "", company: "", message: "" });
+      } else {
+        toast.error("Something went wrong. Please try again.");
+      }
+    } catch (error) {
+      toast.error("Failed to submit. Please email us directly.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-white">
