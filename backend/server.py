@@ -730,8 +730,6 @@ async def create_lead(
     )
     
     lead_dict = lead.model_dump(mode='json')
-    lead_dict["first_contact_at"] = lead_dict["first_contact_at"].isoformat()
-    lead_dict["last_activity_at"] = lead_dict["last_activity_at"].isoformat()
     await db.leads.insert_one(lead_dict)
     
     return serialize_doc(lead_dict)
@@ -893,10 +891,7 @@ async def create_job(
     )
     
     job_dict = job.model_dump(mode='json')
-    job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
-    job_dict["service_window_end"] = job_dict["service_window_end"].isoformat()
     if job_dict.get("exact_arrival_time"):
-        job_dict["exact_arrival_time"] = job_dict["exact_arrival_time"].isoformat()
     await db.jobs.insert_one(job_dict)
     
     # Create a Quote record linked to the job (if quote_amount exists)
@@ -2328,8 +2323,6 @@ async def vapi_create_lead(
         lead_dict = lead.model_dump(mode='json')
         lead_dict["caller_name"] = name  # Store caller name directly on lead
         lead_dict["caller_phone"] = phone  # Store caller phone directly on lead
-        lead_dict["first_contact_at"] = lead_dict["first_contact_at"].isoformat()
-        lead_dict["last_activity_at"] = lead_dict["last_activity_at"].isoformat()
         await db.leads.insert_one(lead_dict)
         
         # Find or create conversation (prevent duplicates)
@@ -2620,8 +2613,6 @@ async def vapi_book_job(
     )
     
     job_dict = job.model_dump(mode='json')
-    job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
-    job_dict["service_window_end"] = job_dict["service_window_end"].isoformat()
     await db.jobs.insert_one(job_dict)
     
     # Create a Quote record linked to the job
@@ -4126,8 +4117,6 @@ async def sms_inbound(request: Request):
                             )
                             
                             job_dict = job.model_dump(mode='json')
-                            job_dict["service_window_start"] = job_dict["service_window_start"].isoformat()
-                            job_dict["service_window_end"] = job_dict["service_window_end"].isoformat()
                             await db.jobs.insert_one(job_dict)
                             
                             # Create quote
