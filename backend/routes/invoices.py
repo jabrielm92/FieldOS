@@ -234,3 +234,128 @@ async def get_overdue_invoices(
             inv["status"] = "OVERDUE"
     
     return serialize_docs(invoices)
+
+
+@router.get("/reports/revenue")
+async def get_revenue_report(
+    start_date: str = None,
+    end_date: str = None,
+    tenant_id: str = Depends(lambda: get_tenant_id),
+    current_user: dict = Depends(lambda: get_current_user)
+):
+    """Get revenue report with payment tracking"""
+    # Default to last 30 days
+    if not end_date:
+        end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    if not start_date:
+        start_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%d')
+    
+    # Get all invoices in date range
+    invoices = await db.invoices.find({
+        "tenant_id": tenant_id,
+        "created_at": {"$gte": start_date, "$lte": end_date + "T23:59:59"}
+    }, {"_id": 0}).to_list(10000)
+    
+    # Calculate metrics
+    total_invoiced = sum(float(inv.get('total', 0)) for inv in invoices)
+    total_paid = sum(float(inv.get('total', 0)) for inv in invoices if inv.get('status') == 'PAID')
+    total_outstanding = sum(float(inv.get('total', 0)) for inv in invoices if inv.get('status') in ['SENT', 'PENDING'])
+    total_overdue = sum(float(inv.get('total', 0)) for inv in invoices if inv.get('status') == 'OVERDUE')
+    
+    # Get jobs for revenue by type
+    jobs = await db.jobs.find({
+        "tenant_id": tenant_id,
+        "created_at": {"$gte": start_date, "$lte": end_date + "T23:59:59"}
+    }, {"_id": 0}).to_list(10000)
+    
+    revenue_by_type = {}
+    for job in jobs:
+        jtype = job.get('job_type', 'OTHER')
+        revenue_by_type[jtype] = revenue_by_type.get(jtype, 0) + float(job.get('quoted_amount', 0))
+    
+    # Daily breakdown
+    daily_revenue = {}
+    for inv in invoices:
+        if inv.get('status') == 'PAID' and inv.get('paid_at'):
+            day = inv['paid_at'][:10]
+            daily_revenue[day] = daily_revenue.get(day, 0) + float(inv.get('total', 0))
+    
+    return {
+        "period": {"start": start_date, "end": end_date},
+        "summary": {
+            "total_invoiced": round(total_invoiced, 2),
+            "total_paid": round(total_paid, 2),
+            "total_outstanding": round(total_outstanding, 2),
+            "total_overdue": round(total_overdue, 2),
+            "collection_rate": round(total_paid / total_invoiced * 100, 1) if total_invoiced > 0 else 0
+        },
+        "invoices_count": {
+            "total": len(invoices),
+            "paid": len([i for i in invoices if i.get('status') == 'PAID']),
+            "outstanding": len([i for i in invoices if i.get('status') in ['SENT', 'PENDING']]),
+            "overdue": len([i for i in invoices if i.get('status') == 'OVERDUE'])
+        },
+        "revenue_by_job_type": revenue_by_type,
+        "daily_revenue": dict(sorted(daily_revenue.items()))
+    }
+
+
+# Industry Templates
+INDUSTRY_TEMPLATES = {
+    "hvac": {
+        "name": "HVAC",
+        "job_types": ["AC Repair", "Heating Repair", "AC Installation", "Furnace Installation", "Maintenance", "Duct Cleaning", "Thermostat Install"],
+        "urgency_options": ["Routine", "Urgent - No Heat/AC", "Emergency - Safety Issue"],
+        "default_greeting": "Thank you for calling. How can I help with your heating or cooling needs today?",
+        "collect_fields": ["name", "phone", "address", "system_type", "issue", "urgency"]
+    },
+    "plumbing": {
+        "name": "Plumbing",
+        "job_types": ["Leak Repair", "Drain Cleaning", "Water Heater", "Toilet Repair", "Faucet Install", "Pipe Repair", "Sewer Line"],
+        "urgency_options": ["Routine", "Urgent - Active Leak", "Emergency - Flooding"],
+        "default_greeting": "Thank you for calling. What plumbing issue can I help you with today?",
+        "collect_fields": ["name", "phone", "address", "issue_location", "issue", "urgency"]
+    },
+    "electrical": {
+        "name": "Electrical",
+        "job_types": ["Outlet Repair", "Panel Upgrade", "Wiring", "Lighting Install", "Generator", "EV Charger", "Inspection"],
+        "urgency_options": ["Routine", "Urgent - No Power", "Emergency - Sparking/Burning"],
+        "default_greeting": "Thank you for calling. What electrical issue can I help you with?",
+        "collect_fields": ["name", "phone", "address", "issue", "urgency"]
+    },
+    "landscaping": {
+        "name": "Landscaping",
+        "job_types": ["Lawn Care", "Tree Service", "Irrigation", "Hardscape", "Design", "Seasonal Cleanup"],
+        "urgency_options": ["Routine", "Priority", "Emergency - Storm Damage"],
+        "default_greeting": "Thank you for calling. How can I help with your landscaping needs?",
+        "collect_fields": ["name", "phone", "address", "service_type", "property_size"]
+    },
+    "cleaning": {
+        "name": "Cleaning",
+        "job_types": ["Regular Cleaning", "Deep Clean", "Move-In/Out", "Post-Construction", "Carpet Cleaning", "Window Cleaning"],
+        "urgency_options": ["Routine", "Rush", "Same-Day"],
+        "default_greeting": "Thank you for calling. What type of cleaning service are you looking for?",
+        "collect_fields": ["name", "phone", "address", "cleaning_type", "property_size", "preferred_date"]
+    },
+    "general": {
+        "name": "General Contractor",
+        "job_types": ["Repair", "Installation", "Maintenance", "Inspection", "Consultation", "Emergency"],
+        "urgency_options": ["Routine", "Urgent", "Emergency"],
+        "default_greeting": "Thank you for calling. How can I help you today?",
+        "collect_fields": ["name", "phone", "address", "issue", "urgency"]
+    }
+}
+
+
+@router.get("/templates/industries")
+async def get_industry_templates():
+    """Get available industry templates"""
+    return INDUSTRY_TEMPLATES
+
+
+@router.get("/templates/industries/{industry}")
+async def get_industry_template(industry: str):
+    """Get specific industry template"""
+    if industry not in INDUSTRY_TEMPLATES:
+        raise HTTPException(status_code=404, detail="Industry template not found")
+    return INDUSTRY_TEMPLATES[industry]
