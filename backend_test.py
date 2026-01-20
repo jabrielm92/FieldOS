@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 class FieldOSAPITester:
-    def __init__(self, base_url: str = "https://smart-field-ops.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://voice-receptionist-4.preview.emergentagent.com"):
         self.base_url = base_url
         self.superadmin_token = None
         self.tenant_owner_token = None
