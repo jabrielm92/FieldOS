@@ -355,9 +355,7 @@ async def create_tenant(data: TenantCreate, current_user: dict = Depends(require
         password_hash=hash_password(data.owner_password)
     )
     
-    owner_dict = owner.model_dump()
-    owner_dict["created_at"] = owner_dict["created_at"].isoformat()
-    owner_dict["updated_at"] = owner_dict["updated_at"].isoformat()
+    owner_dict = owner.model_dump(mode='json')
     await db.users.insert_one(owner_dict)
     
     return serialize_doc(tenant_dict)
@@ -4483,9 +4481,7 @@ async def startup_event():
             tenant_id=None,
             password_hash=hash_password("admin123")
         )
-        admin_dict = admin.model_dump()
-        admin_dict["created_at"] = admin_dict["created_at"].isoformat()
-        admin_dict["updated_at"] = admin_dict["updated_at"].isoformat()
+        admin_dict = admin.model_dump(mode='json')
         await db.users.insert_one(admin_dict)
         logger.info("Created default superadmin: admin@fieldos.app / admin123")
     
