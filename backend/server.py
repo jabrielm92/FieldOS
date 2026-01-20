@@ -5988,18 +5988,12 @@ async def health_check():
 
 # Initialize and include modular routes
 from routes.admin import router as admin_router, init_admin_routes
-from routes.jobs import router as jobs_extra_router, init_jobs_routes
-from routes.invoices import router as invoices_extra_router, init_invoice_routes
 
 # Initialize route dependencies
 init_admin_routes(db, require_superadmin, serialize_doc, serialize_docs, hash_password, UserRole, UserStatus, User, Tenant)
-init_jobs_routes(db, get_tenant_id, get_current_user, serialize_doc)
-init_invoice_routes(db, get_tenant_id, get_current_user, serialize_doc, serialize_docs)
 
 # Include routers
 v1_router.include_router(admin_router)
-v1_router.include_router(jobs_extra_router)
-v1_router.include_router(invoices_extra_router)
 
 api_router.include_router(v1_router)
 app.include_router(api_router)
