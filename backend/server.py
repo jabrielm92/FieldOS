@@ -2969,6 +2969,50 @@ async def voice_inbound(request: Request):
     return Response(content=twiml, media_type="application/xml")
 
 
+@v1_router.get("/voice/audio/{audio_id}")
+async def get_voice_audio(audio_id: str):
+    """
+    Serve ElevenLabs-generated audio for Twilio to play.
+    This endpoint generates audio on-demand and streams it.
+    """
+    from starlette.responses import StreamingResponse
+    from services.elevenlabs_service import elevenlabs_service
+    
+    # Get the text to speak from database
+    audio_doc = await db.voice_audio.find_one({"audio_id": audio_id}, {"_id": 0})
+    
+    if not audio_doc or not audio_doc.get("text"):
+        logger.error(f"No audio text found for ID: {audio_id}")
+        # Return silent audio or error
+        return Response(content=b"", media_type="audio/mpeg")
+    
+    text = audio_doc["text"]
+    
+    # Generate audio with ElevenLabs
+    audio_data = elevenlabs_service.text_to_speech(
+        text=text,
+        voice="roger",  # Natural male voice
+        stability=0.5,
+        similarity_boost=0.75
+    )
+    
+    if not audio_data:
+        logger.error(f"Failed to generate audio for: {text}")
+        # Fallback - return empty or use a backup
+        return Response(content=b"", media_type="audio/mpeg")
+    
+    logger.info(f"Serving {len(audio_data)} bytes of ElevenLabs audio for: {text[:50]}...")
+    
+    return Response(
+        content=audio_data,
+        media_type="audio/mpeg",
+        headers={
+            "Content-Disposition": f"inline; filename={audio_id}.mp3",
+            "Cache-Control": "public, max-age=3600"
+        }
+    )
+
+
 @v1_router.post("/voice/recording-complete")
 async def voice_recording_complete(request: Request):
     """Handle completed voice recording (fallback when self-hosted not enabled)"""
