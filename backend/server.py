@@ -2868,20 +2868,19 @@ async def vapi_call_summary(
     return {"success": True, "message_id": msg.id}
 
 
-# ============= SELF-HOSTED VOICE AI (TWILIO TWIML) =============
+# ============= SELF-HOSTED VOICE AI (TWILIO CONVERSATIONRELAY) =============
 
 @v1_router.post("/voice/inbound")
 async def voice_inbound(request: Request):
     """
     Handle inbound voice call from Twilio.
-    Returns TwiML with Gather for speech input.
+    Returns TwiML with ConversationRelay for real-time WebSocket streaming.
     """
     form_data = await request.form()
     call_sid = form_data.get("CallSid", "")
     from_phone = form_data.get("From", "").strip()
     to_phone = form_data.get("To", "").strip()
     
-    # Normalize phone numbers
     if from_phone and not from_phone.startswith("+"):
         from_phone = "+" + from_phone.lstrip()
     if to_phone and not to_phone.startswith("+"):
@@ -2907,70 +2906,121 @@ async def voice_inbound(request: Request):
         logger.warning(f"No tenant found for phone number: {to_phone}")
         twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Matthew-Neural">We're sorry, this number is not configured.</Say>
+    <Say>We're sorry, this number is not configured.</Say>
     <Hangup/>
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    # Check if tenant has self-hosted voice enabled
     if not tenant.get("use_self_hosted_voice", False):
-        base_url = os.environ.get('APP_BASE_URL', 'https://voice-receptionist-4.preview.emergentagent.com')
+        base_url = os.environ.get('APP_BASE_URL', '')
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna-Neural">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep.</Say>
+    <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep.</Say>
     <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    base_url = os.environ.get('APP_BASE_URL', 'https://voice-receptionist-4.preview.emergentagent.com')
+    base_url = os.environ.get('APP_BASE_URL', '')
+    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
     
-    # Initialize call context
-    call_context = {
-        "call_sid": call_sid,
-        "tenant_id": tenant["id"],
-        "from_phone": from_phone,
-        "to_phone": to_phone,
-        "tenant_name": tenant.get("name", "our company"),
-        "conversation_state": "collecting_name",
-        "collected_info": {
-            "name": None,
-            "phone": from_phone,
-            "phone_confirmed": False,
-            "address": None,
-            "address_confirmed": False,
-            "issue": None,
-            "urgency": None,
-            "preferred_day": None,
-            "preferred_time": None
-        },
-        "conversation_history": [],
-        "started_at": datetime.now(timezone.utc).isoformat()
-    }
-    
+    # Store call context
     await db.voice_calls.update_one(
         {"call_sid": call_sid},
-        {"$set": call_context},
+        {"$set": {
+            "call_sid": call_sid,
+            "tenant_id": tenant["id"],
+            "from_phone": from_phone,
+            "to_phone": to_phone,
+            "tenant_name": tenant.get("name", "our company"),
+            "started_at": datetime.now(timezone.utc).isoformat()
+        }},
         upsert=True
     )
     
-    # Short greeting, then ask for name
-    greeting = f"Hi, thanks for calling {tenant.get('name', 'us')}. Can I get your name please?"
+    welcome = f"Hi, thanks for calling {tenant.get('name', 'us')}. How can I help you?"
     
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
-        <Say voice="Polly.Matthew-Neural">{greeting}</Say>
-    </Gather>
-    <Say voice="Polly.Matthew-Neural">I didn't catch that. Are you still there?</Say>
-    <Gather input="speech" action="{base_url}/api/v1/voice/process-speech" method="POST" speechTimeout="auto" language="en-US" enhanced="true">
-        <Say voice="Polly.Matthew-Neural">Hello?</Say>
-    </Gather>
-    <Say voice="Polly.Matthew-Neural">I'll have someone call you back. Goodbye.</Say>
-    <Hangup/>
+    <Connect>
+        <ConversationRelay 
+            url="{ws_url}/api/v1/voice/ws/{call_sid}"
+            welcomeGreeting="{welcome}"
+            voice="en-US-Standard-J"
+            language="en-US"
+            ttsProvider="google"
+            interruptible="true"
+            dtmfDetection="true"
+            speechModel="phone_call"
+        />
+    </Connect>
 </Response>"""
     
-    logger.info(f"Voice AI started for tenant {tenant['id']}, call {call_sid}")
+    logger.info(f"ConversationRelay started for tenant {tenant['id']}, call {call_sid}")
     return Response(content=twiml, media_type="application/xml")
+
+
+@app.websocket("/api/v1/voice/ws/{call_sid}")
+async def voice_ws(websocket: WebSocket, call_sid: str):
+    """WebSocket endpoint for Twilio ConversationRelay"""
+    await websocket.accept()
+    logger.info(f"ConversationRelay connected: {call_sid}")
+    
+    from services.conversation_relay import ConversationRelayHandler
+    
+    handler = None
+    try:
+        call_context = await db.voice_calls.find_one({"call_sid": call_sid}, {"_id": 0})
+        if not call_context:
+            await websocket.close()
+            return
+        
+        tenant = await db.tenants.find_one({"id": call_context.get("tenant_id")}, {"_id": 0})
+        if not tenant:
+            await websocket.close()
+            return
+        
+        handler = ConversationRelayHandler(
+            db=db,
+            call_sid=call_sid,
+            tenant=tenant,
+            caller_phone=call_context.get("from_phone", "")
+        )
+        
+        while True:
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            event_type = message.get("type")
+            
+            logger.info(f"WS event: {event_type}")
+            
+            if event_type == "setup":
+                await handler.handle_setup(message)
+            elif event_type == "prompt":
+                response = await handler.handle_prompt(message)
+                if response:
+                    await websocket.send_text(json.dumps({
+                        "type": "text",
+                        "token": response,
+                        "last": True
+                    }))
+            elif event_type == "interrupt":
+                await handler.handle_interrupt(message)
+            elif event_type == "dtmf":
+                resp = await handler.handle_dtmf(message)
+                if resp:
+                    await websocket.send_text(json.dumps({"type": "text", "token": resp, "last": True}))
+            elif event_type == "error":
+                await handler.handle_error(message)
+            elif event_type == "end":
+                break
+                
+    except WebSocketDisconnect:
+        logger.info(f"WS disconnected: {call_sid}")
+    except Exception as e:
+        logger.error(f"WS error: {e}")
+    finally:
+        if handler:
+            await handler.handle_end()
 
 
 @v1_router.get("/voice/audio/{audio_id}")
