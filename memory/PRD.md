@@ -131,9 +131,19 @@ Create a premium "AI-First & Multi-Industry" platform that justifies a ~$500/mon
 - POST /api/v1/auth/login
 - POST /api/v1/auth/register
 
-### Branding (Authenticated)
+### Tenant Settings (Authenticated)
+- GET /api/v1/settings/tenant
+- PUT /api/v1/settings/tenant
 - GET /api/v1/settings/branding
 - PUT /api/v1/settings/branding
+
+### Admin (Superadmin only)
+- GET /api/v1/admin/tenants
+- POST /api/v1/admin/tenants
+- GET /api/v1/admin/tenants/{tenant_id}
+- PUT /api/v1/admin/tenants/{tenant_id}
+- DELETE /api/v1/admin/tenants/{tenant_id}
+- GET /api/v1/admin/tenants/{tenant_id}/storage
 
 ### Customer Portal (Public - token-based)
 - GET /api/v1/portal/{token}
