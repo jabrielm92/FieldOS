@@ -126,6 +126,17 @@ export const invoiceAPI = {
   getOverdue: () => api.get('/invoices/overdue'),
 };
 
+// Reports APIs
+export const reportsAPI = {
+  getRevenue: (params = {}) => api.get('/reports/revenue', { params }),
+};
+
+// Templates APIs  
+export const templatesAPI = {
+  getIndustries: () => api.get('/templates/industries'),
+  getIndustry: (industry) => api.get(`/templates/industries/${industry}`),
+};
+
 // Conversation APIs
 export const conversationAPI = {
   list: (filters = {}) => api.get('/conversations', { params: filters }),
