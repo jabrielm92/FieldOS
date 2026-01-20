@@ -3025,7 +3025,7 @@ async def voice_conversation_websocket(websocket: WebSocket, call_sid: str):
             message = json.loads(data)
             
             event_type = message.get("type")
-            logger.debug(f"ConversationRelay event: {event_type}")
+            logger.info(f"ConversationRelay event: {event_type} - {json.dumps(message)[:200]}")
             
             if event_type == "setup":
                 # Initial setup message
