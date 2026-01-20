@@ -293,7 +293,20 @@ function VoiceAIConfigDialog({ tenant, open, onOpenChange, onSuccess }) {
     voice_after_hours_message: tenant?.voice_after_hours_message || "",
   });
   const [loading, setLoading] = useState(false);
+  const [testingCall, setTestingCall] = useState(false);
   const [activeTab, setActiveTab] = useState("twilio");
+
+  const handleTestCall = async () => {
+    setTestingCall(true);
+    try {
+      const result = await adminAPI.testVoiceAI(tenant.id);
+      toast.success(`Test call initiated! Call SID: ${result.data.call_sid}`);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to initiate test call");
+    } finally {
+      setTestingCall(false);
+    }
+  };
 
   useEffect(() => {
     if (tenant) {
