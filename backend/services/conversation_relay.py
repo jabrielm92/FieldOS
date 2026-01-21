@@ -198,7 +198,7 @@ async def get_ai_response(
     conversation_history: list
 ) -> Dict[str, Any]:
     """
-    Get AI response using OpenAI directly.
+    Get AI response using OpenAI directly with JSON mode.
     Returns structured response with text and state updates.
     """
     from openai import AsyncOpenAI
@@ -217,29 +217,31 @@ async def get_ai_response(
     messages.append({"role": "user", "content": user_input})
     
     try:
+        # Use JSON mode to ensure structured response
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
             temperature=0.7,
-            max_tokens=300
+            max_tokens=400,
+            response_format={"type": "json_object"}  # Force JSON response
         )
         
         response_text = response.choices[0].message.content.strip()
-        logger.info(f"AI raw response: {response_text}")
+        logger.info(f"AI raw response: {response_text[:200]}...")
         
         # Parse JSON response
         try:
-            # Handle potential markdown code blocks
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-            
             parsed = json.loads(response_text)
             
             # Clean the collected data to normalize phone numbers and other fields
-            collected_data = parsed.get("collected_data", collected_info)
-            cleaned_data = clean_collected_data(collected_data)
+            collected_data = parsed.get("collected_data", {})
+            # Merge with existing collected_info (don't lose previously collected data)
+            merged_data = collected_info.copy()
+            for key, value in collected_data.items():
+                if value is not None:
+                    merged_data[key] = value
+            
+            cleaned_data = clean_collected_data(merged_data)
             
             return {
                 "response_text": parsed.get("response_text", "I'm sorry, could you repeat that?"),
@@ -249,6 +251,7 @@ async def get_ai_response(
             }
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse AI JSON: {e}. Raw: {response_text}")
+            # Return the raw text as response but keep existing data
             return {
                 "response_text": response_text if len(response_text) < 200 else "I'm sorry, could you repeat that?",
                 "next_state": state,
