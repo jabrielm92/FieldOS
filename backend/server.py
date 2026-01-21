@@ -3114,9 +3114,13 @@ async def voice_inbound(request: Request):
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    # Check if Voice AI is enabled for this tenant
-    if not tenant.get("voice_ai_enabled", False):
-        base_url = os.environ.get('BACKEND_URL', os.environ.get('APP_BASE_URL', ''))
+    base_url = os.environ.get('BACKEND_URL', os.environ.get('APP_BASE_URL', ''))
+    
+    # Check if tenant has OpenAI key configured (required for Voice AI)
+    has_openai = tenant.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
+    
+    if not has_openai:
+        # No AI configured - simple voicemail
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep.</Say>
@@ -3124,10 +3128,7 @@ async def voice_inbound(request: Request):
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    base_url = os.environ.get('BACKEND_URL', os.environ.get('APP_BASE_URL', ''))
-    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
-    
-    # Store call context
+    # Store call context for conversation
     await db.voice_calls.update_one(
         {"call_sid": call_sid},
         {"$set": {
@@ -3136,6 +3137,9 @@ async def voice_inbound(request: Request):
             "from_phone": from_phone,
             "to_phone": to_phone,
             "tenant_name": tenant.get("name", "our company"),
+            "conversation_state": "greeting",
+            "collected_info": {},
+            "conversation_history": [],
             "started_at": datetime.now(timezone.utc).isoformat()
         }},
         upsert=True
@@ -3143,26 +3147,16 @@ async def voice_inbound(request: Request):
     
     welcome = tenant.get('voice_greeting') or f"Hi, thanks for calling {tenant.get('name', 'us')}. How can I help you today?"
     
-    # ConversationRelay for real-time voice AI
+    # Use Gather with speech recognition
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Connect>
-        <ConversationRelay 
-            url="{ws_url}/api/v1/voice/ws/{call_sid}"
-            welcomeGreeting="{welcome}"
-            voice="en-US-Standard-J"
-            language="en-US"
-            ttsProvider="google"
-            interruptible="true"
-            dtmfDetection="true"
-            speechModel="phone_call"
-        />
-    </Connect>
+    <Gather input="speech" action="{base_url}/api/v1/voice/handle-speech" method="POST" timeout="5" speechTimeout="auto" language="en-US">
+        <Say voice="Polly.Joanna">{welcome}</Say>
+    </Gather>
+    <Say voice="Polly.Joanna">I didn't hear anything. Goodbye.</Say>
 </Response>"""
     
-    logger.info(f"ConversationRelay WS URL: {ws_url}/api/v1/voice/ws/{call_sid}")
     logger.info(f"Voice AI started for tenant {tenant['id']}, call {call_sid}")
-    logger.info(f"TwiML Response:\n{twiml}")
     return Response(content=twiml, media_type="application/xml")
 
 
