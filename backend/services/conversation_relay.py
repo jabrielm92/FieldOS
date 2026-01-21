@@ -406,7 +406,7 @@ class ConversationRelayHandler:
         logger.error(f"ConversationRelay error: {description}")
     
     async def handle_end(self) -> None:
-        """Handle call end - save summary and create lead/message"""
+        """Handle call end - save summary and create lead"""
         logger.info(f"Call ended: {self.call_sid}")
         
         # Generate call summary
@@ -418,16 +418,18 @@ class ConversationRelayHandler:
                 "state": STATE_ENDED,
                 "ended_at": datetime.now(timezone.utc).isoformat(),
                 "summary": summary,
+                "collected_info": self.collected_info,
                 "duration_seconds": (datetime.now(timezone.utc) - self.call_started_at).total_seconds()
             }}
         )
         
-        # Create lead if we have useful info
-        if self.collected_info.get("name") or self.collected_info.get("issue"):
+        # Create lead if we have useful info (but no job was booked)
+        # If a job was booked via action="book_job", _create_booking already handles everything
+        if (self.collected_info.get("name") or self.collected_info.get("issue")) and self.state != STATE_BOOKING_COMPLETE:
             await self._create_lead()
         
-        # Create a message record for the inbox
-        await self._create_inbox_message()
+        # Note: We do NOT create inbox messages for voice calls per user request
+        # Inbox should only show SMS messages
     
     def _generate_summary(self) -> str:
         """Generate a summary of the call"""
