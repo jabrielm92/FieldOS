@@ -284,16 +284,20 @@ class ConversationRelayHandler:
         
         logger.info(f"Caller said: '{voice_prompt}' (last={is_last})")
         
+        # Get tenant's voice system prompt (REQUIRED)
+        tenant_prompt = self.tenant.get("voice_system_prompt")
+        
+        if not tenant_prompt:
+            logger.error(f"No voice_system_prompt configured for tenant {self.tenant.get('id')}")
+            return "I'm sorry, the system is not fully configured. Please call back later or try our main office."
+        
         # Add to conversation history
         self.conversation_history.append({
             "role": "user",
             "content": voice_prompt
         })
         
-        # Get custom prompt from tenant if configured
-        custom_prompt = self.tenant.get("voice_system_prompt")
-        
-        # Get AI response
+        # Get AI response using tenant's prompt
         ai_result = await get_ai_response(
             user_input=voice_prompt,
             company_name=self.company_name,
@@ -301,7 +305,7 @@ class ConversationRelayHandler:
             collected_info=self.collected_info,
             state=self.state,
             conversation_history=self.conversation_history,
-            custom_prompt=custom_prompt
+            tenant_prompt=tenant_prompt
         )
         
         # Update state and collected info
