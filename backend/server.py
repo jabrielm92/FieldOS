@@ -4782,10 +4782,10 @@ async def get_dashboard(
     })
     
     # Revenue metrics
-    # Potential revenue: sum of quote_amount for all booked/en_route/on_site jobs this month
+    # Potential revenue: sum of quote_amount for all scheduled/booked/en_route/on_site jobs this month
     potential_jobs = await db.jobs.find({
         "tenant_id": tenant_id,
-        "status": {"$in": ["BOOKED", "EN_ROUTE", "ON_SITE"]},
+        "status": {"$in": ["SCHEDULED", "BOOKED", "EN_ROUTE", "ON_SITE"]},
         "created_at": {"$gte": month_start.isoformat()}
     }, {"_id": 0, "quote_amount": 1}).to_list(1000)
     potential_revenue = sum(j.get("quote_amount", 0) or 0 for j in potential_jobs)
