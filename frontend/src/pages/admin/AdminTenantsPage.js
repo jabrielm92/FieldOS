@@ -529,13 +529,37 @@ CRITICAL RULES:
                 <div className="space-y-2">
                   <Label>Greeting Message</Label>
                   <Textarea value={formData.voice_greeting} onChange={(e) => setFormData({...formData, voice_greeting: e.target.value})} placeholder={`Thank you for calling ${tenant?.name}. How can I help you today?`} rows={2} />
+                  <p className="text-xs text-muted-foreground">Initial greeting spoken when call connects (before AI conversation starts)</p>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label>System Prompt</Label>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, voice_system_prompt: defaultPrompt})}>Use Default</Button>
+                    <Label className="text-base font-semibold">System Prompt (Required)</Label>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setFormData({...formData, voice_system_prompt: defaultPrompt})}>
+                      Load Full Template
+                    </Button>
                   </div>
-                  <Textarea value={formData.voice_system_prompt} onChange={(e) => setFormData({...formData, voice_system_prompt: e.target.value})} placeholder="Instructions for the AI on how to handle calls..." rows={8} />
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Instructions for the AI on how to handle calls. Use these placeholders:
+                  </p>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    <Badge variant="secondary" className="font-mono text-xs">{"{company_name}"}</Badge>
+                    <Badge variant="secondary" className="font-mono text-xs">{"{caller_phone}"}</Badge>
+                    <Badge variant="secondary" className="font-mono text-xs">{"{collected_info}"}</Badge>
+                    <Badge variant="secondary" className="font-mono text-xs">{"{state}"}</Badge>
+                  </div>
+                  <Textarea 
+                    value={formData.voice_system_prompt} 
+                    onChange={(e) => setFormData({...formData, voice_system_prompt: e.target.value})} 
+                    placeholder="Click 'Load Full Template' to get started with a production-ready prompt..."
+                    rows={16}
+                    className="font-mono text-sm"
+                  />
+                  {!formData.voice_system_prompt && (
+                    <div className="flex items-center gap-2 text-amber-600 text-sm">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>System prompt is required for Voice AI to work. Click "Load Full Template" above.</span>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>After Hours Message</Label>
