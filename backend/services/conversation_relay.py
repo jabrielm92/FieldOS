@@ -479,29 +479,53 @@ class ConversationRelayHandler:
         
         return lead_id
     
+    def _calculate_quote_amount(self, job_type: str, urgency: str) -> float:
+        """Calculate quote amount based on job type and urgency"""
+        base_prices = {
+            "DIAGNOSTIC": 89.00,
+            "REPAIR": 250.00,
+            "MAINTENANCE": 149.00,
+            "INSTALL": 1500.00,
+            "INSTALLATION": 1500.00,
+            "INSPECTION": 75.00,
+        }
+        
+        urgency_multipliers = {
+            "EMERGENCY": 1.5,
+            "URGENT": 1.25,
+            "ROUTINE": 1.0,
+        }
+        
+        base = base_prices.get(job_type, 89.00)
+        multiplier = urgency_multipliers.get(urgency, 1.0)
+        
+        return round(base * multiplier, 2)
+    
     async def _create_booking(self) -> None:
-        """Create a job booking from collected information"""
+        """Create a job booking with quote from collected information and send confirmation SMS"""
         from services.twilio_service import twilio_service
         
-        # Use the confirmed phone number
-        phone = self.collected_info.get("phone") or self.caller_phone
+        # Use the confirmed phone number - ensure it's normalized
+        phone = normalize_phone_number(self.collected_info.get("phone") or self.caller_phone)
         
         # First create/find customer
         customer = await self._find_or_create_customer()
         if not customer:
+            logger.error("Failed to create/find customer for booking")
             return
         
         # Create property if we have address
         property_id = None
-        if self.collected_info.get("address") and self.collected_info.get("address_confirmed"):
+        if self.collected_info.get("address"):
             property_id = await self._create_property(customer["id"])
         
         # Create the job
         job_id = str(uuid4())
+        quote_id = str(uuid4())
         
         # Determine the booking time based on collected preferences
-        preferred_day = self.collected_info.get("preferred_day", "").lower()
-        preferred_time = self.collected_info.get("preferred_time", "morning").lower()
+        preferred_day = (self.collected_info.get("preferred_day") or "").lower()
+        preferred_time = (self.collected_info.get("preferred_time") or "morning").lower()
         
         # Calculate the actual date
         now = datetime.now(timezone.utc)
@@ -523,19 +547,45 @@ class ConversationRelayHandler:
             window_end = job_date.replace(hour=12, minute=0, second=0, microsecond=0)
             time_label = "9 AM to 12 PM"
         
+        # Calculate quote amount
+        urgency = self.collected_info.get("urgency", "ROUTINE")
+        quote_amount = self._calculate_quote_amount("DIAGNOSTIC", urgency)
+        
+        # Create Quote
+        quote = {
+            "id": quote_id,
+            "tenant_id": self.tenant["id"],
+            "customer_id": customer["id"],
+            "property_id": property_id,
+            "job_id": job_id,
+            "amount": quote_amount,
+            "currency": "USD",
+            "description": f"Diagnostic service - {self.collected_info.get('issue', 'General service call')}",
+            "status": "SENT",
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await self.db.quotes.insert_one(quote)
+        logger.info(f"Created quote {quote_id} for ${quote_amount}")
+        
+        # Create Job
         job = {
             "id": job_id,
             "tenant_id": self.tenant["id"],
             "customer_id": customer["id"],
             "property_id": property_id,
             "job_type": "DIAGNOSTIC",
-            "priority": self._map_urgency_to_priority(self.collected_info.get("urgency")),
+            "priority": self._map_urgency_to_priority(urgency),
             "status": "SCHEDULED",
             "created_by": "AI_PHONE",
             "description": self.collected_info.get("issue", "Service call scheduled via phone"),
-            "notes": f"Booked via AI phone. Urgency: {self.collected_info.get('urgency', 'ROUTINE')}",
+            "notes": f"Booked via AI phone. Urgency: {urgency}. Caller: {self.collected_info.get('name', 'Unknown')}",
             "service_window_start": window_start.isoformat(),
             "service_window_end": window_end.isoformat(),
+            "quote_amount": quote_amount,
+            "quote_id": quote_id,
             "tags": ["voice_ai_booking"],
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat()
@@ -544,40 +594,96 @@ class ConversationRelayHandler:
         await self.db.jobs.insert_one(job)
         logger.info(f"Created job {job_id} from voice booking")
         
-        # Send SMS confirmation to the CONFIRMED phone number
+        # Also create a lead record for tracking
+        lead_id = await self._create_lead()
+        if lead_id:
+            # Update lead status to JOB_BOOKED
+            await self.db.leads.update_one(
+                {"id": lead_id},
+                {"$set": {"status": "JOB_BOOKED", "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+        
+        # Update state to booking complete
+        self.state = STATE_BOOKING_COMPLETE
+        
+        # Send SMS confirmation with quote to the CONFIRMED phone number
         if phone:
             date_str = window_start.strftime("%A, %B %d")
             address = self.collected_info.get('address', 'your location')
-            name = self.collected_info.get('name', '').split()[0] if self.collected_info.get('name') else 'there'
+            name = (self.collected_info.get('name') or '').split()[0] if self.collected_info.get('name') else 'there'
             
-            sms_msg = f"Hi {name}! Your appointment with {self.company_name} is confirmed for {date_str}, {time_label} at {address}. We'll text you when our tech is on the way!"
+            sms_sig = self.tenant.get('sms_signature', '').strip()
+            
+            # Confirmation SMS with quote
+            sms_msg = f"Hi {name}! Your appointment with {self.company_name} is confirmed for {date_str}, {time_label} at {address}. Service quote: ${quote_amount:.2f}. We'll text you when our tech is on the way!{' ' + sms_sig if sms_sig else ''}"
             
             try:
-                await twilio_service.send_sms(to_phone=phone, body=sms_msg)
-                logger.info(f"Sent booking confirmation SMS to {phone}")
-                
-                # Also create a message record for the SMS
-                await self._create_sms_message(customer["id"], sms_msg)
+                result = await twilio_service.send_sms(to_phone=phone, body=sms_msg)
+                if result.get("success"):
+                    logger.info(f"Sent booking confirmation SMS to {phone}")
+                    # Create a message record for the SMS in inbox
+                    await self._create_sms_message(customer["id"], sms_msg, result.get("provider_message_id"))
+                else:
+                    logger.error(f"Failed to send SMS: {result.get('error')}")
             except Exception as e:
                 logger.error(f"Failed to send SMS confirmation: {e}")
     
-    async def _create_sms_message(self, customer_id: str, content: str) -> None:
-        """Create a message record for the SMS confirmation"""
-        # Find conversation
+    async def _create_sms_message(self, customer_id: str, content: str, twilio_sid: str = None) -> None:
+        """Create a message record for the SMS in the inbox"""
+        # Find or create conversation for this customer
         conversation = await self.db.conversations.find_one({
             "tenant_id": self.tenant["id"],
             "customer_id": customer_id
         }, {"_id": 0})
         
         if not conversation:
-            return
+            # Create a new conversation
+            conversation_id = str(uuid4())
+            conversation = {
+                "id": conversation_id,
+                "tenant_id": self.tenant["id"],
+                "customer_id": customer_id,
+                "status": "OPEN",
+                "primary_channel": "SMS",
+                "last_message_from": "SYSTEM",
+                "last_message_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            await self.db.conversations.insert_one(conversation)
+        else:
+            conversation_id = conversation["id"]
         
+        # Create the outbound SMS message
         message = {
             "id": str(uuid4()),
             "tenant_id": self.tenant["id"],
-            "conversation_id": conversation["id"],
+            "conversation_id": conversation_id,
             "customer_id": customer_id,
             "direction": "OUTBOUND",
+            "sender_type": "SYSTEM",
+            "channel": "SMS",
+            "content": content,
+            "metadata": {
+                "source": "voice_ai_booking_confirmation",
+                "twilio_sid": twilio_sid
+            },
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await self.db.messages.insert_one(message)
+        
+        # Update conversation
+        await self.db.conversations.update_one(
+            {"id": conversation_id},
+            {"$set": {
+                "last_message_from": "SYSTEM",
+                "last_message_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        logger.info(f"Created SMS message record in inbox for customer {customer_id}")
             "sender_type": "SYSTEM",
             "channel": "SMS",
             "content": content,
