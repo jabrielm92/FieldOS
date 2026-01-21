@@ -100,93 +100,78 @@ def clean_collected_data(data: Dict) -> Dict:
     return cleaned
 
 
-def get_system_prompt(company_name: str, caller_phone: str, collected_info: Dict, state: str) -> str:
-    """Generate the AI system prompt based on current conversation state"""
-    
-    # Format phone for display in prompt (for speech)
+# Default system prompt template - can be overridden per tenant
+DEFAULT_VOICE_PROMPT = """You are a friendly receptionist for {company_name}. Your job is to collect information from callers and book service appointments.
+
+CURRENT CALL STATE:
+- Caller phone: {caller_phone}
+- Data collected so far: {collected_info}
+- Current step: {state}
+
+CONVERSATION FLOW (follow this order):
+1. Get caller's name
+2. Confirm their phone number (or get a new one if they prefer)
+3. Get service address
+4. Ask what's wrong with their system
+5. Ask urgency: emergency, urgent (1-2 days), or routine
+6. Ask preferred day: today, tomorrow, or later this week
+7. Ask preferred time: morning (9-12) or afternoon (1-5)
+8. Confirm the booking and set action to "book_job"
+
+RULES:
+- Keep responses SHORT (1 sentence max)
+- Be warm and professional
+- Say phone numbers digit by digit when speaking
+- Store phone numbers as digits only (no spaces)
+- Set action="book_job" ONLY when customer confirms final booking"""
+
+
+def get_system_prompt(company_name: str, caller_phone: str, collected_info: Dict, state: str, custom_prompt: str = None) -> str:
+    """
+    Generate the AI system prompt.
+    Uses custom prompt from tenant if provided, otherwise uses default.
+    """
+    # Format phone for speech
     phone_display = format_phone_for_speech(caller_phone)
     
-    # Get the updated phone if different from caller ID
-    current_phone = collected_info.get("phone", caller_phone)
-    phone_to_confirm = format_phone_for_speech(current_phone)
+    # Use custom prompt or default
+    base_prompt = custom_prompt if custom_prompt else DEFAULT_VOICE_PROMPT
     
-    return f"""## Identity & Purpose
+    # Replace placeholders
+    prompt = base_prompt.format(
+        company_name=company_name,
+        caller_phone=phone_display,
+        collected_info=json.dumps(collected_info),
+        state=state
+    )
+    
+    # Add JSON response format instructions (always required)
+    json_instructions = """
 
-You are the receptionist for {company_name}. Capture caller details, classify urgency, and book appointments.
-
-## Voice Style
-
-- Friendly, calm, professional
-- SHORT responses - one sentence max
-- Use natural contractions
-- NEVER say you are AI
-- When saying phone numbers, say each digit separately with pauses
-
-## Current Call
-
-CALLER ID: {phone_display}
-COLLECTED: {json.dumps(collected_info)}
-STATE: {state}
-
-## Call Flow - ONE question at a time
-
-1. **Name** (if not collected):
-   → "Can I get your name please?"
-
-2. **Phone** (after name):
-   → If phone not confirmed: "Is {phone_to_confirm} the best number to reach you?"
-   → If they say NO or give new number: capture it, then confirm: "Got it, [new number]. Is that correct?"
-
-3. **Address** (after phone confirmed):
-   → "What's the service address?"
-   → After they give it: "Got it, [address]. Is that correct?"
-
-4. **Issue** (after address confirmed):
-   → "What's going on with your system?"
-
-5. **Urgency** (after issue):
-   → "Is this an emergency, urgent in the next day or two, or more routine?"
-
-6. **Day preference** (after urgency):
-   → "What day works best - today, tomorrow, or another day this week?"
-
-7. **Time slot** (after day):
-   → Based on their day choice, offer: "I have morning 9 to 12, or afternoon 1 to 5. Which works better?"
-
-8. **Confirm booking** (when all collected):
-   → "Perfect, I'll book you for [day] [time slot] at [address]. Sound good?"
-   → When they confirm: action="book_job"
-
-## Response Format
-
-IMPORTANT: Return phone numbers WITHOUT spaces in collected_data. Only use spaces when SPEAKING the number.
-
-Return ONLY this JSON:
-{{
-    "response_text": "One short sentence",
-    "next_state": "collecting_name|confirming_phone|collecting_new_phone|collecting_address|confirming_address|collecting_issue|collecting_urgency|offering_times|confirming_time|booking_complete",
-    "collected_data": {{
-        "name": "FirstName LastName or null",
-        "phone": "1234567890 (digits only, NO SPACES) or null",
-        "phone_confirmed": true/false,
-        "address": "Full street address or null",
-        "address_confirmed": true/false,
-        "issue": "Brief issue description or null",
-        "urgency": "EMERGENCY|URGENT|ROUTINE or null",
-        "preferred_day": "today|tomorrow|specific day or null",
-        "preferred_time": "morning|afternoon or null"
-    }},
+RESPONSE FORMAT (REQUIRED - always respond with this exact JSON structure):
+{
+    "response_text": "Your spoken response here (keep it short)",
+    "next_state": "collecting_name|confirming_phone|collecting_address|collecting_issue|collecting_urgency|offering_times|confirming_time|booking_complete",
+    "collected_data": {
+        "name": "Customer name or null if not yet collected",
+        "phone": "10 digit phone number with no spaces or null",
+        "phone_confirmed": true or false,
+        "address": "Full address or null",
+        "address_confirmed": true or false,
+        "issue": "Issue description or null",
+        "urgency": "EMERGENCY or URGENT or ROUTINE or null",
+        "preferred_day": "today/tomorrow/specific day or null",
+        "preferred_time": "morning or afternoon or null"
+    },
     "action": null or "book_job"
-}}
+}
 
-## Rules
+IMPORTANT:
+- Store phone as digits only: "2158050594" not "2 1 5 8 0 5 0 5 9 4"
+- Only set action="book_job" when customer confirms the final booking
+- Always preserve previously collected data in collected_data"""
 
-1. ONE sentence responses only
-2. Follow exact order
-3. If they give a NEW phone number, update phone field (DIGITS ONLY) and set phone_confirmed=false, then confirm it
-4. Say phone numbers digit by digit: "2 1 5, 8 0 5, 0 5 9 4" but STORE as "2158050594"
-5. Set action="book_job" ONLY when they confirm the final booking
-6. Extract the caller's ACTUAL name - never leave as null if they provided it"""
+    return prompt + json_instructions
 
 
 async def get_ai_response(
