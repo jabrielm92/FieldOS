@@ -103,7 +103,7 @@ def clean_collected_data(data: Dict) -> Dict:
 def get_system_prompt(company_name: str, caller_phone: str, collected_info: Dict, state: str) -> str:
     """Generate the AI system prompt based on current conversation state"""
     
-    # Format phone for display in prompt
+    # Format phone for display in prompt (for speech)
     phone_display = format_phone_for_speech(caller_phone)
     
     # Get the updated phone if different from caller ID
@@ -159,19 +159,21 @@ STATE: {state}
 
 ## Response Format
 
+IMPORTANT: Return phone numbers WITHOUT spaces in collected_data. Only use spaces when SPEAKING the number.
+
 Return ONLY this JSON:
 {{
     "response_text": "One short sentence",
     "next_state": "collecting_name|confirming_phone|collecting_new_phone|collecting_address|confirming_address|collecting_issue|collecting_urgency|offering_times|confirming_time|booking_complete",
     "collected_data": {{
-        "name": "string or null",
-        "phone": "string or null",
+        "name": "FirstName LastName or null",
+        "phone": "1234567890 (digits only, NO SPACES) or null",
         "phone_confirmed": true/false,
-        "address": "string or null",
+        "address": "Full street address or null",
         "address_confirmed": true/false,
-        "issue": "string or null",
+        "issue": "Brief issue description or null",
         "urgency": "EMERGENCY|URGENT|ROUTINE or null",
-        "preferred_day": "string or null",
+        "preferred_day": "today|tomorrow|specific day or null",
         "preferred_time": "morning|afternoon or null"
     }},
     "action": null or "book_job"
@@ -181,9 +183,10 @@ Return ONLY this JSON:
 
 1. ONE sentence responses only
 2. Follow exact order
-3. If they give a NEW phone number, update phone field and set phone_confirmed=false, then confirm it
-4. Say phone numbers digit by digit: "2 1 5, 8 0 5, 0 5 9 4"
-5. Set action="book_job" ONLY when they confirm the final booking"""
+3. If they give a NEW phone number, update phone field (DIGITS ONLY) and set phone_confirmed=false, then confirm it
+4. Say phone numbers digit by digit: "2 1 5, 8 0 5, 0 5 9 4" but STORE as "2158050594"
+5. Set action="book_job" ONLY when they confirm the final booking
+6. Extract the caller's ACTUAL name - never leave as null if they provided it"""
 
 
 async def get_ai_response(
