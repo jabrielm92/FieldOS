@@ -3125,7 +3125,6 @@ async def voice_inbound(request: Request):
         return Response(content=twiml, media_type="application/xml")
     
     base_url = os.environ.get('BACKEND_URL', os.environ.get('APP_BASE_URL', ''))
-    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
     
     # Store call context
     await db.voice_calls.update_one(
@@ -3136,31 +3135,25 @@ async def voice_inbound(request: Request):
             "from_phone": from_phone,
             "to_phone": to_phone,
             "tenant_name": tenant.get("name", "our company"),
+            "state": "greeting",
+            "collected_data": {},
             "started_at": datetime.now(timezone.utc).isoformat()
         }},
         upsert=True
     )
     
-    welcome = tenant.get('voice_greeting') or f"Hi, thanks for calling {tenant.get('name', 'us')}. How can I help you?"
+    welcome = tenant.get('voice_greeting') or f"Hi, thanks for calling {tenant.get('name', 'us')}. How can I help you today?"
     
+    # Use simple Gather approach (more reliable than ConversationRelay)
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Connect>
-        <ConversationRelay 
-            url="{ws_url}/api/v1/voice/ws/{call_sid}"
-            welcomeGreeting="{welcome}"
-            voice="en-US-Standard-J"
-            language="en-US"
-            ttsProvider="google"
-            interruptible="true"
-            dtmfDetection="true"
-            speechModel="phone_call"
-        />
-    </Connect>
+    <Gather input="speech" action="{base_url}/api/v1/voice/handle-speech" method="POST" speechTimeout="auto" language="en-US">
+        <Say voice="Polly.Joanna">{welcome}</Say>
+    </Gather>
+    <Say voice="Polly.Joanna">I didn't catch that. Please call back if you need assistance.</Say>
 </Response>"""
     
-    logger.info(f"ConversationRelay TwiML - WS URL: {ws_url}/api/v1/voice/ws/{call_sid}")
-    logger.info(f"ConversationRelay started for tenant {tenant['id']}, call {call_sid}")
+    logger.info(f"Voice AI started for tenant {tenant['id']}, call {call_sid}")
     return Response(content=twiml, media_type="application/xml")
 
 
