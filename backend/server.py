@@ -3078,6 +3078,11 @@ async def voice_inbound(request: Request):
     """
     Handle inbound voice call from Twilio.
     Returns TwiML with ConversationRelay for real-time WebSocket streaming.
+    
+    ConversationRelay provides:
+    - Real-time speech-to-text (STT) via Deepgram
+    - Text-to-speech (TTS) via ElevenLabs (default) or others
+    - Low-latency bidirectional WebSocket communication
     """
     form_data = await request.form()
     call_sid = form_data.get("CallSid", "")
@@ -3114,7 +3119,19 @@ async def voice_inbound(request: Request):
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
+    # Get the backend URL and construct WebSocket URL
     base_url = os.environ.get('BACKEND_URL', os.environ.get('APP_BASE_URL', ''))
+    
+    # Convert https:// to wss:// for WebSocket connection
+    if base_url.startswith('https://'):
+        ws_url = base_url.replace('https://', 'wss://')
+    elif base_url.startswith('http://'):
+        ws_url = base_url.replace('http://', 'ws://')
+    else:
+        ws_url = f"wss://{base_url}"
+    
+    # Construct full WebSocket URL for ConversationRelay
+    ws_endpoint = f"{ws_url}/api/v1/voice/ws/{call_sid}"
     
     # Check if tenant has OpenAI key configured (required for Voice AI)
     has_openai = tenant.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
@@ -3145,18 +3162,53 @@ async def voice_inbound(request: Request):
         upsert=True
     )
     
+    # Get welcome greeting
     welcome = tenant.get('voice_greeting') or f"Hi, thanks for calling {tenant.get('name', 'us')}. How can I help you today?"
     
-    # Use Gather with speech recognition
+    # Escape XML special characters in welcome message
+    welcome = welcome.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&apos;')
+    
+    # Get voice provider settings
+    voice_provider = tenant.get('voice_provider', 'elevenlabs').lower()
+    
+    # Determine TTS provider and voice
+    if voice_provider == 'elevenlabs':
+        tts_provider = 'ElevenLabs'
+        # Use tenant's ElevenLabs voice ID or default
+        voice = tenant.get('elevenlabs_voice_id') or 'UgBBYS2sOqTuMpoF3BR0'  # Default ElevenLabs voice
+    elif voice_provider == 'amazon':
+        tts_provider = 'Amazon'
+        voice = tenant.get('voice_name') or 'Joanna-Neural'
+    else:
+        tts_provider = 'Google'
+        voice = tenant.get('voice_name') or 'en-US-Journey-O'
+    
+    # Build ConversationRelay TwiML
+    # This is the proper format per Twilio documentation
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather input="speech" action="{base_url}/api/v1/voice/handle-speech" method="POST" timeout="5" speechTimeout="auto" language="en-US">
-        <Say voice="Polly.Joanna">{welcome}</Say>
-    </Gather>
-    <Say voice="Polly.Joanna">I didn't hear anything. Goodbye.</Say>
+    <Connect action="{base_url}/api/v1/voice/connect-complete">
+        <ConversationRelay 
+            url="{ws_endpoint}"
+            welcomeGreeting="{welcome}"
+            welcomeGreetingInterruptible="any"
+            language="en-US"
+            ttsProvider="{tts_provider}"
+            voice="{voice}"
+            transcriptionProvider="Deepgram"
+            speechModel="nova-3-general"
+            interruptible="any"
+            dtmfDetection="true"
+        >
+            <Parameter name="tenant_id" value="{tenant['id']}"/>
+            <Parameter name="tenant_name" value="{tenant.get('name', 'Company')}"/>
+            <Parameter name="caller_phone" value="{from_phone}"/>
+        </ConversationRelay>
+    </Connect>
 </Response>"""
     
-    logger.info(f"Voice AI started for tenant {tenant['id']}, call {call_sid}")
+    logger.info(f"Voice AI (ConversationRelay) started for tenant {tenant['id']}, call {call_sid}")
+    logger.info(f"WebSocket endpoint: {ws_endpoint}")
     return Response(content=twiml, media_type="application/xml")
 
 
