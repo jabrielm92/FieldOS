@@ -236,10 +236,15 @@ async def get_ai_response(
                 response_text = response_text.split("```")[1].split("```")[0].strip()
             
             parsed = json.loads(response_text)
+            
+            # Clean the collected data to normalize phone numbers and other fields
+            collected_data = parsed.get("collected_data", collected_info)
+            cleaned_data = clean_collected_data(collected_data)
+            
             return {
                 "response_text": parsed.get("response_text", "I'm sorry, could you repeat that?"),
                 "next_state": parsed.get("next_state", state),
-                "collected_data": parsed.get("collected_data", collected_info),
+                "collected_data": cleaned_data,
                 "action": parsed.get("action")
             }
         except json.JSONDecodeError as e:
