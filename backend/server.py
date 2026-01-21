@@ -3115,8 +3115,9 @@ async def voice_inbound(request: Request):
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    if not tenant.get("use_self_hosted_voice", False):
-        base_url = os.environ.get('APP_BASE_URL', '')
+    # Check if Voice AI is enabled for this tenant
+    if not tenant.get("voice_ai_enabled", False):
+        base_url = os.environ.get('BACKEND_URL', os.environ.get('APP_BASE_URL', ''))
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep.</Say>
@@ -3124,7 +3125,7 @@ async def voice_inbound(request: Request):
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     
-    base_url = os.environ.get('APP_BASE_URL', '')
+    base_url = os.environ.get('BACKEND_URL', os.environ.get('APP_BASE_URL', ''))
     ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
     
     # Store call context
