@@ -3141,7 +3141,7 @@ async def voice_inbound(request: Request):
         upsert=True
     )
     
-    welcome = f"Hi, thanks for calling {tenant.get('name', 'us')}. How can I help you?"
+    welcome = tenant.get('voice_greeting') or f"Hi, thanks for calling {tenant.get('name', 'us')}. How can I help you?"
     
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -3159,6 +3159,7 @@ async def voice_inbound(request: Request):
     </Connect>
 </Response>"""
     
+    logger.info(f"ConversationRelay TwiML - WS URL: {ws_url}/api/v1/voice/ws/{call_sid}")
     logger.info(f"ConversationRelay started for tenant {tenant['id']}, call {call_sid}")
     return Response(content=twiml, media_type="application/xml")
 
