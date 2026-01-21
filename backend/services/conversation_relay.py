@@ -447,83 +447,12 @@ class ConversationRelayHandler:
         
         return " | ".join(parts) if parts else "No information collected"
     
-    async def _create_inbox_message(self) -> None:
-        """Create a message in the inbox for this call"""
-        # Find or create customer
-        phone = self.collected_info.get("phone") or self.caller_phone
-        customer = await self.db.customers.find_one({
-            "tenant_id": self.tenant["id"],
-            "phone": phone
-        }, {"_id": 0})
-        
-        if not customer:
-            return
-        
-        # Find or create conversation
-        conversation = await self.db.conversations.find_one({
-            "tenant_id": self.tenant["id"],
-            "customer_id": customer["id"]
-        }, {"_id": 0})
-        
-        if not conversation:
-            conversation_id = str(uuid4())
-            conversation = {
-                "id": conversation_id,
-                "tenant_id": self.tenant["id"],
-                "customer_id": customer["id"],
-                "status": "ACTIVE",
-                "preferred_channel": "CALL",
-                "last_message_from": "CUSTOMER",
-                "last_message_at": datetime.now(timezone.utc).isoformat(),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }
-            await self.db.conversations.insert_one(conversation)
-        else:
-            conversation_id = conversation["id"]
-            # Update conversation
-            await self.db.conversations.update_one(
-                {"id": conversation_id},
-                {"$set": {
-                    "last_message_from": "CUSTOMER",
-                    "last_message_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                }}
-            )
-        
-        # Create message for the voice call
-        call_summary = self._generate_summary()
-        transcript = "\n".join([
-            f"{'Caller' if m['role'] == 'user' else 'AI'}: {m['content']}"
-            for m in self.conversation_history
-        ])
-        
-        message = {
-            "id": str(uuid4()),
-            "tenant_id": self.tenant["id"],
-            "conversation_id": conversation_id,
-            "customer_id": customer["id"],
-            "direction": "INBOUND",
-            "sender_type": "CUSTOMER",
-            "channel": "VOICE",
-            "content": f"📞 Voice Call\n\n{call_summary}\n\n--- Transcript ---\n{transcript}",
-            "metadata": {
-                "call_sid": self.call_sid,
-                "duration_seconds": (datetime.now(timezone.utc) - self.call_started_at).total_seconds(),
-                "collected_info": self.collected_info
-            },
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        
-        await self.db.messages.insert_one(message)
-        logger.info(f"Created inbox message for call {self.call_sid}")
-    
     async def _create_lead(self) -> Optional[str]:
         """Create a lead from call information"""
         lead_id = str(uuid4())
         
-        # Use the confirmed phone, not caller ID
-        phone = self.collected_info.get("phone") or self.caller_phone
+        # Use the confirmed phone, not caller ID - ensure it's normalized
+        phone = normalize_phone_number(self.collected_info.get("phone") or self.caller_phone)
         
         lead = {
             "id": lead_id,
