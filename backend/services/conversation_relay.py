@@ -27,20 +27,77 @@ STATE_BOOKING_COMPLETE = "booking_complete"
 STATE_ENDED = "ended"
 
 
+def normalize_phone_number(phone: str) -> str:
+    """
+    Normalize phone number to clean E.164 format.
+    Removes spaces, commas, and other formatting characters.
+    Returns: +1XXXXXXXXXX format
+    """
+    if not phone:
+        return ""
+    # Remove ALL non-digit characters
+    digits = re.sub(r'\D', '', phone)
+    
+    # Handle various lengths
+    if len(digits) == 10:
+        return f"+1{digits}"
+    elif len(digits) == 11 and digits.startswith('1'):
+        return f"+{digits}"
+    elif len(digits) > 11:
+        # Take last 10 digits and add +1
+        return f"+1{digits[-10:]}"
+    else:
+        # Return as-is with + prefix
+        return f"+{digits}" if digits else ""
+
+
 def format_phone_for_speech(phone: str) -> str:
     """Format phone number for natural speech with pauses"""
     if not phone:
         return ""
-    # Remove non-digits
-    digits = re.sub(r'\D', '', phone)
+    # First normalize to get clean digits
+    normalized = normalize_phone_number(phone)
+    digits = re.sub(r'\D', '', normalized)
+    
+    if len(digits) == 11 and digits.startswith('1'):
+        digits = digits[1:]  # Remove country code for speech
+    
     if len(digits) == 10:
         # Format as: 2 1 5, 8 0 5, 0 5 9 4 (with pauses)
         return f"{digits[0]} {digits[1]} {digits[2]}, {digits[3]} {digits[4]} {digits[5]}, {digits[6]} {digits[7]} {digits[8]} {digits[9]}"
-    elif len(digits) == 11 and digits[0] == '1':
-        # Skip the 1
-        digits = digits[1:]
-        return f"{digits[0]} {digits[1]} {digits[2]}, {digits[3]} {digits[4]} {digits[5]}, {digits[6]} {digits[7]} {digits[8]} {digits[9]}"
     return phone
+
+
+def clean_collected_data(data: Dict) -> Dict:
+    """
+    Clean and normalize collected data from AI responses.
+    - Removes spaces from phone numbers
+    - Normalizes addresses
+    - Cleans up names
+    """
+    cleaned = data.copy()
+    
+    # Clean phone number - remove spaces, commas, etc.
+    if cleaned.get("phone"):
+        cleaned["phone"] = normalize_phone_number(cleaned["phone"])
+    
+    # Clean name - capitalize properly
+    if cleaned.get("name"):
+        name = cleaned["name"].strip()
+        # Remove any weird characters
+        name = re.sub(r'[^\w\s\'-]', '', name)
+        # Capitalize each word
+        name = ' '.join(word.capitalize() for word in name.split())
+        cleaned["name"] = name
+    
+    # Clean address - normalize whitespace
+    if cleaned.get("address"):
+        address = cleaned["address"].strip()
+        # Normalize multiple spaces to single space
+        address = re.sub(r'\s+', ' ', address)
+        cleaned["address"] = address
+    
+    return cleaned
 
 
 def get_system_prompt(company_name: str, caller_phone: str, collected_info: Dict, state: str) -> str:
