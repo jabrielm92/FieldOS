@@ -318,6 +318,9 @@ class ConversationRelayHandler:
             "content": voice_prompt
         })
         
+        # Get custom prompt from tenant if configured
+        custom_prompt = self.tenant.get("voice_system_prompt")
+        
         # Get AI response
         ai_result = await get_ai_response(
             user_input=voice_prompt,
@@ -325,7 +328,8 @@ class ConversationRelayHandler:
             caller_phone=self.caller_phone,
             collected_info=self.collected_info,
             state=self.state,
-            conversation_history=self.conversation_history
+            conversation_history=self.conversation_history,
+            custom_prompt=custom_prompt
         )
         
         # Update state and collected info
