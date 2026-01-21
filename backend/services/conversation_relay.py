@@ -100,55 +100,26 @@ def clean_collected_data(data: Dict) -> Dict:
     return cleaned
 
 
-# Default system prompt template - can be overridden per tenant
-DEFAULT_VOICE_PROMPT = """You are a friendly receptionist for {company_name}. Your job is to collect information from callers and book service appointments.
-
-CURRENT CALL STATE:
-- Caller phone: {caller_phone}
-- Data collected so far: {collected_info}
-- Current step: {state}
-
-CONVERSATION FLOW (follow this order):
-1. Get caller's name
-2. Confirm their phone number (or get a new one if they prefer)
-3. Get service address
-4. Ask what's wrong with their system
-5. Ask urgency: emergency, urgent (1-2 days), or routine
-6. Ask preferred day: today, tomorrow, or later this week
-7. Ask preferred time: morning (9-12) or afternoon (1-5)
-8. Confirm the booking and set action to "book_job"
-
-RULES:
-- Keep responses SHORT (1 sentence max)
-- Be warm and professional
-- Say phone numbers digit by digit when speaking
-- Store phone numbers as digits only (no spaces)
-- Set action="book_job" ONLY when customer confirms final booking"""
-
-
-def get_system_prompt(company_name: str, caller_phone: str, collected_info: Dict, state: str, custom_prompt: str = None) -> str:
+def get_system_prompt(company_name: str, caller_phone: str, collected_info: Dict, state: str, tenant_prompt: str) -> str:
     """
-    Generate the AI system prompt.
-    Uses custom prompt from tenant if provided, otherwise uses default.
+    Generate the AI system prompt using ONLY the tenant's configured prompt.
+    The tenant_prompt is required - no hardcoded defaults.
     """
     # Format phone for speech
     phone_display = format_phone_for_speech(caller_phone)
     
-    # Use custom prompt or default
-    base_prompt = custom_prompt if custom_prompt else DEFAULT_VOICE_PROMPT
-    
-    # Replace placeholders
-    prompt = base_prompt.format(
+    # Replace placeholders in tenant's prompt
+    prompt = tenant_prompt.format(
         company_name=company_name,
         caller_phone=phone_display,
         collected_info=json.dumps(collected_info),
         state=state
     )
     
-    # Add JSON response format instructions (always required)
+    # Add JSON response format instructions (required for system to work)
     json_instructions = """
 
-RESPONSE FORMAT (REQUIRED - always respond with this exact JSON structure):
+RESPONSE FORMAT (REQUIRED - you MUST respond with this exact JSON structure):
 {
     "response_text": "Your spoken response here (keep it short)",
     "next_state": "collecting_name|confirming_phone|collecting_address|collecting_issue|collecting_urgency|offering_times|confirming_time|booking_complete",
@@ -166,10 +137,11 @@ RESPONSE FORMAT (REQUIRED - always respond with this exact JSON structure):
     "action": null or "book_job"
 }
 
-IMPORTANT:
-- Store phone as digits only: "2158050594" not "2 1 5 8 0 5 0 5 9 4"
-- Only set action="book_job" when customer confirms the final booking
-- Always preserve previously collected data in collected_data"""
+CRITICAL RULES:
+- Store phone as digits only: "2158050594" NOT "2 1 5 8 0 5 0 5 9 4"
+- Set action="book_job" ONLY when customer explicitly confirms the final booking
+- Always preserve previously collected data in collected_data
+- Keep response_text short (1-2 sentences max)"""
 
     return prompt + json_instructions
 
