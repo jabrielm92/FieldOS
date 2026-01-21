@@ -166,7 +166,7 @@ Confirm verbally:
 
 ## Tool URLs (for Vapi Dashboard)
 
-Base URL: `https://ops-service.preview.emergentagent.com/api/v1`
+Base URL: `https://bizvoice-4.preview.emergentagent.com/api/v1`
 
 - **create-lead**: `POST /vapi/create-lead`
 - **check-availability**: `POST /vapi/check-availability`
