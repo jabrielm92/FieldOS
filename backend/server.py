@@ -3168,8 +3168,13 @@ async def voice_inbound(request: Request):
 @app.websocket("/api/v1/voice/ws/{call_sid}")
 async def voice_ws(websocket: WebSocket, call_sid: str):
     """WebSocket endpoint for Twilio ConversationRelay"""
-    await websocket.accept()
-    logger.info(f"ConversationRelay connected: {call_sid}")
+    logger.info(f"WebSocket connection attempt for call: {call_sid}")
+    try:
+        await websocket.accept()
+        logger.info(f"ConversationRelay WebSocket CONNECTED: {call_sid}")
+    except Exception as e:
+        logger.error(f"WebSocket accept failed: {e}")
+        return
     
     from services.conversation_relay import ConversationRelayHandler
     
