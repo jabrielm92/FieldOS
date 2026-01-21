@@ -5062,7 +5062,7 @@ async def get_analytics_overview(
     # Potential revenue: booked/scheduled jobs
     potential_jobs = await db.jobs.find({
         "tenant_id": tenant_id,
-        "status": {"$in": ["BOOKED", "EN_ROUTE", "ON_SITE"]},
+        "status": {"$in": ["SCHEDULED", "BOOKED", "EN_ROUTE", "ON_SITE"]},
         "created_at": {"$gte": start_str}
     }, {"_id": 0, "quote_amount": 1}).to_list(1000)
     potential_revenue = sum(j.get("quote_amount", 0) or 0 for j in potential_jobs)
