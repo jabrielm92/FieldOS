@@ -590,13 +590,30 @@ class ConversationRelayHandler:
             sms_msg = f"Hi {name}! Your appointment with {self.company_name} is confirmed for {date_str}, {time_label} at {address}. Service quote: ${quote_amount:.2f}. We'll text you when our tech is on the way!{' ' + sms_sig if sms_sig else ''}"
             
             try:
-                result = await twilio_service.send_sms(to_phone=phone, body=sms_msg)
-                if result.get("success"):
-                    logger.info(f"Sent booking confirmation SMS to {phone}")
-                    # Create a message record for the SMS in inbox
-                    await self._create_sms_message(customer["id"], sms_msg, result.get("provider_message_id"))
+                # Use tenant's Twilio credentials (multi-tenant)
+                tenant_account_sid = self.tenant.get('twilio_account_sid')
+                tenant_auth_token = self.tenant.get('twilio_auth_token')
+                tenant_messaging_sid = self.tenant.get('twilio_messaging_service_sid')
+                tenant_phone = self.tenant.get('twilio_phone_number')
+                
+                if tenant_account_sid and tenant_auth_token:
+                    from twilio.rest import Client
+                    client = Client(tenant_account_sid, tenant_auth_token)
+                    
+                    msg_params = {"body": sms_msg, "to": phone}
+                    if tenant_messaging_sid:
+                        msg_params["messaging_service_sid"] = tenant_messaging_sid
+                    elif tenant_phone:
+                        msg_params["from_"] = tenant_phone
+                    else:
+                        logger.error("No messaging service or phone number configured for tenant")
+                        return
+                    
+                    message = client.messages.create(**msg_params)
+                    logger.info(f"Sent booking confirmation SMS to {phone}, SID: {message.sid}")
+                    await self._create_sms_message(customer["id"], sms_msg, message.sid)
                 else:
-                    logger.error(f"Failed to send SMS: {result.get('error')}")
+                    logger.error("Tenant Twilio credentials not configured")
             except Exception as e:
                 logger.error(f"Failed to send SMS confirmation: {e}")
     
