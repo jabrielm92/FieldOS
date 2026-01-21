@@ -471,6 +471,11 @@ CRITICAL RULES:
                   <Input value={formData.twilio_phone_number} onChange={(e) => setFormData({...formData, twilio_phone_number: e.target.value})} placeholder="+1234567890" />
                   <p className="text-xs text-muted-foreground">The Twilio phone number assigned to this tenant</p>
                 </div>
+                <div className="space-y-2">
+                  <Label>Messaging Service SID</Label>
+                  <Input value={formData.twilio_messaging_service_sid} onChange={(e) => setFormData({...formData, twilio_messaging_service_sid: e.target.value})} placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+                  <p className="text-xs text-muted-foreground">For SMS confirmations (optional if phone number is set)</p>
+                </div>
               </TabsContent>
 
               {/* AI Keys Tab */}
