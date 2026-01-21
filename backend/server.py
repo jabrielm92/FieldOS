@@ -3273,8 +3273,15 @@ async def ws_test(websocket: WebSocket):
 
 @app.websocket("/api/v1/voice/ws/{call_sid}")
 async def voice_ws(websocket: WebSocket, call_sid: str):
-    """WebSocket endpoint for Twilio ConversationRelay"""
-    logger.info(f"WebSocket connection attempt for call: {call_sid}")
+    """
+    WebSocket endpoint for Twilio ConversationRelay.
+    
+    Handles real-time bidirectional communication:
+    - Receives: setup, prompt (transcribed speech), interrupt, dtmf, error
+    - Sends: text tokens for TTS synthesis
+    """
+    logger.info(f"ConversationRelay WebSocket connection attempt for call: {call_sid}")
+    
     try:
         await websocket.accept()
         logger.info(f"ConversationRelay WebSocket CONNECTED: {call_sid}")
@@ -3285,56 +3292,117 @@ async def voice_ws(websocket: WebSocket, call_sid: str):
     from services.conversation_relay import ConversationRelayHandler
     
     handler = None
+    tenant = None
+    caller_phone = ""
+    
     try:
+        # Get call context from database
         call_context = await db.voice_calls.find_one({"call_sid": call_sid}, {"_id": 0})
-        if not call_context:
-            await websocket.close()
-            return
         
-        tenant = await db.tenants.find_one({"id": call_context.get("tenant_id")}, {"_id": 0})
-        if not tenant:
-            await websocket.close()
-            return
-        
-        handler = ConversationRelayHandler(
-            db=db,
-            call_sid=call_sid,
-            tenant=tenant,
-            caller_phone=call_context.get("from_phone", "")
-        )
+        if call_context:
+            tenant = await db.tenants.find_one({"id": call_context.get("tenant_id")}, {"_id": 0})
+            caller_phone = call_context.get("from_phone", "")
         
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
             event_type = message.get("type")
             
-            logger.info(f"WS event: {event_type}")
+            logger.info(f"ConversationRelay event: {event_type}")
+            logger.debug(f"Message payload: {json.dumps(message)[:500]}")
             
             if event_type == "setup":
-                await handler.handle_setup(message)
-            elif event_type == "prompt":
-                response = await handler.handle_prompt(message)
-                if response:
+                # Setup message contains session info and custom parameters
+                session_id = message.get("sessionId", "")
+                custom_params = message.get("customParameters", {})
+                
+                logger.info(f"ConversationRelay setup - SessionID: {session_id}")
+                logger.info(f"Custom parameters: {custom_params}")
+                
+                # If we didn't have call context, try to get tenant from custom parameters
+                if not tenant and custom_params.get("tenant_id"):
+                    tenant = await db.tenants.find_one({"id": custom_params["tenant_id"]}, {"_id": 0})
+                    caller_phone = custom_params.get("caller_phone", "")
+                
+                if tenant:
+                    handler = ConversationRelayHandler(
+                        db=db,
+                        call_sid=call_sid,
+                        tenant=tenant,
+                        caller_phone=caller_phone
+                    )
+                    await handler.handle_setup(message)
+                else:
+                    logger.error(f"No tenant found for call {call_sid}")
+                    # Send end message to terminate
                     await websocket.send_text(json.dumps({
-                        "type": "text",
-                        "token": response,
-                        "last": True
+                        "type": "end",
+                        "handoffData": json.dumps({"reason": "No tenant configured"})
                     }))
+                    break
+                    
+            elif event_type == "prompt":
+                # Prompt message contains transcribed speech from caller
+                voice_prompt = message.get("voicePrompt", "")
+                is_last = message.get("last", True)
+                lang = message.get("lang", "en-US")
+                
+                logger.info(f"Caller said: '{voice_prompt}' (lang={lang}, last={is_last})")
+                
+                if handler and voice_prompt.strip():
+                    response = await handler.handle_prompt(message)
+                    
+                    if response:
+                        # Send text tokens for TTS synthesis
+                        # ConversationRelay will convert this to speech
+                        await websocket.send_text(json.dumps({
+                            "type": "text",
+                            "token": response,
+                            "last": True
+                        }))
+                        
             elif event_type == "interrupt":
-                await handler.handle_interrupt(message)
+                # Caller interrupted the AI's speech
+                utterance = message.get("utteranceUntilInterrupt", "")
+                duration_ms = message.get("durationUntilInterruptMs", 0)
+                logger.info(f"Caller interrupted after {duration_ms}ms. Partial: '{utterance}'")
+                
+                if handler:
+                    await handler.handle_interrupt(message)
+                    
             elif event_type == "dtmf":
-                resp = await handler.handle_dtmf(message)
-                if resp:
-                    await websocket.send_text(json.dumps({"type": "text", "token": resp, "last": True}))
+                # Caller pressed a key
+                digit = message.get("digit", "")
+                logger.info(f"DTMF digit pressed: {digit}")
+                
+                if handler:
+                    response = await handler.handle_dtmf(message)
+                    if response:
+                        await websocket.send_text(json.dumps({
+                            "type": "text",
+                            "token": response,
+                            "last": True
+                        }))
+                        
             elif event_type == "error":
-                await handler.handle_error(message)
+                # Error from ConversationRelay
+                description = message.get("description", "Unknown error")
+                logger.error(f"ConversationRelay error: {description}")
+                
+                if handler:
+                    await handler.handle_error(message)
+                    
             elif event_type == "end":
+                # Session ending
+                logger.info(f"ConversationRelay session ending for call {call_sid}")
                 break
                 
     except WebSocketDisconnect:
-        logger.info(f"WS disconnected: {call_sid}")
+        logger.info(f"ConversationRelay WebSocket disconnected: {call_sid}")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}")
     except Exception as e:
-        logger.error(f"WS error: {e}")
+        logger.error(f"ConversationRelay WebSocket error: {e}", exc_info=True)
     finally:
         if handler:
             await handler.handle_end()
