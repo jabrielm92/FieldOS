@@ -198,6 +198,8 @@ class TenantBase(BaseModel):
     twilio_auth_token: Optional[str] = None
     twilio_api_key_sid: Optional[str] = None
     twilio_api_key_secret: Optional[str] = None
+    twilio_phone_number: Optional[str] = None
+    twilio_messaging_service_sid: Optional[str] = None
     
     # OpenAI Configuration (per-tenant)
     openai_api_key: Optional[str] = None
