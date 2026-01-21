@@ -153,19 +153,19 @@ async def get_ai_response(
     collected_info: Dict,
     state: str,
     conversation_history: list,
-    custom_prompt: str = None
+    tenant_prompt: str
 ) -> Dict[str, Any]:
     """
     Get AI response using OpenAI directly with JSON mode.
     Returns structured response with text and state updates.
     
     Args:
-        custom_prompt: Optional custom system prompt from tenant configuration
+        tenant_prompt: The tenant's voice system prompt (REQUIRED)
     """
     from openai import AsyncOpenAI
     
     client = AsyncOpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-    system_prompt = get_system_prompt(company_name, caller_phone, collected_info, state, custom_prompt)
+    system_prompt = get_system_prompt(company_name, caller_phone, collected_info, state, tenant_prompt)
     
     # Build messages
     messages = [{"role": "system", "content": system_prompt}]
