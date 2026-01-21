@@ -684,29 +684,11 @@ class ConversationRelayHandler:
         )
         
         logger.info(f"Created SMS message record in inbox for customer {customer_id}")
-            "sender_type": "SYSTEM",
-            "channel": "SMS",
-            "content": content,
-            "metadata": {"source": "voice_ai_booking_confirmation"},
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        
-        await self.db.messages.insert_one(message)
-        
-        # Update conversation
-        await self.db.conversations.update_one(
-            {"id": conversation["id"]},
-            {"$set": {
-                "last_message_from": "SYSTEM",
-                "last_message_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
-        )
     
     async def _find_or_create_customer(self) -> Optional[Dict]:
         """Find existing customer or create new one using CONFIRMED phone"""
-        # Use the confirmed phone, not caller ID
-        phone = self.collected_info.get("phone") or self.caller_phone
+        # Use the confirmed phone, not caller ID - ensure it's normalized
+        phone = normalize_phone_number(self.collected_info.get("phone") or self.caller_phone)
         
         # Try to find by phone
         customer = await self.db.customers.find_one({
@@ -715,22 +697,27 @@ class ConversationRelayHandler:
         }, {"_id": 0})
         
         if customer:
-            # Update name if we have a new one
-            if self.collected_info.get("name") and not customer.get("first_name"):
-                name_parts = self.collected_info["name"].split(" ", 1)
-                await self.db.customers.update_one(
-                    {"id": customer["id"]},
-                    {"$set": {
-                        "first_name": name_parts[0],
-                        "last_name": name_parts[1] if len(name_parts) > 1 else "",
-                        "updated_at": datetime.now(timezone.utc).isoformat()
-                    }}
-                )
+            # Update name if we have a new one and current name is Unknown
+            if self.collected_info.get("name"):
+                name = self.collected_info["name"]
+                if customer.get("first_name") == "Unknown" or not customer.get("first_name"):
+                    name_parts = name.split(" ", 1)
+                    await self.db.customers.update_one(
+                        {"id": customer["id"]},
+                        {"$set": {
+                            "first_name": name_parts[0],
+                            "last_name": name_parts[1] if len(name_parts) > 1 else "",
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }}
+                    )
+                    # Return updated customer
+                    customer = await self.db.customers.find_one({"id": customer["id"]}, {"_id": 0})
             return customer
         
         # Create new customer with confirmed phone
         customer_id = str(uuid4())
-        name_parts = (self.collected_info.get("name") or "").split(" ", 1)
+        name = self.collected_info.get("name") or ""
+        name_parts = name.split(" ", 1) if name else ["Unknown", ""]
         
         new_customer = {
             "id": customer_id,
@@ -738,6 +725,7 @@ class ConversationRelayHandler:
             "first_name": name_parts[0] if name_parts[0] else "Unknown",
             "last_name": name_parts[1] if len(name_parts) > 1 else "",
             "phone": phone,
+            "preferred_channel": "SMS",
             "source": "AI_PHONE",
             "tags": ["voice_ai"],
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -745,6 +733,7 @@ class ConversationRelayHandler:
         }
         
         await self.db.customers.insert_one(new_customer)
+        logger.info(f"Created new customer {customer_id}: {name_parts[0]} {name_parts[1] if len(name_parts) > 1 else ''}")
         return new_customer
     
     async def _create_property(self, customer_id: str) -> Optional[str]:
