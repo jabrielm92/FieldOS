@@ -3162,7 +3162,18 @@ async def voice_inbound(request: Request):
     
     logger.info(f"ConversationRelay WS URL: {ws_url}/api/v1/voice/ws/{call_sid}")
     logger.info(f"Voice AI started for tenant {tenant['id']}, call {call_sid}")
+    logger.info(f"TwiML Response:\n{twiml}")
     return Response(content=twiml, media_type="application/xml")
+
+
+# Simple WebSocket test endpoint
+@app.websocket("/ws/test")
+async def ws_test(websocket: WebSocket):
+    """Test WebSocket connectivity"""
+    await websocket.accept()
+    logger.info("Test WebSocket connected!")
+    await websocket.send_text("WebSocket working!")
+    await websocket.close()
 
 
 @app.websocket("/api/v1/voice/ws/{call_sid}")
