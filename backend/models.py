@@ -192,7 +192,6 @@ class TenantBase(BaseModel):
     
     # Voice AI Configuration
     voice_ai_enabled: bool = False
-    use_self_hosted_voice: bool = True  # Self-hosted by default
     
     # Twilio Voice Credentials (per-tenant)
     twilio_account_sid: Optional[str] = None

@@ -398,7 +398,6 @@ class TenantUpdate(BaseModel):
     service_area: Optional[str] = None
     # Voice AI Configuration
     voice_ai_enabled: Optional[bool] = None
-    use_self_hosted_voice: Optional[bool] = None
     twilio_account_sid: Optional[str] = None
     twilio_auth_token: Optional[str] = None
     twilio_api_key_sid: Optional[str] = None
