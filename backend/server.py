@@ -3212,6 +3212,55 @@ async def voice_inbound(request: Request):
     return Response(content=twiml, media_type="application/xml")
 
 
+@v1_router.post("/voice/connect-complete")
+async def voice_connect_complete(request: Request):
+    """
+    Called by Twilio when the <Connect> verb completes (ConversationRelay session ends).
+    This is the action URL for the Connect verb.
+    """
+    form_data = await request.form()
+    call_sid = form_data.get("CallSid", "")
+    call_status = form_data.get("CallStatus", "")
+    session_id = form_data.get("SessionId", "")
+    session_status = form_data.get("SessionStatus", "")
+    session_duration = form_data.get("SessionDuration", "0")
+    handoff_data = form_data.get("HandoffData", "")
+    error_code = form_data.get("ErrorCode", "")
+    error_message = form_data.get("ErrorMessage", "")
+    
+    logger.info(f"ConversationRelay session ended: {call_sid}")
+    logger.info(f"  Session: {session_id}, Status: {session_status}, Duration: {session_duration}s")
+    
+    if error_code:
+        logger.error(f"  Error: {error_code} - {error_message}")
+    
+    if handoff_data:
+        logger.info(f"  Handoff data: {handoff_data}")
+    
+    # Update the voice call record with session end info
+    await db.voice_calls.update_one(
+        {"call_sid": call_sid},
+        {"$set": {
+            "session_id": session_id,
+            "session_status": session_status,
+            "session_duration_seconds": int(session_duration) if session_duration else 0,
+            "handoff_data": handoff_data,
+            "error_code": error_code if error_code else None,
+            "error_message": error_message if error_message else None,
+            "ended_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Return empty TwiML to end the call gracefully
+    twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">Thank you for calling. Goodbye!</Say>
+    <Hangup/>
+</Response>"""
+    
+    return Response(content=twiml, media_type="application/xml")
+
+
 # Simple WebSocket test endpoint
 @app.websocket("/ws/test")
 async def ws_test(websocket: WebSocket):
