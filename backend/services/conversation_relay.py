@@ -268,6 +268,7 @@ class ConversationRelayHandler:
         }
         self.conversation_history = []
         self.call_started_at = datetime.now(timezone.utc)
+        self.booking_created = False  # Prevent duplicate bookings
     
     async def handle_setup(self, message: Dict) -> None:
         """Handle setup message from ConversationRelay"""
