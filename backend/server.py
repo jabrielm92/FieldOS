@@ -3372,16 +3372,34 @@ async def voice_ws(websocket: WebSocket, call_sid: str):
                 logger.info(f"Caller said: '{voice_prompt}' (lang={lang}, last={is_last})")
                 
                 if handler and voice_prompt.strip():
-                    response = await handler.handle_prompt(message)
-                    
-                    if response:
-                        # Send text tokens for TTS synthesis
-                        # ConversationRelay will convert this to speech
+                    try:
+                        response = await handler.handle_prompt(message)
+                        logger.info(f"Handler returned response: '{response}'")
+                        
+                        if response:
+                            # Send text tokens for TTS synthesis
+                            # ConversationRelay will convert this to speech
+                            await websocket.send_text(json.dumps({
+                                "type": "text",
+                                "token": response,
+                                "last": True
+                            }))
+                            logger.info(f"Sent response to Twilio: '{response}'")
+                        else:
+                            logger.warning("Handler returned empty response")
+                    except Exception as e:
+                        logger.error(f"Error in handle_prompt: {e}", exc_info=True)
+                        # Send a fallback response
                         await websocket.send_text(json.dumps({
                             "type": "text",
-                            "token": response,
+                            "token": "I'm sorry, I'm having trouble. Could you repeat that?",
                             "last": True
                         }))
+                else:
+                    if not handler:
+                        logger.error("No handler available for prompt event")
+                    elif not voice_prompt.strip():
+                        logger.warning("Empty voice prompt received")
                         
             elif event_type == "interrupt":
                 # Caller interrupted the AI's speech
