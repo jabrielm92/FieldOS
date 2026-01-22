@@ -518,17 +518,25 @@ class ConversationRelayHandler:
         preferred_day = (self.collected_info.get("preferred_day") or "").lower()
         preferred_time = (self.collected_info.get("preferred_time") or "morning").lower()
         
-        # Calculate the actual date
-        now = datetime.now(timezone.utc)
+        # Get tenant timezone or default to US Eastern
+        from zoneinfo import ZoneInfo
+        tenant_tz_str = self.tenant.get("timezone") or "America/New_York"
+        try:
+            tenant_tz = ZoneInfo(tenant_tz_str)
+        except:
+            tenant_tz = ZoneInfo("America/New_York")
+        
+        # Calculate the actual date in tenant's timezone
+        now_local = datetime.now(tenant_tz)
         if "today" in preferred_day:
-            job_date = now
+            job_date = now_local
         elif "tomorrow" in preferred_day:
-            job_date = now + timedelta(days=1)
+            job_date = now_local + timedelta(days=1)
         else:
             # Default to tomorrow
-            job_date = now + timedelta(days=1)
+            job_date = now_local + timedelta(days=1)
         
-        # Set time window based on preference
+        # Set time window based on preference (in tenant's local time)
         if "afternoon" in preferred_time or "pm" in preferred_time:
             window_start = job_date.replace(hour=13, minute=0, second=0, microsecond=0)
             window_end = job_date.replace(hour=17, minute=0, second=0, microsecond=0)
