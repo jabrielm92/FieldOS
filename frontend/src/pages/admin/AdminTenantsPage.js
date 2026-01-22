@@ -277,21 +277,12 @@ function EditTenantDialog({ tenant, open, onOpenChange, onSuccess }) {
 function VoiceAIConfigDialog({ tenant, open, onOpenChange, onSuccess }) {
   const [formData, setFormData] = useState({
     voice_ai_enabled: tenant?.voice_ai_enabled || false,
-    twilio_account_sid: tenant?.twilio_account_sid || "",
-    twilio_auth_token: tenant?.twilio_auth_token || "",
-    twilio_api_key_sid: tenant?.twilio_api_key_sid || "",
-    twilio_api_key_secret: tenant?.twilio_api_key_secret || "",
     twilio_phone_number: tenant?.twilio_phone_number || "",
     twilio_messaging_service_sid: tenant?.twilio_messaging_service_sid || "",
-    openai_api_key: tenant?.openai_api_key || "",
-    elevenlabs_api_key: tenant?.elevenlabs_api_key || "",
-    elevenlabs_voice_id: tenant?.elevenlabs_voice_id || "",
-    voice_provider: tenant?.voice_provider || "elevenlabs",
-    voice_model: tenant?.voice_model || "eleven_turbo_v2_5",
-    voice_name: tenant?.voice_name || "",
     voice_greeting: tenant?.voice_greeting || "",
     voice_system_prompt: tenant?.voice_system_prompt || "",
     voice_after_hours_message: tenant?.voice_after_hours_message || "",
+    timezone: tenant?.timezone || "America/New_York",
   });
   const [loading, setLoading] = useState(false);
   const [testingCall, setTestingCall] = useState(false);
@@ -313,21 +304,12 @@ function VoiceAIConfigDialog({ tenant, open, onOpenChange, onSuccess }) {
     if (tenant) {
       setFormData({
         voice_ai_enabled: tenant.voice_ai_enabled || false,
-        twilio_account_sid: tenant.twilio_account_sid || "",
-        twilio_auth_token: tenant.twilio_auth_token || "",
-        twilio_api_key_sid: tenant.twilio_api_key_sid || "",
-        twilio_api_key_secret: tenant.twilio_api_key_secret || "",
         twilio_phone_number: tenant.twilio_phone_number || "",
         twilio_messaging_service_sid: tenant.twilio_messaging_service_sid || "",
-        openai_api_key: tenant.openai_api_key || "",
-        elevenlabs_api_key: tenant.elevenlabs_api_key || "",
-        elevenlabs_voice_id: tenant.elevenlabs_voice_id || "",
-        voice_provider: tenant.voice_provider || "elevenlabs",
-        voice_model: tenant.voice_model || "eleven_turbo_v2_5",
-        voice_name: tenant.voice_name || "",
         voice_greeting: tenant.voice_greeting || `Thank you for calling ${tenant.name}. How can I help you today?`,
         voice_system_prompt: tenant.voice_system_prompt || "",
         voice_after_hours_message: tenant.voice_after_hours_message || "",
+        timezone: tenant.timezone || "America/New_York",
       });
     }
   }, [tenant]);
