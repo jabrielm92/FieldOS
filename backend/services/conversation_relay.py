@@ -356,8 +356,9 @@ class ConversationRelayHandler:
             }}
         )
         
-        # Handle booking action
-        if action == "book_job":
+        # Handle booking action - only once per call
+        if action == "book_job" and not self.booking_created:
+            self.booking_created = True
             await self._create_booking()
         
         return response_text
