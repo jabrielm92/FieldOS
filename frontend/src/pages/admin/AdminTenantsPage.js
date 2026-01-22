@@ -418,96 +418,44 @@ CRITICAL RULES:
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid grid-cols-4 w-full">
-                <TabsTrigger value="twilio"><Phone className="h-4 w-4 mr-1" />Twilio</TabsTrigger>
-                <TabsTrigger value="ai"><Settings className="h-4 w-4 mr-1" />AI Keys</TabsTrigger>
-                <TabsTrigger value="voice"><Mic className="h-4 w-4 mr-1" />Voice</TabsTrigger>
-                <TabsTrigger value="prompts"><MessageSquare className="h-4 w-4 mr-1" />Prompts</TabsTrigger>
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="twilio"><Phone className="h-4 w-4 mr-1" />Phone & SMS</TabsTrigger>
+                <TabsTrigger value="prompts"><MessageSquare className="h-4 w-4 mr-1" />AI Prompts</TabsTrigger>
               </TabsList>
 
-              {/* Twilio Tab */}
+              {/* Twilio Tab - Per-tenant phone config only */}
               <TabsContent value="twilio" className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Account SID *</Label>
-                    <Input value={formData.twilio_account_sid} onChange={(e) => setFormData({...formData, twilio_account_sid: e.target.value})} placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Auth Token *</Label>
-                    <Input type="password" value={formData.twilio_auth_token} onChange={(e) => setFormData({...formData, twilio_auth_token: e.target.value})} placeholder="••••••••••••••••" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>API Key SID</Label>
-                    <Input value={formData.twilio_api_key_sid} onChange={(e) => setFormData({...formData, twilio_api_key_sid: e.target.value})} placeholder="SKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
-                    <p className="text-xs text-muted-foreground">For ConversationRelay WebSocket</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>API Key Secret</Label>
-                    <Input type="password" value={formData.twilio_api_key_secret} onChange={(e) => setFormData({...formData, twilio_api_key_secret: e.target.value})} placeholder="••••••••••••••••" />
-                  </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Note:</strong> Twilio credentials (Account SID, Auth Token) are shared across all tenants via server environment. 
+                    Only configure the phone number and messaging service specific to this tenant.
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Phone Number *</Label>
+                  <Label>Tenant Phone Number *</Label>
                   <Input value={formData.twilio_phone_number} onChange={(e) => setFormData({...formData, twilio_phone_number: e.target.value})} placeholder="+1234567890" />
-                  <p className="text-xs text-muted-foreground">The Twilio phone number assigned to this tenant</p>
+                  <p className="text-xs text-muted-foreground">The Twilio phone number assigned to this tenant for inbound calls</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Messaging Service SID</Label>
                   <Input value={formData.twilio_messaging_service_sid} onChange={(e) => setFormData({...formData, twilio_messaging_service_sid: e.target.value})} placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
-                  <p className="text-xs text-muted-foreground">For SMS confirmations (optional if phone number is set)</p>
-                </div>
-              </TabsContent>
-
-              {/* AI Keys Tab */}
-              <TabsContent value="ai" className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <Label>OpenAI API Key *</Label>
-                  <Input type="password" value={formData.openai_api_key} onChange={(e) => setFormData({...formData, openai_api_key: e.target.value})} placeholder="sk-..." />
-                  <p className="text-xs text-muted-foreground">For GPT-4o conversation intelligence</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>ElevenLabs API Key</Label>
-                    <Input type="password" value={formData.elevenlabs_api_key} onChange={(e) => setFormData({...formData, elevenlabs_api_key: e.target.value})} placeholder="••••••••••••••••" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>ElevenLabs Voice ID</Label>
-                    <Input value={formData.elevenlabs_voice_id} onChange={(e) => setFormData({...formData, elevenlabs_voice_id: e.target.value})} placeholder="21m00Tcm4TlvDq8ikWAM" />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">Leave ElevenLabs fields empty to use Twilio's built-in TTS</p>
-              </TabsContent>
-
-              {/* Voice Tab */}
-              <TabsContent value="voice" className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Voice Provider</Label>
-                    <Select value={formData.voice_provider} onValueChange={(v) => setFormData({...formData, voice_provider: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
-                        <SelectItem value="twilio">Twilio TTS</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Voice Model</Label>
-                    <Select value={formData.voice_model} onValueChange={(v) => setFormData({...formData, voice_model: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="eleven_turbo_v2_5">Eleven Turbo v2.5 (Fast)</SelectItem>
-                        <SelectItem value="eleven_multilingual_v2">Eleven Multilingual v2</SelectItem>
-                        <SelectItem value="Polly.Joanna">Twilio Polly Joanna</SelectItem>
-                        <SelectItem value="Polly.Matthew">Twilio Polly Matthew</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <p className="text-xs text-muted-foreground">For sending SMS confirmations. If not set, the phone number above will be used.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Voice Name/Persona</Label>
+                  <Label>Timezone</Label>
+                  <Select value={formData.timezone} onValueChange={(v) => setFormData({...formData, timezone: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="America/New_York">Eastern Time (ET)</SelectItem>
+                      <SelectItem value="America/Chicago">Central Time (CT)</SelectItem>
+                      <SelectItem value="America/Denver">Mountain Time (MT)</SelectItem>
+                      <SelectItem value="America/Los_Angeles">Pacific Time (PT)</SelectItem>
+                      <SelectItem value="America/Phoenix">Arizona (MST)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Used for scheduling appointments in the correct local time</p>
+                </div>
+              </TabsContent>
                   <Input value={formData.voice_name} onChange={(e) => setFormData({...formData, voice_name: e.target.value})} placeholder="e.g., Sarah, Alex, Professional Assistant" />
                   <p className="text-xs text-muted-foreground">A name for the AI assistant to introduce itself as</p>
                 </div>
