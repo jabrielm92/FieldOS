@@ -600,10 +600,11 @@ class ConversationRelayHandler:
         # Send SMS confirmation with quote to the CONFIRMED phone number
         if phone:
             date_str = window_start.strftime("%A, %B %d")
-            address = self.collected_info.get('address', 'your location')
+            address = self.collected_info.get('address') or 'your location'
             name = (self.collected_info.get('name') or '').split()[0] if self.collected_info.get('name') else 'there'
             
-            sms_sig = self.tenant.get('sms_signature', '').strip()
+            # Handle None values safely
+            sms_sig = (self.tenant.get('sms_signature') or '').strip()
             
             # Confirmation SMS with quote
             sms_msg = f"Hi {name}! Your appointment with {self.company_name} is confirmed for {date_str}, {time_label} at {address}. Service quote: ${quote_amount:.2f}. We'll text you when our tech is on the way!{' ' + sms_sig if sms_sig else ''}"
@@ -634,7 +635,7 @@ class ConversationRelayHandler:
                 else:
                     logger.error("No TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars set")
             except Exception as e:
-                logger.error(f"Failed to send SMS confirmation: {e}")
+                logger.error(f"Failed to send SMS confirmation: {e}", exc_info=True)
     
     async def _create_sms_message(self, customer_id: str, content: str, twilio_sid: str = None) -> None:
         """Create a message record for the SMS in the inbox"""
