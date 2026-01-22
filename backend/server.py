@@ -3345,8 +3345,10 @@ async def voice_ws(websocket: WebSocket, call_sid: str):
                 if not tenant and custom_params.get("tenant_id"):
                     tenant = await db.tenants.find_one({"id": custom_params["tenant_id"]}, {"_id": 0})
                     caller_phone = custom_params.get("caller_phone", "")
+                    logger.info(f"Got tenant from custom_params: {tenant.get('name') if tenant else 'None'}")
                 
                 if tenant:
+                    logger.info(f"Creating handler for tenant: {tenant.get('name')}, has prompt: {bool(tenant.get('voice_system_prompt'))}")
                     handler = ConversationRelayHandler(
                         db=db,
                         call_sid=call_sid,
@@ -3354,6 +3356,7 @@ async def voice_ws(websocket: WebSocket, call_sid: str):
                         caller_phone=caller_phone
                     )
                     await handler.handle_setup(message)
+                    logger.info("Handler created successfully")
                 else:
                     logger.error(f"No tenant found for call {call_sid}")
                     # Send end message to terminate
