@@ -330,11 +330,13 @@ class ConversationRelayHandler:
             if value is not None:
                 self.collected_info[key] = value
         
-        response_text = ai_result.get("response_text", "")
+        response_text = ai_result.get("response_text") or "I'm sorry, could you repeat that?"
         action = ai_result.get("action")
         
         # Format phone numbers in response for natural speech
         response_text = self._format_response_for_speech(response_text)
+        
+        logger.info(f"AI response to send: '{response_text}'")
         
         # Add assistant response to history
         self.conversation_history.append({
