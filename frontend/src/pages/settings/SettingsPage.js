@@ -70,25 +70,25 @@ export default function SettingsPage() {
   return (
     <Layout title="Settings" subtitle="Configure your company settings">
       <Tabs defaultValue="company" className="max-w-4xl">
-        <TabsList className="mb-6">
-          <TabsTrigger value="company" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
+        <TabsList className="mb-6 flex-wrap h-auto gap-1">
+          <TabsTrigger value="company" className="flex items-center gap-1 text-xs sm:text-sm">
+            <Building2 className="h-4 w-4 hidden sm:block" />
             Company
           </TabsTrigger>
-          <TabsTrigger value="branding" className="flex items-center gap-2">
-            <Palette className="h-4 w-4" />
+          <TabsTrigger value="branding" disabled className="flex items-center gap-1 text-xs sm:text-sm opacity-50 cursor-not-allowed">
+            <Palette className="h-4 w-4 hidden sm:block" />
             Branding
           </TabsTrigger>
-          <TabsTrigger value="portal" className="flex items-center gap-2">
-            <Globe className="h-4 w-4" />
+          <TabsTrigger value="portal" disabled className="flex items-center gap-1 text-xs sm:text-sm opacity-50 cursor-not-allowed">
+            <Globe className="h-4 w-4 hidden sm:block" />
             Portal
           </TabsTrigger>
-          <TabsTrigger value="messaging" className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4" />
+          <TabsTrigger value="messaging" className="flex items-center gap-1 text-xs sm:text-sm">
+            <MessageSquare className="h-4 w-4 hidden sm:block" />
             Messaging
           </TabsTrigger>
-          <TabsTrigger value="scheduling" className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
+          <TabsTrigger value="scheduling" className="flex items-center gap-1 text-xs sm:text-sm">
+            <Clock className="h-4 w-4 hidden sm:block" />
             Scheduling
           </TabsTrigger>
         </TabsList>

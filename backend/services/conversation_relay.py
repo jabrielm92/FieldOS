@@ -108,13 +108,16 @@ def get_system_prompt(company_name: str, caller_phone: str, collected_info: Dict
     # Format phone for speech
     phone_display = format_phone_for_speech(caller_phone)
     
-    # Replace placeholders in tenant's prompt
-    prompt = tenant_prompt.format(
-        company_name=company_name,
-        caller_phone=phone_display,
-        collected_info=json.dumps(collected_info),
-        state=state
-    )
+    # Replace placeholders in tenant's prompt safely
+    # Use replace instead of format to avoid issues with JSON braces in prompt
+    try:
+        prompt = tenant_prompt.replace("{company_name}", company_name)
+        prompt = prompt.replace("{caller_phone}", phone_display)
+        prompt = prompt.replace("{collected_info}", json.dumps(collected_info))
+        prompt = prompt.replace("{state}", state)
+    except Exception as e:
+        logger.error(f"Error formatting prompt: {e}")
+        prompt = tenant_prompt  # Use as-is if formatting fails
     
     # Add JSON response format instructions (required for system to work)
     json_instructions = """
@@ -164,7 +167,19 @@ async def get_ai_response(
     """
     from openai import AsyncOpenAI
     
-    client = AsyncOpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+    # Use OpenAI key from environment (Railway)
+    openai_api_key = os.environ.get('OPENAI_API_KEY')
+    
+    if not openai_api_key:
+        logger.error("No OPENAI_API_KEY environment variable set")
+        return {
+            "response_text": "I'm sorry, the system is not fully configured. Please try again later.",
+            "next_state": state,
+            "collected_data": collected_info,
+            "action": None
+        }
+    
+    client = AsyncOpenAI(api_key=openai_api_key)
     system_prompt = get_system_prompt(company_name, caller_phone, collected_info, state, tenant_prompt)
     
     # Build messages
@@ -297,7 +312,7 @@ class ConversationRelayHandler:
             "content": voice_prompt
         })
         
-        # Get AI response using tenant's prompt
+        # Get AI response using tenant's prompt (OpenAI key from Railway env)
         ai_result = await get_ai_response(
             user_input=voice_prompt,
             company_name=self.company_name,
@@ -590,30 +605,30 @@ class ConversationRelayHandler:
             sms_msg = f"Hi {name}! Your appointment with {self.company_name} is confirmed for {date_str}, {time_label} at {address}. Service quote: ${quote_amount:.2f}. We'll text you when our tech is on the way!{' ' + sms_sig if sms_sig else ''}"
             
             try:
-                # Use tenant's Twilio credentials (multi-tenant)
-                tenant_account_sid = self.tenant.get('twilio_account_sid')
-                tenant_auth_token = self.tenant.get('twilio_auth_token')
-                tenant_messaging_sid = self.tenant.get('twilio_messaging_service_sid')
+                # Use Twilio credentials from Railway env vars
+                account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+                auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+                messaging_sid = os.environ.get('TWILIO_MESSAGING_SERVICE_SID')
                 tenant_phone = self.tenant.get('twilio_phone_number')
                 
-                if tenant_account_sid and tenant_auth_token:
+                if account_sid and auth_token:
                     from twilio.rest import Client
-                    client = Client(tenant_account_sid, tenant_auth_token)
+                    client = Client(account_sid, auth_token)
                     
                     msg_params = {"body": sms_msg, "to": phone}
-                    if tenant_messaging_sid:
-                        msg_params["messaging_service_sid"] = tenant_messaging_sid
+                    if messaging_sid:
+                        msg_params["messaging_service_sid"] = messaging_sid
                     elif tenant_phone:
                         msg_params["from_"] = tenant_phone
                     else:
-                        logger.error("No messaging service or phone number configured for tenant")
+                        logger.error("No TWILIO_MESSAGING_SERVICE_SID env var or tenant phone number configured")
                         return
                     
                     message = client.messages.create(**msg_params)
                     logger.info(f"Sent booking confirmation SMS to {phone}, SID: {message.sid}")
                     await self._create_sms_message(customer["id"], sms_msg, message.sid)
                 else:
-                    logger.error("Tenant Twilio credentials not configured")
+                    logger.error("No TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars set")
             except Exception as e:
                 logger.error(f"Failed to send SMS confirmation: {e}")
     

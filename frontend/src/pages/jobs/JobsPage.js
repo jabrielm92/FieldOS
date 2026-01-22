@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { Plus, Search, Clock, MapPin, User, Truck, Calendar, UserPlus, Edit, Trash2 } from "lucide-react";
 
 const statusColors = {
+  SCHEDULED: "bg-indigo-100 text-indigo-800",
   BOOKED: "bg-yellow-100 text-yellow-800",
   EN_ROUTE: "bg-purple-100 text-purple-800",
   ON_SITE: "bg-orange-100 text-orange-800",
@@ -279,8 +280,79 @@ export default function JobsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table data-testid="jobs-table">
+        <>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {filteredJobs.map((job) => (
+              <Card 
+                key={job.id} 
+                className={`cursor-pointer hover:shadow-md transition-shadow ${selectedIds.includes(job.id) ? 'ring-2 ring-primary' : ''}`}
+                onClick={() => handleJobClick(job)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                        <User className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">
+                          {job.customer?.first_name} {job.customer?.last_name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{job.job_type}</p>
+                      </div>
+                    </div>
+                    <Badge className={`${statusColors[job.status] || "bg-gray-100 text-gray-800"} text-xs`}>
+                      {job.status}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      <span>{formatDateTime(job.service_window_start)}</span>
+                    </div>
+                    {job.property && (
+                      <div className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        <span className="truncate">{job.property.address_line1}, {job.property.city}</span>
+                      </div>
+                    )}
+                    {job.technician && (
+                      <div className="flex items-center gap-1">
+                        <Truck className="h-3 w-3" />
+                        <span>{job.technician.name}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t">
+                    <Badge className={priorityColors[job.priority]} variant="outline">
+                      {job.priority}
+                    </Badge>
+                    <div className="flex gap-2">
+                      {!job.technician && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedJob(job);
+                            setShowAssignDialog(true);
+                          }}
+                        >
+                          Assign
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <Card className="hidden md:block overflow-x-auto">
+            <Table data-testid="jobs-table">
             <TableHeader>
               <TableRow className="table-industrial">
                 <TableHead className="w-10">
@@ -434,6 +506,7 @@ export default function JobsPage() {
             </TableBody>
           </Table>
         </Card>
+        </>
       )}
 
       {/* Assign Technician Dialog */}

@@ -14,11 +14,16 @@ import {
 
 const statusColors = {
   NEW: "bg-blue-100 text-blue-800",
+  SCHEDULED: "bg-indigo-100 text-indigo-800",
   BOOKED: "bg-yellow-100 text-yellow-800",
   EN_ROUTE: "bg-purple-100 text-purple-800",
   ON_SITE: "bg-orange-100 text-orange-800",
   COMPLETED: "bg-green-100 text-green-800",
   CANCELLED: "bg-red-100 text-red-800",
+  CONTACTED: "bg-cyan-100 text-cyan-800",
+  QUALIFIED: "bg-teal-100 text-teal-800",
+  JOB_BOOKED: "bg-emerald-100 text-emerald-800",
+  LOST: "bg-gray-100 text-gray-800",
 };
 
 const urgencyColors = {
@@ -508,42 +513,45 @@ function JobRow({ job, onClick }) {
 
   return (
     <div 
-      className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border-l-4"
+      className="p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border-l-2"
       style={{ borderLeftColor: job.priority === "EMERGENCY" ? "#ef4444" : job.priority === "HIGH" ? "#f97316" : "#3b82f6" }}
       onClick={onClick}
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="font-medium truncate">
-            {job.customer?.first_name} {job.customer?.last_name}
-          </p>
-          {job.priority === "EMERGENCY" && (
-            <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
-          )}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium truncate">
+              {job.customer?.first_name} {job.customer?.last_name}
+            </p>
+            {job.priority === "EMERGENCY" && (
+              <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mt-0.5">
+            <span>{job.job_type}</span>
+            {job.property && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                <span className="truncate max-w-[100px]">{job.property.city}</span>
+              </span>
+            )}
+            {job.quote_amount && (
+              <span className="text-green-600 font-medium">
+                {formatJobCurrency(job.quote_amount)}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-          <span>{job.job_type}</span>
-          {job.property && (
-            <span className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              {job.property.city}
-            </span>
-          )}
-          {job.quote_amount && (
-            <span className="flex items-center gap-1 text-green-600 font-medium">
-              <DollarSign className="h-3 w-3" />
-              {formatJobCurrency(job.quote_amount)}
-            </span>
-          )}
+        <div className="flex items-center justify-between sm:justify-end gap-2 sm:flex-col sm:items-end">
+          <div className="text-left sm:text-right">
+            <p className="text-xs sm:text-sm font-medium">{formatDate(job.service_window_start)}</p>
+            <p className="text-xs text-muted-foreground">{formatTime(job.service_window_start)}</p>
+          </div>
+          <Badge className={`${statusColors[job.status] || "bg-gray-100 text-gray-800"} text-xs`} variant="outline">
+            {formatStatus(job.status)}
+          </Badge>
         </div>
       </div>
-      <div className="text-right flex-shrink-0">
-        <p className="text-sm font-medium">{formatDate(job.service_window_start)}</p>
-        <p className="text-xs text-muted-foreground">{formatTime(job.service_window_start)}</p>
-      </div>
-      <Badge className={statusColors[job.status] || "bg-gray-100"} variant="outline">
-        {job.status}
-      </Badge>
     </div>
   );
 }

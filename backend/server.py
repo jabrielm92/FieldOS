@@ -822,16 +822,24 @@ async def list_leads(
     
     leads = await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
-    # Enrich leads with customer data
+    # Enrich leads with customer and property data
     enriched_leads = []
     for lead in leads:
         customer = None
+        prop = None
         if lead.get("customer_id"):
             customer = await db.customers.find_one({"id": lead["customer_id"]}, {"_id": 0})
+        if lead.get("property_id"):
+            prop = await db.properties.find_one({"id": lead["property_id"]}, {"_id": 0})
+        
+        # Also get address from lead itself if stored there
+        address = lead.get("captured_address") or lead.get("address_line1") or (prop.get("address_line1") if prop else None)
         
         enriched_leads.append({
             **serialize_doc(lead),
             "customer": serialize_doc(customer) if customer else None,
+            "property": serialize_doc(prop) if prop else None,
+            "address": address,
             "caller_name": lead.get("caller_name") or (f"{customer['first_name']} {customer['last_name']}" if customer else "Unknown")
         })
     
@@ -1322,6 +1330,9 @@ async def list_quotes(
     for quote in quotes:
         customer = await db.customers.find_one({"id": quote.get("customer_id")}, {"_id": 0})
         quote["customer"] = serialize_doc(customer) if customer else None
+        if quote.get("property_id"):
+            prop = await db.properties.find_one({"id": quote.get("property_id")}, {"_id": 0})
+            quote["property"] = serialize_doc(prop) if prop else None
     
     return serialize_docs(quotes)
 
@@ -3133,11 +3144,22 @@ async def voice_inbound(request: Request):
     # Construct full WebSocket URL for ConversationRelay
     ws_endpoint = f"{ws_url}/api/v1/voice/ws/{call_sid}"
     
-    # Check if tenant has OpenAI key configured (required for Voice AI)
-    has_openai = tenant.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
+    # Check if OpenAI key is configured in Railway env (required for Voice AI)
+    has_openai = os.environ.get("OPENAI_API_KEY")
     
     if not has_openai:
         # No AI configured - simple voicemail
+        logger.warning("No OPENAI_API_KEY environment variable set")
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep.</Say>
+    <Record maxLength="120" action="{base_url}/api/v1/voice/recording-complete" />
+</Response>"""
+        return Response(content=twiml, media_type="application/xml")
+    
+    # Check if tenant has voice system prompt configured
+    if not tenant.get("voice_system_prompt"):
+        logger.warning(f"No voice system prompt configured for tenant {tenant.get('id')}")
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">Thank you for calling {tenant.get('name', 'us')}. Please leave a message after the beep.</Say>
@@ -3559,7 +3581,13 @@ async def voice_process_speech(request: Request):
         from openai import AsyncOpenAI
         from services.voice_ai_prompt import get_voice_ai_prompt
         
-        client = AsyncOpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+        # Use tenant's OpenAI key (multi-tenant)
+        openai_key = tenant.get("openai_api_key") if tenant else None
+        if not openai_key:
+            logger.error("No OpenAI API key configured for tenant")
+            return Response(content="Error: API not configured", media_type="text/plain")
+        
+        client = AsyncOpenAI(api_key=openai_key)
         
         # Get conversation history from call context
         conversation_history = call_context.get("conversation_history", [])

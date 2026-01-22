@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 
 const statusColors = {
+  SCHEDULED: "bg-indigo-500",
   BOOKED: "bg-yellow-500",
   EN_ROUTE: "bg-purple-500",
   ON_SITE: "bg-orange-500",
@@ -47,6 +48,7 @@ const statusColors = {
 };
 
 const statusBadgeColors = {
+  SCHEDULED: "bg-indigo-100 text-indigo-800",
   BOOKED: "bg-yellow-100 text-yellow-800",
   EN_ROUTE: "bg-purple-100 text-purple-800",
   ON_SITE: "bg-orange-100 text-orange-800",
@@ -195,12 +197,13 @@ export default function CalendarPage() {
   return (
     <Layout title="Calendar" subtitle="View and manage your job schedule">
       {/* Navigation */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Header with navigation */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => navigateMonth(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <h2 className="text-xl font-heading font-bold min-w-[200px] text-center">
+          <h2 className="text-lg sm:text-xl font-heading font-bold min-w-[150px] sm:min-w-[200px] text-center">
             {formatMonthYear(currentDate)}
           </h2>
           <Button variant="outline" size="icon" onClick={() => navigateMonth(1)}>
@@ -210,8 +213,9 @@ export default function CalendarPage() {
             Today
           </Button>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Legend - hidden on mobile */}
+          <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <div className="w-3 h-3 rounded-full bg-yellow-500"></div> Booked
             </span>
@@ -219,28 +223,29 @@ export default function CalendarPage() {
               <div className="w-3 h-3 rounded-full bg-purple-500"></div> En Route
             </span>
             <span className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-full bg-green-500"></div> Completed
+              <div className="w-3 h-3 rounded-full bg-green-500"></div> Done
             </span>
           </div>
-          <Button variant="outline" onClick={() => navigate('/dispatch')}>
-            <Briefcase className="h-4 w-4 mr-2" />
-            Dispatch Board
+          <Button variant="outline" size="sm" className="hidden sm:flex" onClick={() => navigate('/dispatch')}>
+            <Briefcase className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Dispatch</span>
           </Button>
-          <Button onClick={() => { setSelectedDate(new Date()); setShowCreateModal(true); }}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Job
+          <Button size="sm" onClick={() => { setSelectedDate(new Date()); setShowCreateModal(true); }}>
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">New Job</span>
           </Button>
         </div>
       </div>
 
       {/* Calendar Grid */}
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
           {/* Week day headers */}
           <div className="grid grid-cols-7 border-b">
-            {weekDays.map(day => (
-              <div key={day} className="p-3 text-center text-sm font-medium text-muted-foreground bg-muted/50">
-                {day}
+            {weekDays.map((day, i) => (
+              <div key={day} className="p-1 sm:p-3 text-center text-xs sm:text-sm font-medium text-muted-foreground bg-muted/50">
+                <span className="sm:hidden">{day.charAt(0)}</span>
+                <span className="hidden sm:inline">{day}</span>
               </div>
             ))}
           </div>
@@ -249,7 +254,7 @@ export default function CalendarPage() {
           <div className="grid grid-cols-7">
             {/* Empty cells for days before month starts */}
             {Array.from({ length: startingDay }, (_, i) => (
-              <div key={`empty-${i}`} className="min-h-[120px] p-2 border-b border-r bg-muted/20" />
+              <div key={`empty-${i}`} className="min-h-[60px] sm:min-h-[120px] p-1 sm:p-2 border-b border-r bg-muted/20" />
             ))}
 
             {/* Days of the month */}
@@ -261,20 +266,24 @@ export default function CalendarPage() {
               return (
                 <div
                   key={day}
-                  className={`min-h-[120px] p-2 border-b border-r transition-colors hover:bg-muted/30 cursor-pointer group
+                  className={`min-h-[60px] sm:min-h-[120px] p-1 sm:p-2 border-b border-r transition-colors hover:bg-muted/30 cursor-pointer group
                     ${isToday ? 'bg-primary/5 ring-2 ring-primary ring-inset' : ''}`}
                   onClick={() => handleDayClick(day)}
                 >
-                  <div className={`text-sm font-medium mb-1 flex items-center justify-between ${isToday ? 'text-primary' : ''}`}>
+                  <div className={`text-xs sm:text-sm font-medium mb-1 flex items-center justify-between ${isToday ? 'text-primary' : ''}`}>
                     <span>{day}</span>
-                    <Plus className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                    {dayJobs.length > 0 && (
+                      <span className="sm:hidden w-2 h-2 rounded-full bg-primary"></span>
+                    )}
+                    <Plus className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity hidden sm:block" />
                   </div>
-                  <div className="space-y-1">
+                  {/* Jobs - hidden on mobile, show dot indicator instead */}
+                  <div className="hidden sm:block space-y-1">
                     {dayJobs.slice(0, 3).map(job => (
                       <div
                         key={job.id}
                         className={`text-xs p-1.5 rounded cursor-pointer hover:opacity-80 transition-opacity
-                          ${statusColors[job.status]} text-white`}
+                          ${statusColors[job.status] || 'bg-gray-500'} text-white`}
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedJob(job);

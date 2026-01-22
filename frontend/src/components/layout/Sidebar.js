@@ -21,7 +21,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../ui/button";
 import { useState } from "react";
 
-const tenantNavItems = [
+export const tenantNavItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/leads", icon: TrendingUp, label: "Leads" },
   { to: "/jobs", icon: Briefcase, label: "Jobs" },
@@ -36,7 +36,7 @@ const tenantNavItems = [
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
-const adminNavItems = [
+export const adminNavItems = [
   { to: "/admin", icon: LayoutDashboard, label: "Overview" },
   { to: "/admin/tenants", icon: Building2, label: "Tenants" },
 ];
@@ -56,7 +56,7 @@ export function Sidebar() {
   return (
     <aside 
       className={cn(
-        "fixed left-0 top-0 h-full bg-card border-r border-border flex flex-col transition-all duration-300 z-50",
+        "fixed left-0 top-0 h-full bg-card border-r border-border flex-col transition-all duration-300 z-50 hidden md:flex",
         collapsed ? "w-16" : "w-64"
       )}
     >

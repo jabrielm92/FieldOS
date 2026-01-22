@@ -40,10 +40,13 @@ const priorityColors = {
 };
 
 const statusColors = {
+  SCHEDULED: "bg-indigo-100 text-indigo-800",
   BOOKED: "bg-yellow-100 text-yellow-800",
   EN_ROUTE: "bg-purple-100 text-purple-800",
   ON_SITE: "bg-orange-100 text-orange-800",
   COMPLETED: "bg-green-100 text-green-800",
+  CANCELLED: "bg-red-100 text-red-800",
+  NEW: "bg-blue-100 text-blue-800",
 };
 
 // Helper to get local date string (avoids UTC timezone issues)
@@ -148,14 +151,15 @@ export default function DispatchBoard() {
   return (
     <Layout title="Dispatch Board" subtitle="Assign and manage technician schedules">
       {/* Date Navigation & Stats */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-4 mb-6">
+        {/* Date Navigation */}
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => navigateDate(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-md">
+          <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-md">
             <Calendar className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-primary">{formatDate(selectedDate)}</span>
+            <span className="font-semibold text-primary text-sm">{formatDate(selectedDate)}</span>
           </div>
           <Button variant="outline" size="icon" onClick={() => navigateDate(1)}>
             <ChevronRight className="h-4 w-4" />
@@ -171,23 +175,23 @@ export default function DispatchBoard() {
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3 py-2 border rounded-md text-sm text-foreground bg-background"
+            className="px-2 py-1.5 border rounded-md text-sm text-foreground bg-background w-[130px]"
           />
         </div>
 
         {/* Stats Summary */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md">
             <Truck className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">{totalJobs} Total Jobs</span>
+            <span className="text-xs sm:text-sm font-medium">{totalJobs} Total</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 rounded-md">
             <CheckCircle className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-medium text-green-700">{assignedJobs} Assigned</span>
+            <span className="text-xs sm:text-sm font-medium text-green-700">{assignedJobs} Assigned</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 rounded-md">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <span className="text-sm font-medium text-amber-700">{unassignedJobs} Unassigned</span>
+            <span className="text-xs sm:text-sm font-medium text-amber-700">{unassignedJobs} Unassigned</span>
           </div>
         </div>
       </div>
@@ -376,19 +380,19 @@ function JobCard({ job, formatTime, assigned, onAssign, onUnassign, onReassign }
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 mt-2">
         {!assigned && onAssign && (
-          <Button size="sm" className="w-full text-xs" onClick={onAssign}>
+          <Button size="sm" className="w-full text-xs h-8" onClick={onAssign}>
             Assign Tech
           </Button>
         )}
         {assigned && (
           <>
-            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onReassign}>
+            <Button size="sm" variant="secondary" className="flex-1 text-xs h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300" onClick={onReassign}>
               Reassign
             </Button>
-            <Button size="sm" variant="ghost" className="text-xs text-red-600 hover:text-red-700" onClick={onUnassign}>
-              Remove
+            <Button size="sm" variant="destructive" className="text-xs h-8 px-2" onClick={onUnassign}>
+              ✕
             </Button>
           </>
         )}
