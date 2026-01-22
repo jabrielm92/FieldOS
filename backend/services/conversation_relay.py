@@ -618,10 +618,12 @@ class ConversationRelayHandler:
             sms_msg = f"Hi {name}! Your appointment with {self.company_name} is confirmed for {date_str}, {time_label} at {address}. Service quote: ${quote_amount:.2f}. We'll text you when our tech is on the way!{' ' + sms_sig if sms_sig else ''}"
             
             try:
-                # Use Twilio credentials from Railway env vars
+                # Use shared Twilio credentials from Railway env vars
                 account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
                 auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
-                messaging_sid = os.environ.get('TWILIO_MESSAGING_SERVICE_SID')
+                
+                # Per-tenant: messaging service or phone number from MongoDB
+                tenant_messaging_sid = self.tenant.get('twilio_messaging_service_sid')
                 tenant_phone = self.tenant.get('twilio_phone_number')
                 
                 if account_sid and auth_token:
@@ -629,12 +631,14 @@ class ConversationRelayHandler:
                     client = Client(account_sid, auth_token)
                     
                     msg_params = {"body": sms_msg, "to": phone}
-                    if messaging_sid:
-                        msg_params["messaging_service_sid"] = messaging_sid
+                    if tenant_messaging_sid:
+                        # Prefer tenant's messaging service
+                        msg_params["messaging_service_sid"] = tenant_messaging_sid
                     elif tenant_phone:
+                        # Fall back to tenant's phone number
                         msg_params["from_"] = tenant_phone
                     else:
-                        logger.error("No TWILIO_MESSAGING_SERVICE_SID env var or tenant phone number configured")
+                        logger.error("Tenant has no messaging_service_sid or phone_number configured")
                         return
                     
                     message = client.messages.create(**msg_params)
