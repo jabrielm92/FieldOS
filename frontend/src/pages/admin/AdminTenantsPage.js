@@ -456,10 +456,6 @@ CRITICAL RULES:
                   <p className="text-xs text-muted-foreground">Used for scheduling appointments in the correct local time</p>
                 </div>
               </TabsContent>
-                  <Input value={formData.voice_name} onChange={(e) => setFormData({...formData, voice_name: e.target.value})} placeholder="e.g., Sarah, Alex, Professional Assistant" />
-                  <p className="text-xs text-muted-foreground">A name for the AI assistant to introduce itself as</p>
-                </div>
-              </TabsContent>
 
               {/* Prompts Tab */}
               <TabsContent value="prompts" className="space-y-4 mt-4">
@@ -507,7 +503,7 @@ CRITICAL RULES:
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button type="button" variant="outline" onClick={handleTestCall} disabled={testingCall || !formData.voice_ai_enabled}>
+            <Button type="button" variant="outline" onClick={handleTestCall} disabled={testingCall || !formData.twilio_phone_number}>
               {testingCall ? "Calling..." : "Test Voice AI"}
             </Button>
             <div className="flex gap-2">
