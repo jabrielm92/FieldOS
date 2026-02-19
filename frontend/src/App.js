@@ -23,6 +23,7 @@ import ReportsPage from "./pages/reports/ReportsPage";
 import RevenueReportsPage from "./pages/reports/RevenueReportsPage";
 import CustomerPortal from "./pages/portal/CustomerPortal";
 import CalendarPage from "./pages/calendar/CalendarPage";
+import TrackingPage from "./pages/tracking/TrackingPage";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireSuperAdmin = false }) {
@@ -155,6 +156,9 @@ function AppRoutes() {
 
       {/* Customer Portal (Public) */}
       <Route path="/portal/:token" element={<CustomerPortal />} />
+
+      {/* Technician Tracking (Public) */}
+      <Route path="/track/:token" element={<TrackingPage />} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={

@@ -9,7 +9,7 @@ import { Switch } from "../../components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { toast } from "sonner";
-import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save } from "lucide-react";
+import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save, Star } from "lucide-react";
 import { settingsAPI } from "../../lib/api";
 
 export default function SettingsPage() {
@@ -55,6 +55,25 @@ export default function SettingsPage() {
     }));
   };
 
+  const updateReviewSettings = (field, value) => {
+    setTenant(prev => ({
+      ...prev,
+      review_settings: { ...(prev?.review_settings || {}), [field]: value }
+    }));
+  };
+
+  const handleSaveReviews = async () => {
+    setSaving(true);
+    try {
+      await settingsAPI.updateReviewSettings(tenant?.review_settings || {});
+      toast.success("Review settings saved");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to save review settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout title="Settings" subtitle="Configure your company settings">
@@ -86,6 +105,10 @@ export default function SettingsPage() {
           <TabsTrigger value="messaging" className="flex items-center gap-1 text-xs sm:text-sm">
             <MessageSquare className="h-4 w-4 hidden sm:block" />
             Messaging
+          </TabsTrigger>
+          <TabsTrigger value="reviews" className="flex items-center gap-1 text-xs sm:text-sm">
+            <Star className="h-3.5 w-3.5" />
+            Reviews
           </TabsTrigger>
           <TabsTrigger value="scheduling" className="flex items-center gap-1 text-xs sm:text-sm">
             <Clock className="h-4 w-4 hidden sm:block" />
@@ -308,6 +331,113 @@ export default function SettingsPage() {
           </Card>
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving} className="btn-industrial">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              SAVE CHANGES
+            </Button>
+          </div>
+        </TabsContent>
+
+        {/* Reviews Tab */}
+        <TabsContent value="reviews" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading flex items-center gap-2">
+                <Star className="h-5 w-5" />
+                Review Request Automation
+              </CardTitle>
+              <CardDescription>
+                Automatically send review request SMS after job completion
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base">Enable Automated Reviews</Label>
+                  <p className="text-sm text-muted-foreground">Send review requests after completed jobs</p>
+                </div>
+                <Switch
+                  checked={tenant?.review_settings?.enabled !== false}
+                  onCheckedChange={(v) => updateReviewSettings("enabled", v)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Send Delay (hours after completion)</Label>
+                <Select
+                  value={String(tenant?.review_settings?.delay_hours ?? 2)}
+                  onValueChange={(v) => updateReviewSettings("delay_hours", parseInt(v))}
+                >
+                  <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 hour</SelectItem>
+                    <SelectItem value="2">2 hours</SelectItem>
+                    <SelectItem value="4">4 hours</SelectItem>
+                    <SelectItem value="24">24 hours (next day)</SelectItem>
+                    <SelectItem value="48">48 hours (2 days)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Preferred Platform</Label>
+                <Select
+                  value={tenant?.review_settings?.preferred_platform || "google"}
+                  onValueChange={(v) => updateReviewSettings("preferred_platform", v)}
+                >
+                  <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="google">Google</SelectItem>
+                    <SelectItem value="yelp">Yelp</SelectItem>
+                    <SelectItem value="facebook">Facebook</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Review Links</CardTitle>
+              <CardDescription>Paste your business review page URLs</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Google Review URL</Label>
+                <Input
+                  value={tenant?.review_settings?.google_review_url || ""}
+                  onChange={(e) => updateReviewSettings("google_review_url", e.target.value)}
+                  placeholder="https://g.page/r/..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Yelp Review URL</Label>
+                <Input
+                  value={tenant?.review_settings?.yelp_review_url || ""}
+                  onChange={(e) => updateReviewSettings("yelp_review_url", e.target.value)}
+                  placeholder="https://www.yelp.com/biz/..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Facebook Review URL</Label>
+                <Input
+                  value={tenant?.review_settings?.facebook_review_url || ""}
+                  onChange={(e) => updateReviewSettings("facebook_review_url", e.target.value)}
+                  placeholder="https://www.facebook.com/..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Custom Message Template</Label>
+                <Textarea
+                  value={tenant?.review_settings?.message_template || ""}
+                  onChange={(e) => updateReviewSettings("message_template", e.target.value)}
+                  placeholder="Hi {first_name}! Thanks for choosing {company_name}. Leave us a review: {review_link}"
+                  rows={3}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Variables: {"{first_name}"}, {"{company_name}"}, {"{review_link}"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveReviews} disabled={saving} className="btn-industrial">
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
               SAVE CHANGES
             </Button>

@@ -32,7 +32,7 @@ import {
 } from "../../components/ui/table";
 import { jobAPI, customerAPI, propertyAPI, technicianAPI, dispatchAPI } from "../../lib/api";
 import { toast } from "sonner";
-import { Plus, Search, Clock, MapPin, User, Truck, Calendar, UserPlus, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Clock, MapPin, User, Truck, Calendar, UserPlus, Edit, Trash2, CheckCircle, Star } from "lucide-react";
 
 const statusColors = {
   SCHEDULED: "bg-indigo-100 text-indigo-800",
@@ -62,6 +62,10 @@ export default function JobsPage() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleting, setDeleting] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [completionJob, setCompletionJob] = useState(null);
+  const [completionNotes, setCompletionNotes] = useState("");
+  const [completionSending, setCompletionSending] = useState(false);
 
   useEffect(() => {
     fetchJobs();
@@ -96,11 +100,42 @@ export default function JobsPage() {
 
   const handleMarkEnRoute = async (jobId) => {
     try {
-      await jobAPI.markEnRoute(jobId);
-      toast.success("Job marked as en-route, SMS sent!");
+      await jobAPI.markEnRoute(jobId, { estimated_minutes: 30, send_sms: true, include_tracking_link: true });
+      toast.success("On My Way SMS sent with tracking link!");
       fetchJobs();
     } catch (error) {
       toast.error("Failed to update job status");
+    }
+  };
+
+  const openCompletionModal = (job) => {
+    setCompletionJob(job);
+    setCompletionNotes("");
+    setShowCompletionModal(true);
+  };
+
+  const handleCompleteJob = async () => {
+    if (!completionJob) return;
+    setCompletionSending(true);
+    try {
+      const res = await jobAPI.complete(completionJob.id, {
+        completion_notes: completionNotes || undefined,
+        send_invoice: true,
+        request_review: true,
+      });
+      const d = res.data;
+      let msg = "Job completed!";
+      if (d.invoice) msg += ` Invoice #${d.invoice.invoice_number} created.`;
+      if (d.invoice_sent) msg += " Payment link sent via SMS.";
+      if (d.review_scheduled) msg += " Review request scheduled.";
+      toast.success(msg);
+      setShowCompletionModal(false);
+      setCompletionJob(null);
+      fetchJobs();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to complete job");
+    } finally {
+      setCompletionSending(false);
     }
   };
 
@@ -464,38 +499,52 @@ export default function JobsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge className={statusColors[job.status]}>
-                      {job.status?.replace('_', ' ')}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge className={statusColors[job.status]}>
+                        {job.status?.replace('_', ' ')}
+                      </Badge>
+                      {job.review_request_sent && (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                          <Star className="h-3 w-3" /> Review sent
+                        </span>
+                      )}
+                      {!job.review_request_sent && job.review_scheduled_at && job.status === "COMPLETED" && (
+                        <span className="inline-flex items-center gap-1 text-xs text-blue-500">
+                          <Star className="h-3 w-3" /> Review scheduled
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
                       {job.status === "BOOKED" && (
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="outline"
                           onClick={() => handleMarkEnRoute(job.id)}
                           data-testid={`en-route-${job.id}`}
                         >
                           <Truck className="h-3 w-3 mr-1" />
-                          En Route
+                          On My Way
                         </Button>
                       )}
                       {job.status === "EN_ROUTE" && (
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="outline"
-                          onClick={() => handleUpdateStatus(job.id, "ON_SITE")}
+                          onClick={() => handleUpdateStatus(job.id, "IN_PROGRESS")}
                         >
-                          On Site
+                          Arrived
                         </Button>
                       )}
-                      {job.status === "ON_SITE" && (
-                        <Button 
-                          size="sm" 
+                      {(job.status === "ON_SITE" || job.status === "IN_PROGRESS") && (
+                        <Button
+                          size="sm"
                           variant="default"
-                          onClick={() => handleUpdateStatus(job.id, "COMPLETED")}
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => openCompletionModal(job)}
                         >
+                          <CheckCircle className="h-3 w-3 mr-1" />
                           Complete
                         </Button>
                       )}
@@ -626,6 +675,57 @@ export default function JobsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowJobDetailDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Job Completion Modal */}
+      <Dialog open={showCompletionModal} onOpenChange={setShowCompletionModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Complete Job
+            </DialogTitle>
+            {completionJob && (
+              <DialogDescription>
+                {completionJob.job_type} for {completionJob.customer?.first_name} {completionJob.customer?.last_name}
+                {completionJob.quote_amount ? ` — $${completionJob.quote_amount.toFixed(2)}` : ""}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="completion-notes">Completion Notes (optional)</Label>
+              <Textarea
+                id="completion-notes"
+                placeholder="What was done? Any parts replaced, issues found..."
+                value={completionNotes}
+                onChange={(e) => setCompletionNotes(e.target.value)}
+                className="mt-1.5"
+                rows={3}
+              />
+            </div>
+            <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-sm text-blue-800 space-y-1">
+              <p className="font-medium">This will automatically:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-blue-700">
+                {completionJob?.quote_amount && <li>Create invoice for ${completionJob.quote_amount?.toFixed(2)}</li>}
+                <li>Send payment link to customer via SMS</li>
+                <li>Schedule a review request</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowCompletionModal(false)} disabled={completionSending}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={handleCompleteJob}
+              disabled={completionSending}
+            >
+              {completionSending ? "Completing..." : "Complete & Send Invoice"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

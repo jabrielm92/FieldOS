@@ -681,6 +681,38 @@ async def bulk_delete_customers(
     return {"success": True, "deleted_count": result.deleted_count}
 
 
+@v1_router.post("/customers/{customer_id}/review-opt-out")
+async def customer_review_opt_out(
+    customer_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Opt a customer out of automated review requests"""
+    result = await db.customers.update_one(
+        {"id": customer_id, "tenant_id": tenant_id},
+        {"$set": {"review_opt_out": True, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True}
+
+
+@v1_router.post("/customers/{customer_id}/review-opt-in")
+async def customer_review_opt_in(
+    customer_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Re-enable review requests for a customer"""
+    result = await db.customers.update_one(
+        {"id": customer_id, "tenant_id": tenant_id},
+        {"$set": {"review_opt_out": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True}
+
+
 # ============= PROPERTIES ENDPOINTS =============
 
 @v1_router.get("/properties")
@@ -1151,62 +1183,235 @@ async def update_job(
     return serialize_doc(job)
 
 
+class EnRouteRequest(BaseModel):
+    technician_id: Optional[str] = None
+    estimated_minutes: int = 30
+    send_sms: bool = True
+    include_tracking_link: bool = True
+
+
 @v1_router.post("/jobs/{job_id}/en-route")
 async def mark_job_en_route(
     job_id: str,
+    data: EnRouteRequest = None,
     tenant_id: str = Depends(get_tenant_id),
     current_user: dict = Depends(get_current_user)
 ):
-    """Mark job as en-route and send SMS"""
+    """Mark job as en-route, generate tracking token, and send SMS"""
+    import secrets as _sec
+    if data is None:
+        data = EnRouteRequest()
     job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    # Update job status
+
+    tracking_token = _sec.token_urlsafe(16)
+    now = datetime.now(timezone.utc)
+    estimated_arrival = (now + timedelta(minutes=data.estimated_minutes)).isoformat()
+    tech_id = data.technician_id or job.get("assigned_technician_id")
+
     await db.jobs.update_one(
         {"id": job_id},
         {"$set": {
             "status": JobStatus.EN_ROUTE.value,
+            "en_route_at": now.isoformat(),
             "en_route_sms_sent": True,
-            "updated_at": datetime.now(timezone.utc).isoformat()
+            "tracking_token": tracking_token,
+            "estimated_arrival": estimated_arrival,
+            "assigned_technician_id": tech_id,
+            "updated_at": now.isoformat()
         }}
     )
-    
-    # Get customer and tenant for SMS
     customer = await db.customers.find_one({"id": job["customer_id"]}, {"_id": 0})
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
-    
-    if customer and tenant and tenant.get("twilio_phone_number"):
+    sms_sent = False
+
+    if data.send_sms and customer and tenant and tenant.get("twilio_phone_number"):
         from services.twilio_service import twilio_service
-        
         tech = None
-        if job.get("assigned_technician_id"):
-            tech = await db.technicians.find_one({"id": job["assigned_technician_id"]}, {"_id": 0})
-        
-        tech_name = tech["name"] if tech else "Our technician"
-        message = f"Hi {customer['first_name']}, {tech_name} is on the way! They should arrive shortly. {tenant.get('sms_signature', '')}"
-        
+        if tech_id:
+            tech = await db.technicians.find_one({"id": tech_id}, {"_id": 0})
+        tech_name = (tech.get("name") if tech else None) or "Your technician"
+        eta_time = (now + timedelta(minutes=data.estimated_minutes)).strftime("%-I:%M %p")
+        message = (
+            f"Hi {customer.get('first_name', 'there')}! "
+            f"{tech_name} from {tenant['name']} is on the way. "
+            f"Estimated arrival: {eta_time} (~{data.estimated_minutes} min)."
+        )
+        if data.include_tracking_link:
+            base_url = tenant.get("app_url", "https://app.fieldos.com")
+            message += f" Track: {base_url}/track/{tracking_token}"
+        if tenant.get("sms_signature"):
+            message += f" {tenant['sms_signature']}"
         result = await twilio_service.send_sms(
             to_phone=customer["phone"],
             body=message,
             from_phone=tenant["twilio_phone_number"]
         )
-        
-        # Log the message
-        if result["success"]:
+        sms_sent = result.get("success", False)
+        if sms_sent:
             msg = Message(
                 tenant_id=tenant_id,
-                conversation_id="",  # Will be linked if conversation exists
+                conversation_id="",
                 customer_id=customer["id"],
                 direction=MessageDirection.OUTBOUND,
                 sender_type=SenderType.SYSTEM,
                 content=message,
                 metadata={"twilio_sid": result.get("provider_message_id")}
             )
-            msg_dict = msg.model_dump(mode='json')
-            await db.messages.insert_one(msg_dict)
-    
-    return {"message": "Job marked en-route", "sms_sent": True}
+            await db.messages.insert_one(msg.model_dump(mode='json'))
+
+    return {"success": True, "sms_sent": sms_sent, "tracking_token": tracking_token}
+
+
+@v1_router.post("/jobs/{job_id}/arrived")
+async def mark_job_arrived(
+    job_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark technician as arrived on site"""
+    job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    now = datetime.now(timezone.utc)
+    await db.jobs.update_one(
+        {"id": job_id},
+        {"$set": {
+            "status": JobStatus.IN_PROGRESS.value,
+            "actual_arrival": now.isoformat(),
+            "updated_at": now.isoformat()
+        }}
+    )
+    return {"success": True, "arrived_at": now.isoformat()}
+
+
+class _CompletionPhoto(BaseModel):
+    type: str = "OTHER"
+    url: str
+    caption: Optional[str] = None
+
+
+class _AdditionalCharge(BaseModel):
+    description: str
+    amount: float
+
+
+class JobCompleteRequest(BaseModel):
+    technician_id: Optional[str] = None
+    completion_notes: Optional[str] = None
+    photos: Optional[List[_CompletionPhoto]] = None
+    signature_url: Optional[str] = None
+    additional_charges: Optional[List[_AdditionalCharge]] = None
+    send_invoice: bool = True
+    request_review: bool = True
+
+
+@v1_router.post("/jobs/{job_id}/complete")
+async def complete_job(
+    job_id: str,
+    data: JobCompleteRequest,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Complete job: mark done, auto-create invoice, send payment SMS, schedule review"""
+    import secrets as _sec
+    job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    customer = await db.customers.find_one({"id": job["customer_id"]}, {"_id": 0})
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    now = datetime.now(timezone.utc)
+
+    update_fields = {"status": JobStatus.COMPLETED.value, "completed_at": now.isoformat(), "updated_at": now.isoformat()}
+    if data.completion_notes:
+        update_fields["completion_notes"] = data.completion_notes
+    if data.photos:
+        update_fields["completion_photos"] = [p.model_dump() for p in data.photos]
+    if data.signature_url:
+        update_fields["signature_url"] = data.signature_url
+    if data.technician_id:
+        update_fields["assigned_technician_id"] = data.technician_id
+    await db.jobs.update_one({"id": job_id}, {"$set": update_fields})
+
+    invoice_doc = None
+    invoice_sent = False
+
+    if data.send_invoice and customer:
+        existing = await db.invoices.find_one({"job_id": job_id, "tenant_id": tenant_id})
+        if not existing:
+            line_items = []
+            base_amount = job.get("quote_amount", 0) or 0
+            if base_amount:
+                line_items.append({
+                    "description": f"{job.get('job_type', 'Service')} - {data.completion_notes or 'Service completed'}",
+                    "quantity": 1, "unit_price": base_amount, "total": base_amount, "type": "LABOR"
+                })
+            for charge in (data.additional_charges or []):
+                line_items.append({"description": charge.description, "quantity": 1,
+                                   "unit_price": charge.amount, "total": charge.amount, "type": "FEE"})
+            subtotal = sum(i["total"] for i in line_items)
+            inv_settings = (tenant.get("invoice_settings") or {}) if tenant else {}
+            tax_rate = inv_settings.get("default_tax_rate", 0)
+            tax_amount = round(subtotal * tax_rate / 100, 2)
+            total = round(subtotal + tax_amount, 2)
+            next_num = inv_settings.get("next_invoice_number", 1)
+            prefix = inv_settings.get("invoice_prefix", "INV")
+            invoice_number = f"{prefix}-{now.year}-{next_num:04d}"
+            await db.tenants.update_one({"id": tenant_id}, {"$set": {"invoice_settings.next_invoice_number": next_num + 1}})
+            due_date = (now + timedelta(days=inv_settings.get("default_payment_terms", 10))).date().isoformat()
+            payment_token = _sec.token_urlsafe(16)
+            invoice_doc = {
+                "id": str(uuid4()), "tenant_id": tenant_id,
+                "customer_id": job["customer_id"], "property_id": job.get("property_id"),
+                "job_id": job_id, "quote_id": job.get("quote_id"),
+                "invoice_number": invoice_number, "line_items": line_items,
+                "subtotal": subtotal, "discount_type": None, "discount_value": 0, "discount_amount": 0,
+                "tax_rate": tax_rate, "tax_amount": tax_amount, "total": total,
+                "amount_paid": 0, "amount_due": total, "status": "SENT",
+                "invoice_date": now.isoformat(), "due_date": due_date, "sent_at": now.isoformat(),
+                "payment_link_token": payment_token, "payments": [],
+                "notes": inv_settings.get("invoice_footer_text", ""),
+                "created_at": now.isoformat(), "updated_at": now.isoformat(),
+            }
+            await db.invoices.insert_one(invoice_doc)
+            await db.jobs.update_one({"id": job_id}, {"$set": {"invoice_id": invoice_doc["id"]}})
+
+            if tenant and tenant.get("twilio_phone_number") and customer.get("phone"):
+                from services.twilio_service import twilio_service
+                base_url = tenant.get("app_url", "https://app.fieldos.com")
+                payment_link = f"{base_url}/pay/{payment_token}"
+                notes_line = f"\nSummary: {data.completion_notes}" if data.completion_notes else ""
+                msg_body = (
+                    f"Hi {customer.get('first_name', 'there')}! "
+                    f"Your {job.get('job_type', 'service')} is complete.{notes_line}\n"
+                    f"Invoice #{invoice_number}: ${total:.2f}\n"
+                    f"Pay securely: {payment_link}"
+                )
+                if tenant.get("sms_signature"):
+                    msg_body += f" {tenant['sms_signature']}"
+                res = await twilio_service.send_sms(
+                    to_phone=customer["phone"], body=msg_body, from_phone=tenant["twilio_phone_number"]
+                )
+                invoice_sent = res.get("success", False)
+
+    review_scheduled_at = None
+    if data.request_review and tenant:
+        review_settings = tenant.get("review_settings") or {}
+        delay_hours = review_settings.get("delay_hours", 2)
+        review_scheduled_at = (now + timedelta(hours=delay_hours)).isoformat()
+        await db.jobs.update_one({"id": job_id}, {"$set": {"review_scheduled_at": review_scheduled_at}})
+
+    updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    return {
+        "success": True,
+        "job": serialize_doc(updated_job),
+        "invoice": serialize_doc(invoice_doc) if invoice_doc else None,
+        "invoice_sent": invoice_sent,
+        "review_scheduled": review_scheduled_at is not None,
+        "review_send_at": review_scheduled_at,
+    }
 
 
 class OnMyWayRequest(BaseModel):
@@ -1225,30 +1430,23 @@ async def send_on_my_way(
     job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
     customer = await db.customers.find_one({"id": job.get("customer_id")}, {"_id": 0})
     if not customer or not customer.get("phone"):
         raise HTTPException(status_code=400, detail="Customer phone not found")
-    
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     if not tenant or not tenant.get("twilio_phone_number"):
         raise HTTPException(status_code=400, detail="SMS not configured")
-    
     tech = await db.technicians.find_one({"id": job.get("assigned_technician_id")}, {"_id": 0}) if job.get("assigned_technician_id") else None
     tech_name = tech.get("name", "Your technician") if tech else "Your technician"
-    
     if data.custom_message:
         message = data.custom_message
     else:
         message = f"Hi {customer.get('first_name', 'there')}! {tech_name} from {tenant['name']} is on the way and will arrive in approximately {data.eta_minutes} minutes."
         if tenant.get("sms_signature"):
             message += f" {tenant['sms_signature']}"
-    
     from services.twilio_service import twilio_service
-    await twilio_service.send_sms(to_phone=customer["phone"], message=message, from_phone=tenant["twilio_phone_number"])
-    
+    await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
     await db.jobs.update_one({"id": job_id}, {"$set": {"status": JobStatus.EN_ROUTE.value, "en_route_at": datetime.now(timezone.utc).isoformat(), "eta_minutes": data.eta_minutes}})
-    
     return {"success": True, "message": "On My Way notification sent"}
 
 
@@ -1267,33 +1465,34 @@ async def request_review(
     job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
     if job.get("status") != JobStatus.COMPLETED.value:
         raise HTTPException(status_code=400, detail="Job must be completed")
-    
     customer = await db.customers.find_one({"id": job.get("customer_id")}, {"_id": 0})
     if not customer or not customer.get("phone"):
         raise HTTPException(status_code=400, detail="Customer phone not found")
-    
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     if not tenant or not tenant.get("twilio_phone_number"):
         raise HTTPException(status_code=400, detail="SMS not configured")
-    
-    branding = tenant.get("branding", {})
-    review_urls = {"google": branding.get("google_review_url", ""), "yelp": branding.get("yelp_review_url", ""), "facebook": branding.get("facebook_review_url", "")}
+    review_settings = tenant.get("review_settings") or {}
+    branding = tenant.get("branding") or {}
+    review_urls = {
+        "google": review_settings.get("google_review_url") or branding.get("google_review_url", ""),
+        "yelp": review_settings.get("yelp_review_url") or branding.get("yelp_review_url", ""),
+        "facebook": review_settings.get("facebook_review_url") or branding.get("facebook_review_url", ""),
+    }
     review_url = review_urls.get(data.platform, "")
-    
     message = f"Hi {customer.get('first_name', 'there')}! Thank you for choosing {tenant['name']}. We hope you're satisfied with our service!"
     if review_url:
         message += f" We'd love your feedback: {review_url}"
     if tenant.get("sms_signature"):
         message += f" {tenant['sms_signature']}"
-    
     from services.twilio_service import twilio_service
-    await twilio_service.send_sms(to_phone=customer["phone"], message=message, from_phone=tenant["twilio_phone_number"])
-    
-    await db.jobs.update_one({"id": job_id}, {"$set": {"review_requested_at": datetime.now(timezone.utc).isoformat(), "review_platform": data.platform}})
-    
+    await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
+    await db.jobs.update_one({"id": job_id}, {"$set": {
+        "review_requested_at": datetime.now(timezone.utc).isoformat(),
+        "review_platform": data.platform,
+        "review_request_sent": True,
+    }})
     return {"success": True, "message": "Review request sent"}
 
 
@@ -5698,6 +5897,126 @@ async def update_branding_settings(
     )
     
     return {"success": True, "branding": filtered_branding}
+
+
+# ============= REVIEW SETTINGS =============
+
+@v1_router.get("/settings/reviews")
+async def get_review_settings(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get tenant review request settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return tenant.get("review_settings") or {}
+
+
+@v1_router.put("/settings/reviews")
+async def update_review_settings(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update tenant review request settings"""
+    allowed = [
+        "enabled", "delay_hours", "google_review_url", "yelp_review_url",
+        "facebook_review_url", "preferred_platform", "message_template"
+    ]
+    filtered = {k: v for k, v in data.items() if k in allowed}
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {"$set": {"review_settings": filtered, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True, "review_settings": filtered}
+
+
+@v1_router.get("/reviews/pending")
+async def get_pending_reviews(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get jobs that have review requests scheduled but not yet sent"""
+    jobs = await db.jobs.find({
+        "tenant_id": tenant_id,
+        "status": "COMPLETED",
+        "review_scheduled_at": {"$exists": True},
+        "review_request_sent": {"$ne": True},
+    }, {"_id": 0}).to_list(200)
+    return serialize_docs(jobs)
+
+
+@v1_router.get("/reviews/stats")
+async def get_review_stats(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get review request statistics"""
+    total_completed = await db.jobs.count_documents({"tenant_id": tenant_id, "status": "COMPLETED"})
+    total_requested = await db.jobs.count_documents({"tenant_id": tenant_id, "review_request_sent": True})
+    pending = await db.jobs.count_documents({
+        "tenant_id": tenant_id,
+        "status": "COMPLETED",
+        "review_scheduled_at": {"$exists": True},
+        "review_request_sent": {"$ne": True},
+    })
+    return {
+        "total_completed": total_completed,
+        "review_requests_sent": total_requested,
+        "pending_review_requests": pending,
+        "request_rate": round(total_requested / total_completed * 100, 1) if total_completed else 0,
+    }
+
+
+# ============= PUBLIC TRACKING =============
+
+@api_router.get("/track/{token}")
+async def get_tracking_info(token: str):
+    """Public tracking page - no auth required"""
+    job = await db.jobs.find_one({"tracking_token": token}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Tracking link not found or expired")
+
+    tenant = await db.tenants.find_one({"id": job["tenant_id"]}, {"_id": 0})
+    customer = await db.customers.find_one({"id": job["customer_id"]}, {"_id": 0})
+    prop = await db.properties.find_one({"id": job.get("property_id")}, {"_id": 0}) if job.get("property_id") else None
+    tech = None
+    if job.get("assigned_technician_id"):
+        tech_doc = await db.technicians.find_one({"id": job["assigned_technician_id"]}, {"_id": 0})
+        if tech_doc:
+            tech = {"name": tech_doc.get("name"), "photo_url": tech_doc.get("photo_url"), "vehicle_info": tech_doc.get("vehicle_info")}
+
+    minutes_remaining = None
+    if job.get("estimated_arrival"):
+        try:
+            eta = datetime.fromisoformat(job["estimated_arrival"].replace("Z", "+00:00"))
+            diff = (eta - datetime.now(timezone.utc)).total_seconds() / 60
+            minutes_remaining = max(0, int(diff))
+        except Exception:
+            pass
+
+    return {
+        "status": job.get("status"),
+        "job_type": job.get("job_type"),
+        "service_window_start": job.get("service_window_start"),
+        "service_window_end": job.get("service_window_end"),
+        "en_route_at": job.get("en_route_at"),
+        "estimated_arrival": job.get("estimated_arrival"),
+        "actual_arrival": job.get("actual_arrival"),
+        "minutes_remaining": minutes_remaining,
+        "technician": tech,
+        "company": {
+            "name": tenant.get("name") if tenant else None,
+            "phone": tenant.get("primary_phone") if tenant else None,
+            "logo_url": (tenant.get("branding") or {}).get("logo_url") if tenant else None,
+        },
+        "property_address": (
+            f"{prop.get('address_line1', '')}, {prop.get('city', '')}, {prop.get('state', '')}"
+            if prop else None
+        ),
+        "customer_first_name": customer.get("first_name") if customer else None,
+    }
 
 
 # ============= ENHANCED CUSTOMER PORTAL =============

@@ -55,6 +55,10 @@ export const adminAPI = {
 export const settingsAPI = {
   getTenantSettings: () => api.get('/settings/tenant'),
   updateTenantSettings: (data) => api.put('/settings/tenant', data),
+  getReviewSettings: () => api.get('/settings/reviews'),
+  updateReviewSettings: (data) => api.put('/settings/reviews', data),
+  getBrandingSettings: () => api.get('/settings/branding'),
+  updateBrandingSettings: (data) => api.put('/settings/branding', data),
 };
 
 // Customer APIs
@@ -100,7 +104,9 @@ export const jobAPI = {
   get: (id) => api.get(`/jobs/${id}`),
   create: (data) => api.post('/jobs', data),
   update: (id, data) => api.put(`/jobs/${id}`, data),
-  markEnRoute: (id) => api.post(`/jobs/${id}/en-route`),
+  markEnRoute: (id, data = {}) => api.post(`/jobs/${id}/en-route`, data),
+  markArrived: (id) => api.post(`/jobs/${id}/arrived`),
+  complete: (id, data) => api.post(`/jobs/${id}/complete`, data),
   bulkDelete: (ids) => api.post('/jobs/bulk-delete', ids),
   sendOnMyWay: (id, data) => api.post(`/jobs/${id}/on-my-way`, data),
   requestReview: (id, data) => api.post(`/jobs/${id}/request-review`, data),
@@ -173,6 +179,13 @@ export const dispatchAPI = {
 export const dashboardAPI = {
   get: () => api.get('/dashboard'),
   getReports: (params = {}) => api.get('/reports/summary', { params }),
+};
+
+// Public APIs (no auth)
+const BACKEND_URL_PUBLIC = import.meta.env.VITE_BACKEND_URL;
+export const publicAPI = {
+  getTracking: (token) =>
+    axios.get(`${BACKEND_URL_PUBLIC}/api/track/${token}`),
 };
 
 export default api;

@@ -118,6 +118,26 @@ export default function DispatchBoard() {
     }
   };
 
+  const handleEnRoute = async (jobId) => {
+    try {
+      const res = await jobAPI.markEnRoute(jobId, { estimated_minutes: 30, send_sms: true, include_tracking_link: true });
+      toast.success("On My Way SMS sent! Tracking link generated.");
+      fetchDispatchBoard();
+    } catch (error) {
+      toast.error("Failed to send On My Way notification");
+    }
+  };
+
+  const handleArrived = async (jobId) => {
+    try {
+      await jobAPI.markArrived(jobId);
+      toast.success("Marked as arrived");
+      fetchDispatchBoard();
+    } catch (error) {
+      toast.error("Failed to mark arrived");
+    }
+  };
+
   const navigateDate = (direction) => {
     const date = new Date(selectedDate + 'T12:00:00'); // Use noon to avoid timezone issues
     date.setDate(date.getDate() + direction);
@@ -262,9 +282,9 @@ export default function DispatchBoard() {
                   ) : (
                     <div className="space-y-3">
                       {tech.jobs.map((job) => (
-                        <JobCard 
-                          key={job.id} 
-                          job={job} 
+                        <JobCard
+                          key={job.id}
+                          job={job}
                           formatTime={formatTime}
                           assigned
                           onUnassign={() => handleUnassignJob(job.id)}
@@ -272,6 +292,8 @@ export default function DispatchBoard() {
                             setSelectedJob(job);
                             setShowAssignDialog(true);
                           }}
+                          onEnRoute={() => handleEnRoute(job.id)}
+                          onArrived={() => handleArrived(job.id)}
                         />
                       ))}
                     </div>
@@ -341,10 +363,13 @@ export default function DispatchBoard() {
   );
 }
 
-function JobCard({ job, formatTime, assigned, onAssign, onUnassign, onReassign }) {
+function JobCard({ job, formatTime, assigned, onAssign, onUnassign, onReassign, onEnRoute, onArrived }) {
+  const canEnRoute = assigned && ["BOOKED", "SCHEDULED", "NEW"].includes(job.status);
+  const canArrive = assigned && job.status === "EN_ROUTE";
+
   return (
-    <div 
-      className={`p-3 rounded-lg border-l-4 ${priorityColors[job.priority] || priorityColors.NORMAL} 
+    <div
+      className={`p-3 rounded-lg border-l-4 ${priorityColors[job.priority] || priorityColors.NORMAL}
         shadow-sm hover:shadow-md transition-shadow cursor-pointer`}
       data-testid={`dispatch-job-${job.id}`}
     >
@@ -377,6 +402,30 @@ function JobCard({ job, formatTime, assigned, onAssign, onUnassign, onReassign }
         <div className="flex items-center gap-1 text-xs text-red-600 mb-2">
           <AlertTriangle className="h-3 w-3" />
           <span className="font-medium">EMERGENCY</span>
+        </div>
+      )}
+
+      {/* Status action buttons */}
+      {(canEnRoute || canArrive) && (
+        <div className="mb-2">
+          {canEnRoute && (
+            <Button
+              size="sm"
+              className="w-full text-xs h-8 bg-purple-600 hover:bg-purple-700 text-white"
+              onClick={(e) => { e.stopPropagation(); onEnRoute && onEnRoute(); }}
+            >
+              <Truck className="h-3 w-3 mr-1" /> On My Way
+            </Button>
+          )}
+          {canArrive && (
+            <Button
+              size="sm"
+              className="w-full text-xs h-8 bg-green-600 hover:bg-green-700 text-white"
+              onClick={(e) => { e.stopPropagation(); onArrived && onArrived(); }}
+            >
+              <CheckCircle className="h-3 w-3 mr-1" /> Mark Arrived
+            </Button>
+          )}
         </div>
       )}
 
