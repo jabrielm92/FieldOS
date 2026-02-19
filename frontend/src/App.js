@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { BrandingProvider } from "./contexts/BrandingContext";
 import { Toaster } from "./components/ui/sonner";
 
 // Pages
@@ -24,6 +25,13 @@ import RevenueReportsPage from "./pages/reports/RevenueReportsPage";
 import CustomerPortal from "./pages/portal/CustomerPortal";
 import CalendarPage from "./pages/calendar/CalendarPage";
 import TrackingPage from "./pages/tracking/TrackingPage";
+
+// Authenticated Layout - wraps BrandingProvider around protected routes
+function AuthenticatedLayout({ children }) {
+  const { user } = useAuth();
+  if (!user) return children;
+  return <BrandingProvider>{children}</BrandingProvider>;
+}
 
 // Protected Route Component
 function ProtectedRoute({ children, requireSuperAdmin = false }) {
@@ -82,75 +90,103 @@ function AppRoutes() {
         </PublicRoute>
       } />
 
-      {/* Tenant Routes */}
+      {/* Tenant Routes - wrapped in BrandingProvider via AuthenticatedLayout */}
       <Route path="/dashboard" element={
         <ProtectedRoute>
-          <DashboardPage />
+          <AuthenticatedLayout>
+            <DashboardPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/leads" element={
         <ProtectedRoute>
-          <LeadsPage />
+          <AuthenticatedLayout>
+            <LeadsPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/jobs" element={
         <ProtectedRoute>
-          <JobsPage />
+          <AuthenticatedLayout>
+            <JobsPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/conversations" element={
         <ProtectedRoute>
-          <ConversationsPage />
+          <AuthenticatedLayout>
+            <ConversationsPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/customers" element={
         <ProtectedRoute>
-          <CustomersPage />
+          <AuthenticatedLayout>
+            <CustomersPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/technicians" element={
         <ProtectedRoute>
-          <TechniciansPage />
+          <AuthenticatedLayout>
+            <TechniciansPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/quotes" element={
         <ProtectedRoute>
-          <QuotesPage />
+          <AuthenticatedLayout>
+            <QuotesPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/campaigns" element={
         <ProtectedRoute>
-          <CampaignsPage />
+          <AuthenticatedLayout>
+            <CampaignsPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/dispatch" element={
         <ProtectedRoute>
-          <DispatchBoard />
+          <AuthenticatedLayout>
+            <DispatchBoard />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/reports" element={
         <ProtectedRoute>
-          <ReportsPage />
+          <AuthenticatedLayout>
+            <ReportsPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/reports/revenue" element={
         <ProtectedRoute>
-          <RevenueReportsPage />
+          <AuthenticatedLayout>
+            <RevenueReportsPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/calendar" element={
         <ProtectedRoute>
-          <CalendarPage />
+          <AuthenticatedLayout>
+            <CalendarPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/settings" element={
         <ProtectedRoute>
-          <SettingsPage />
+          <AuthenticatedLayout>
+            <SettingsPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/settings/workflows" element={
         <ProtectedRoute>
-          <WorkflowBuilderPage />
+          <AuthenticatedLayout>
+            <WorkflowBuilderPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
@@ -163,12 +199,16 @@ function AppRoutes() {
       {/* Admin Routes */}
       <Route path="/admin" element={
         <ProtectedRoute requireSuperAdmin>
-          <Navigate to="/admin/tenants" replace />
+          <AuthenticatedLayout>
+            <Navigate to="/admin/tenants" replace />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/tenants" element={
         <ProtectedRoute requireSuperAdmin>
-          <AdminTenantsPage />
+          <AuthenticatedLayout>
+            <AdminTenantsPage />
+          </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
