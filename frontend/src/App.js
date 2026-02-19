@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { BrandingProvider } from "./contexts/BrandingContext";
 import { Toaster } from "./components/ui/sonner";
@@ -27,6 +27,7 @@ import CalendarPage from "./pages/calendar/CalendarPage";
 import TrackingPage from "./pages/tracking/TrackingPage";
 import InvoicesPage from "./pages/invoices/InvoicesPage";
 import PaymentPage from "./pages/payment/PaymentPage";
+import OnboardingPage from "./pages/onboarding/OnboardingPage";
 
 // Authenticated Layout - wraps BrandingProvider around protected routes
 function AuthenticatedLayout({ children }) {
@@ -38,6 +39,7 @@ function AuthenticatedLayout({ children }) {
 // Protected Route Component
 function ProtectedRoute({ children, requireSuperAdmin = false }) {
   const { user, loading, isSuperAdmin } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -53,6 +55,11 @@ function ProtectedRoute({ children, requireSuperAdmin = false }) {
 
   if (requireSuperAdmin && !isSuperAdmin) {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  // Redirect to onboarding if no industry set (non-superadmin tenants only)
+  if (!isSuperAdmin && !user?.tenant?.industry_slug && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return children;
@@ -90,6 +97,13 @@ function AppRoutes() {
         <PublicRoute>
           <LoginPage />
         </PublicRoute>
+      } />
+
+      {/* Onboarding Route */}
+      <Route path="/onboarding" element={
+        <ProtectedRoute>
+          <OnboardingPage />
+        </ProtectedRoute>
       } />
 
       {/* Tenant Routes - wrapped in BrandingProvider via AuthenticatedLayout */}
