@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { publicAPI } from "@/lib/api";
+import { MapPin } from "lucide-react";
 
 function formatTime(isoString) {
   if (!isoString) return null;
@@ -25,6 +26,8 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
+const MAP_VISIBLE_STATUSES = ["EN_ROUTE", "SCHEDULED", "IN_PROGRESS"];
 
 export default function TrackingPage() {
   const { token } = useParams();
@@ -76,6 +79,14 @@ export default function TrackingPage() {
   const etaTime = formatTime(data?.estimated_arrival);
   const arrivedTime = formatTime(data?.actual_arrival);
   const minutesLeft = data?.minutes_remaining;
+
+  const showMap =
+    data.property_address &&
+    MAP_VISIBLE_STATUSES.includes(data.status);
+
+  const encodedAddress = showMap
+    ? encodeURIComponent(data.property_address)
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -163,6 +174,34 @@ export default function TrackingPage() {
                 <p className="text-sm text-gray-400 mt-0.5">{tech.vehicle_info}</p>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Service Location Map */}
+        {showMap && (
+          <div className="bg-white rounded-2xl shadow p-5 space-y-3">
+            <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">
+              Service Location
+            </h3>
+            <iframe
+              title="Service Location Map"
+              src={`https://maps.google.com/maps?q=${encodedAddress}&output=embed&z=14`}
+              width="100%"
+              height="200"
+              style={{ border: "none" }}
+              className="rounded-xl"
+              loading="lazy"
+              allowFullScreen
+            />
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 border border-blue-600 text-blue-600 px-4 py-2 rounded-full text-sm font-medium hover:bg-blue-50 transition-colors"
+            >
+              <MapPin className="w-4 h-4" />
+              Get Directions
+            </a>
           </div>
         )}
 
