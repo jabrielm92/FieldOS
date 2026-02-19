@@ -1696,8 +1696,81 @@ async def mark_invoice_paid(
     
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
+
     return {"success": True, "message": "Invoice marked as paid"}
+
+
+@v1_router.get("/invoices/public/{token}")
+async def get_invoice_by_token(token: str):
+    """
+    Public endpoint — no auth required.
+    Returns invoice data for the customer-facing /pay/:token page.
+    """
+    invoice = await db.invoices.find_one({"payment_link_token": token}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found or link has expired")
+
+    tenant = await db.tenants.find_one({"id": invoice.get("tenant_id")}, {"_id": 0})
+    customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+
+    cust_name = ""
+    if customer:
+        cust_name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or customer.get("name", "")
+
+    company_info = {
+        "name": (tenant or {}).get("name", "FieldOS"),
+        "logo_url": ((tenant or {}).get("branding") or {}).get("logo_url"),
+        "primary_color": ((tenant or {}).get("branding") or {}).get("primary_color", "#0066CC"),
+        "phone": (tenant or {}).get("primary_phone"),
+    }
+
+    return {
+        "id": invoice["id"],
+        "invoice_number": invoice.get("invoice_number", f"INV-{invoice['id'][:6].upper()}"),
+        "amount": invoice.get("amount", 0),
+        "status": invoice.get("status", "SENT"),
+        "due_date": invoice.get("due_date"),
+        "notes": invoice.get("notes", ""),
+        "stripe_payment_link": invoice.get("stripe_payment_link"),
+        "paid_at": invoice.get("paid_at"),
+        "customer": {"name": cust_name} if cust_name else None,
+        "company": company_info,
+    }
+
+
+# ============= INVOICE SETTINGS =============
+
+@v1_router.get("/settings/invoice")
+async def get_invoice_settings(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get invoice settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    settings = tenant.get("invoice_settings") or {}
+    stripe_key = tenant.get("stripe_secret_key", "")
+    if stripe_key and len(stripe_key) > 8:
+        stripe_key = stripe_key[:7] + "..." + stripe_key[-4:]
+    return {**settings, "stripe_secret_key": stripe_key, "stripe_configured": bool(tenant.get("stripe_secret_key"))}
+
+
+@v1_router.put("/settings/invoice")
+async def update_invoice_settings(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update invoice settings"""
+    stripe_key = data.pop("stripe_secret_key", None)
+    set_data = {f"invoice_settings.{k}": v for k, v in data.items()
+                if k not in ("stripe_configured",) and v is not None}
+    if stripe_key and "..." not in stripe_key and len(stripe_key) > 10:
+        set_data["stripe_secret_key"] = stripe_key
+    set_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.tenants.update_one({"id": tenant_id}, {"$set": set_data})
+    return {"success": True}
 
 
 # ============= CONVERSATIONS & MESSAGES =============

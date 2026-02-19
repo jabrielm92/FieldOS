@@ -342,3 +342,42 @@ async def stripe_webhook(request: Request):
     except Exception as e:
         logger.error(f"Stripe webhook error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============= PUBLIC PAYMENT PAGE =============
+
+@router.get("/public/{token}")
+async def get_invoice_public(token: str):
+    """
+    Public endpoint — no auth required.
+    Returns invoice data for the customer-facing payment page at /pay/:token.
+    """
+    invoice = await db.invoices.find_one(
+        {"payment_link_token": token}, {"_id": 0}
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found or link has expired")
+
+    # Fetch tenant branding (logo, company name)
+    tenant = await db.tenants.find_one({"id": invoice.get("tenant_id")}, {"_id": 0})
+    customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+
+    return {
+        "id": invoice["id"],
+        "invoice_number": invoice.get("invoice_number", f"INV-{invoice['id'][:6].upper()}"),
+        "amount": invoice.get("amount", 0),
+        "status": invoice.get("status", "SENT"),
+        "due_date": invoice.get("due_date"),
+        "notes": invoice.get("notes", ""),
+        "stripe_payment_link": invoice.get("stripe_payment_link"),
+        "paid_at": invoice.get("paid_at"),
+        "customer": {
+            "name": f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() if customer else "Customer",
+        } if customer else None,
+        "company": {
+            "name": tenant.get("name", "FieldOS") if tenant else "FieldOS",
+            "logo_url": (tenant.get("branding") or {}).get("logo_url") if tenant else None,
+            "primary_color": (tenant.get("branding") or {}).get("primary_color", "#0066CC") if tenant else "#0066CC",
+            "phone": tenant.get("primary_phone") if tenant else None,
+        } if tenant else {"name": "FieldOS", "primary_color": "#0066CC"},
+    }

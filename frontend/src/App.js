@@ -25,6 +25,8 @@ import RevenueReportsPage from "./pages/reports/RevenueReportsPage";
 import CustomerPortal from "./pages/portal/CustomerPortal";
 import CalendarPage from "./pages/calendar/CalendarPage";
 import TrackingPage from "./pages/tracking/TrackingPage";
+import InvoicesPage from "./pages/invoices/InvoicesPage";
+import PaymentPage from "./pages/payment/PaymentPage";
 
 // Authenticated Layout - wraps BrandingProvider around protected routes
 function AuthenticatedLayout({ children }) {
@@ -190,11 +192,23 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
 
+      {/* Invoices */}
+      <Route path="/invoices" element={
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <InvoicesPage />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
+      } />
+
       {/* Customer Portal (Public) */}
       <Route path="/portal/:token" element={<CustomerPortal />} />
 
       {/* Technician Tracking (Public) */}
       <Route path="/track/:token" element={<TrackingPage />} />
+
+      {/* Public Invoice Payment Page */}
+      <Route path="/pay/:token" element={<PaymentPage />} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={

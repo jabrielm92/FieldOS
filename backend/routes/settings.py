@@ -94,3 +94,75 @@ async def update_tenant_settings(
 
     updated = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     return serialize_doc(updated)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Invoice Settings
+# ──────────────────────────────────────────────────────────────────────────────
+
+class InvoiceSettingsUpdate(BaseModel):
+    invoice_prefix: Optional[str] = None
+    default_payment_terms: Optional[int] = None
+    default_tax_rate: Optional[float] = None
+    company_name: Optional[str] = None
+    company_address: Optional[str] = None
+    company_phone: Optional[str] = None
+    company_email: Optional[str] = None
+    invoice_footer_text: Optional[str] = None
+    payment_instructions: Optional[str] = None
+    auto_reminder_enabled: Optional[bool] = None
+    auto_reminder_days: Optional[List[int]] = None
+    stripe_secret_key: Optional[str] = None
+
+
+@router.get("/invoice")
+async def get_invoice_settings(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get invoice settings for tenant"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    settings = tenant.get("invoice_settings") or {}
+    # Mask Stripe key
+    stripe_key = tenant.get("stripe_secret_key", "")
+    if stripe_key and len(stripe_key) > 8:
+        stripe_key = stripe_key[:7] + "..." + stripe_key[-4:]
+
+    return {
+        **settings,
+        "stripe_secret_key": stripe_key,
+        "stripe_configured": bool(tenant.get("stripe_secret_key")),
+    }
+
+
+@router.put("/invoice")
+async def update_invoice_settings(
+    data: InvoiceSettingsUpdate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update invoice settings"""
+    if current_user.get("role") not in [UserRole.OWNER.value, UserRole.SUPERADMIN.value]:
+        raise HTTPException(status_code=403, detail="Only owner can update settings")
+
+    update_fields = {k: v for k, v in data.model_dump(mode="json").items() if v is not None}
+
+    # Stripe key is stored at tenant root level, not in invoice_settings
+    stripe_key = update_fields.pop("stripe_secret_key", None)
+
+    set_data = {f"invoice_settings.{k}": v for k, v in update_fields.items()}
+    if stripe_key and not stripe_key.startswith("sk_") is False:
+        set_data["stripe_secret_key"] = stripe_key
+    elif stripe_key and "..." not in stripe_key:
+        set_data["stripe_secret_key"] = stripe_key
+
+    set_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.tenants.update_one({"id": tenant_id}, {"$set": set_data})
+
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    settings = tenant.get("invoice_settings") or {}
+    return {"success": True, **settings}

@@ -9,8 +9,8 @@ import { Switch } from "../../components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { toast } from "sonner";
-import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save, Star, Link2, Wrench, Trash2, Pencil, Plus } from "lucide-react";
-import { settingsAPI, customFieldsAPI, industryAPI } from "../../lib/api";
+import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save, Star, Link2, Wrench, Trash2, Pencil, Plus, Receipt } from "lucide-react";
+import { settingsAPI, customFieldsAPI, industryAPI, invoiceAPI } from "../../lib/api";
 import { useBranding } from "../../contexts/BrandingContext";
 
 export default function SettingsPage() {
@@ -27,20 +27,39 @@ export default function SettingsPage() {
   const [editingField, setEditingField] = useState(null);
   const [fieldOptionsInput, setFieldOptionsInput] = useState('');
 
+  // Invoice Settings state
+  const [invoiceSettings, setInvoiceSettings] = useState({
+    invoice_prefix: 'INV',
+    default_payment_terms: 30,
+    default_tax_rate: 0,
+    company_name: '',
+    company_address: '',
+    company_phone: '',
+    company_email: '',
+    invoice_footer_text: 'Thank you for your business!',
+    payment_instructions: '',
+    auto_reminder_enabled: false,
+    stripe_secret_key: '',
+    stripe_configured: false,
+  });
+  const [savingInvoice, setSavingInvoice] = useState(false);
+
   useEffect(() => {
     fetchTenantSettings();
   }, []);
 
   const fetchTenantSettings = async () => {
     try {
-      const [tenantRes, fieldsRes, industryRes] = await Promise.allSettled([
+      const [tenantRes, fieldsRes, industryRes, invoiceRes] = await Promise.allSettled([
         settingsAPI.getTenantSettings(),
         customFieldsAPI.list(),
         industryAPI.getSettings(),
+        invoiceAPI.getInvoiceSettings(),
       ]);
       if (tenantRes.status === 'fulfilled') setTenant(tenantRes.value.data);
       if (fieldsRes.status === 'fulfilled') setCustomFields(fieldsRes.value.data.custom_fields || []);
       if (industryRes.status === 'fulfilled') setIndustrySettings(industryRes.value.data);
+      if (invoiceRes.status === 'fulfilled') setInvoiceSettings(prev => ({ ...prev, ...invoiceRes.value.data }));
       if (tenantRes.status === 'rejected') toast.error("Failed to load settings");
     } catch (error) {
       toast.error("Failed to load settings");
@@ -168,6 +187,10 @@ export default function SettingsPage() {
           <TabsTrigger value="scheduling" className="flex items-center gap-1 text-xs sm:text-sm">
             <Clock className="h-4 w-4 hidden sm:block" />
             Scheduling
+          </TabsTrigger>
+          <TabsTrigger value="invoice" className="flex items-center gap-1 text-xs sm:text-sm">
+            <Receipt className="h-4 w-4" />
+            <span className="hidden sm:inline">Invoicing</span>
           </TabsTrigger>
           <TabsTrigger value="fields" className="flex items-center gap-1 text-xs sm:text-sm">
             <Wrench className="h-4 w-4 hidden sm:block" />
@@ -895,6 +918,183 @@ export default function SettingsPage() {
               ) : null}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Invoice Tab */}
+        <TabsContent value="invoice" className="space-y-6">
+          {/* Stripe */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading flex items-center gap-2">
+                <Receipt className="h-5 w-5" />
+                Payment Processing
+              </CardTitle>
+              <CardDescription>Connect Stripe to accept online invoice payments</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {invoiceSettings.stripe_configured && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-300">
+                  <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+                  Stripe is connected
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Stripe Secret Key</Label>
+                <Input
+                  type="password"
+                  placeholder="sk_live_... or sk_test_..."
+                  value={invoiceSettings.stripe_secret_key || ''}
+                  onChange={e => setInvoiceSettings(prev => ({ ...prev, stripe_secret_key: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Found in your <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noreferrer" className="underline">Stripe dashboard</a>. Use test keys during setup.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Invoice Defaults */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading">Invoice Defaults</CardTitle>
+              <CardDescription>Default values applied to new invoices</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Invoice Prefix</Label>
+                  <Input
+                    value={invoiceSettings.invoice_prefix || 'INV'}
+                    onChange={e => setInvoiceSettings(prev => ({ ...prev, invoice_prefix: e.target.value }))}
+                    placeholder="INV"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Terms (days)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={invoiceSettings.default_payment_terms ?? 30}
+                    onChange={e => setInvoiceSettings(prev => ({ ...prev, default_payment_terms: parseInt(e.target.value) || 30 }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Default Tax Rate (%)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={invoiceSettings.default_tax_rate ?? 0}
+                  onChange={e => setInvoiceSettings(prev => ({ ...prev, default_tax_rate: parseFloat(e.target.value) || 0 }))}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Invoice Footer Text</Label>
+                <Input
+                  value={invoiceSettings.invoice_footer_text || ''}
+                  onChange={e => setInvoiceSettings(prev => ({ ...prev, invoice_footer_text: e.target.value }))}
+                  placeholder="Thank you for your business!"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Payment Instructions</Label>
+                <Input
+                  value={invoiceSettings.payment_instructions || ''}
+                  onChange={e => setInvoiceSettings(prev => ({ ...prev, payment_instructions: e.target.value }))}
+                  placeholder="Pay online or call us to pay by phone."
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Company Info on Invoice */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading">Company Info on Invoices</CardTitle>
+              <CardDescription>Displayed on customer-facing invoice pages</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Company Name</Label>
+                  <Input
+                    value={invoiceSettings.company_name || ''}
+                    onChange={e => setInvoiceSettings(prev => ({ ...prev, company_name: e.target.value }))}
+                    placeholder={tenant?.name || ''}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input
+                    value={invoiceSettings.company_phone || ''}
+                    onChange={e => setInvoiceSettings(prev => ({ ...prev, company_phone: e.target.value }))}
+                    placeholder={tenant?.primary_phone || ''}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={invoiceSettings.company_email || ''}
+                  onChange={e => setInvoiceSettings(prev => ({ ...prev, company_email: e.target.value }))}
+                  placeholder={tenant?.primary_contact_email || ''}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Address</Label>
+                <Input
+                  value={invoiceSettings.company_address || ''}
+                  onChange={e => setInvoiceSettings(prev => ({ ...prev, company_address: e.target.value }))}
+                  placeholder="123 Main St, City, State 12345"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Auto Reminders */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading">Payment Reminders</CardTitle>
+              <CardDescription>Automatically remind customers about unpaid invoices</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={invoiceSettings.auto_reminder_enabled || false}
+                  onCheckedChange={v => setInvoiceSettings(prev => ({ ...prev, auto_reminder_enabled: v }))}
+                />
+                <div>
+                  <p className="font-medium text-sm">Auto payment reminders</p>
+                  <p className="text-xs text-muted-foreground">Send SMS reminders for overdue invoices</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button
+              className="btn-industrial"
+              disabled={savingInvoice}
+              onClick={async () => {
+                setSavingInvoice(true);
+                try {
+                  await invoiceAPI.updateInvoiceSettings(invoiceSettings);
+                  toast.success("Invoice settings saved");
+                } catch {
+                  toast.error("Failed to save invoice settings");
+                } finally {
+                  setSavingInvoice(false);
+                }
+              }}
+            >
+              {savingInvoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              SAVE INVOICE SETTINGS
+            </Button>
+          </div>
         </TabsContent>
       </Tabs>
     </Layout>

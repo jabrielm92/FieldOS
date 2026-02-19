@@ -130,6 +130,14 @@ export const invoiceAPI = {
   createPaymentLink: (id) => api.post(`/invoices/${id}/payment-link`),
   sendPaymentLink: (id) => api.post(`/invoices/${id}/send-payment-link`),
   getOverdue: () => api.get('/invoices/overdue'),
+  getInvoiceSettings: () => api.get('/settings/invoice'),
+  updateInvoiceSettings: (data) => api.put('/settings/invoice', data),
+};
+
+// Public invoice payment (no auth)
+export const publicInvoiceAPI = {
+  getByToken: (token) =>
+    axios.get(`${BACKEND_URL}/api/v1/invoices/public/${token}`),
 };
 
 // Reports APIs

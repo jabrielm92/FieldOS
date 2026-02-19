@@ -1,10 +1,10 @@
 import { cn } from "../../lib/utils";
-import { 
-  LayoutDashboard, 
-  Users, 
-  Briefcase, 
-  MessageSquare, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Users,
+  Briefcase,
+  MessageSquare,
+  FileText,
   Settings,
   Building2,
   Wrench,
@@ -14,7 +14,8 @@ import {
   ChevronLeft,
   Truck,
   BarChart3,
-  Calendar
+  Calendar,
+  Receipt
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -31,6 +32,7 @@ export const tenantNavItems = [
   { to: "/customers", icon: Users, label: "Customers" },
   { to: "/technicians", icon: Wrench, label: "Technicians" },
   { to: "/quotes", icon: FileText, label: "Quotes" },
+  { to: "/invoices", icon: Receipt, label: "Invoices" },
   { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings" },
