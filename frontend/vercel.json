@@ -1,7 +1,7 @@
 {
   "buildCommand": "yarn build",
   "outputDirectory": "build",
-  "framework": "create-react-app",
+  "framework": "vite",
   "installCommand": "yarn install --legacy-peer-deps",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }

@@ -54,7 +54,7 @@ import {
 } from "recharts";
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = import.meta.env.VITE_BACKEND_URL;
 
 const COLORS = ['#0066CC', '#FF6B00', '#22C55E', '#EAB308', '#EF4444', '#8B5CF6', '#06B6D4'];
 
