@@ -9,13 +9,23 @@ import { Switch } from "../../components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { toast } from "sonner";
-import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save, Star } from "lucide-react";
-import { settingsAPI } from "../../lib/api";
+import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save, Star, Link2, Wrench, Trash2, Pencil, Plus } from "lucide-react";
+import { settingsAPI, customFieldsAPI, industryAPI } from "../../lib/api";
+import { useBranding } from "../../contexts/BrandingContext";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tenant, setTenant] = useState(null);
+  const brandingCtx = useBranding();
+
+  // Custom Fields state
+  const [customFields, setCustomFields] = useState([]);
+  const [industrySettings, setIndustrySettings] = useState({ industry_slug: '', custom_job_types: [] });
+  const [showAddField, setShowAddField] = useState(false);
+  const [newField, setNewField] = useState({ name: '', type: 'TEXT', applies_to: 'job', required: false, options: [] });
+  const [editingField, setEditingField] = useState(null);
+  const [fieldOptionsInput, setFieldOptionsInput] = useState('');
 
   useEffect(() => {
     fetchTenantSettings();
@@ -23,8 +33,15 @@ export default function SettingsPage() {
 
   const fetchTenantSettings = async () => {
     try {
-      const response = await settingsAPI.getTenantSettings();
-      setTenant(response.data);
+      const [tenantRes, fieldsRes, industryRes] = await Promise.allSettled([
+        settingsAPI.getTenantSettings(),
+        customFieldsAPI.list(),
+        industryAPI.getSettings(),
+      ]);
+      if (tenantRes.status === 'fulfilled') setTenant(tenantRes.value.data);
+      if (fieldsRes.status === 'fulfilled') setCustomFields(fieldsRes.value.data.custom_fields || []);
+      if (industryRes.status === 'fulfilled') setIndustrySettings(industryRes.value.data);
+      if (tenantRes.status === 'rejected') toast.error("Failed to load settings");
     } catch (error) {
       toast.error("Failed to load settings");
     } finally {
@@ -74,6 +91,44 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveBranding = async () => {
+    setSaving(true);
+    try {
+      const brandingData = tenant?.branding || {};
+      await settingsAPI.updateBrandingSettings(brandingData);
+      // Apply CSS variables via context
+      if (brandingCtx?.applyBrandingCSS) {
+        brandingCtx.applyBrandingCSS(brandingData);
+      }
+      if (brandingCtx?.setBranding) {
+        brandingCtx.setBranding(prev => ({ ...prev, ...brandingData }));
+      }
+      toast.success("Branding settings saved");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to save branding settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSavePortal = async () => {
+    setSaving(true);
+    try {
+      const portalFields = {
+        portal_title: tenant?.branding?.portal_title,
+        portal_welcome_message: tenant?.branding?.portal_welcome_message,
+        portal_support_email: tenant?.branding?.portal_support_email,
+        portal_support_phone: tenant?.branding?.portal_support_phone,
+      };
+      await settingsAPI.updateBrandingSettings(portalFields);
+      toast.success("Portal settings saved");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to save portal settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout title="Settings" subtitle="Configure your company settings">
@@ -94,11 +149,11 @@ export default function SettingsPage() {
             <Building2 className="h-4 w-4 hidden sm:block" />
             Company
           </TabsTrigger>
-          <TabsTrigger value="branding" disabled className="flex items-center gap-1 text-xs sm:text-sm opacity-50 cursor-not-allowed">
+          <TabsTrigger value="branding" className="flex items-center gap-1 text-xs sm:text-sm">
             <Palette className="h-4 w-4 hidden sm:block" />
             Branding
           </TabsTrigger>
-          <TabsTrigger value="portal" disabled className="flex items-center gap-1 text-xs sm:text-sm opacity-50 cursor-not-allowed">
+          <TabsTrigger value="portal" className="flex items-center gap-1 text-xs sm:text-sm">
             <Globe className="h-4 w-4 hidden sm:block" />
             Portal
           </TabsTrigger>
@@ -113,6 +168,10 @@ export default function SettingsPage() {
           <TabsTrigger value="scheduling" className="flex items-center gap-1 text-xs sm:text-sm">
             <Clock className="h-4 w-4 hidden sm:block" />
             Scheduling
+          </TabsTrigger>
+          <TabsTrigger value="fields" className="flex items-center gap-1 text-xs sm:text-sm">
+            <Wrench className="h-4 w-4 hidden sm:block" />
+            Fields
           </TabsTrigger>
         </TabsList>
 
@@ -203,9 +262,9 @@ export default function SettingsPage() {
                 <Palette className="h-5 w-5" />
                 Brand Colors & Logo
               </CardTitle>
-              <CardDescription>Customize your brand appearance</CardDescription>
+              <CardDescription>Customize your brand appearance across the app and customer portal</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
                 <div>
                   <Label className="text-base">Enable White-Label Branding</Label>
@@ -214,35 +273,87 @@ export default function SettingsPage() {
                 <Switch checked={branding.white_label_enabled || false} onCheckedChange={(checked) => updateBranding("white_label_enabled", checked)} />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="logo_url">Logo URL</Label>
                   <Input id="logo_url" placeholder="https://example.com/logo.png" value={branding.logo_url || ""} onChange={(e) => updateBranding("logo_url", e.target.value)} />
+                  <p className="text-xs text-muted-foreground">Enter a publicly accessible URL to your logo image</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="favicon_url">Favicon URL</Label>
-                  <Input id="favicon_url" placeholder="https://example.com/favicon.ico" value={branding.favicon_url || ""} onChange={(e) => updateBranding("favicon_url", e.target.value)} />
+                {branding.logo_url && (
+                  <div className="p-4 border rounded-lg bg-muted/30">
+                    <Label className="text-sm text-muted-foreground mb-2 block">Logo Preview</Label>
+                    <img
+                      src={branding.logo_url}
+                      alt="Company logo preview"
+                      className="h-12 object-contain"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label className="text-base mb-3 block">Brand Colors</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { field: "primary_color", label: "Primary Color", default: "#0066CC" },
+                    { field: "secondary_color", label: "Secondary Color", default: "#004499" },
+                    { field: "accent_color", label: "Accent Color", default: "#FF6600" },
+                    { field: "text_on_primary", label: "Text on Primary", default: "#FFFFFF" },
+                  ].map(({ field, label, default: defaultColor }) => (
+                    <div key={field} className="space-y-2">
+                      <Label className="text-sm">{label}</Label>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="color"
+                          value={branding[field] || defaultColor}
+                          onChange={(e) => updateBranding(field, e.target.value)}
+                          className="h-8 w-12 cursor-pointer rounded border flex-shrink-0"
+                        />
+                        <Input
+                          value={branding[field] || defaultColor}
+                          onChange={(e) => updateBranding(field, e.target.value)}
+                          className="flex-1 font-mono text-sm"
+                          placeholder={defaultColor}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-4">
-                {["primary_color", "secondary_color", "accent_color", "text_on_primary"].map((colorField) => (
-                  <div key={colorField} className="space-y-2">
-                    <Label>{colorField.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</Label>
-                    <div className="flex gap-2">
-                      <input type="color" value={branding[colorField] || "#0066CC"} onChange={(e) => updateBranding(colorField, e.target.value)} className="h-10 w-14 rounded border cursor-pointer" />
-                      <Input value={branding[colorField] || ""} onChange={(e) => updateBranding(colorField, e.target.value)} className="flex-1" />
+              {(branding.primary_color || branding.secondary_color || branding.accent_color) && (
+                <div className="p-4 border rounded-lg bg-muted/30">
+                  <Label className="text-sm text-muted-foreground mb-3 block">Color Preview</Label>
+                  <div className="flex gap-3 items-center">
+                    <div
+                      className="h-10 w-24 rounded flex items-center justify-center text-xs font-medium"
+                      style={{ backgroundColor: branding.primary_color || "#0066CC", color: branding.text_on_primary || "#FFFFFF" }}
+                    >
+                      Primary
+                    </div>
+                    <div
+                      className="h-10 w-24 rounded flex items-center justify-center text-xs font-medium text-white"
+                      style={{ backgroundColor: branding.secondary_color || "#004499" }}
+                    >
+                      Secondary
+                    </div>
+                    <div
+                      className="h-10 w-24 rounded flex items-center justify-center text-xs font-medium text-white"
+                      style={{ backgroundColor: branding.accent_color || "#FF6600" }}
+                    >
+                      Accent
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving} className="btn-industrial">
+            <Button onClick={handleSaveBranding} disabled={saving} className="btn-industrial">
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              SAVE CHANGES
+              SAVE BRANDING
             </Button>
           </div>
         </TabsContent>
@@ -255,7 +366,7 @@ export default function SettingsPage() {
                 <Globe className="h-5 w-5" />
                 Customer Portal Settings
               </CardTitle>
-              <CardDescription>Configure your customer-facing portal</CardDescription>
+              <CardDescription>Configure your customer-facing self-service portal</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -278,10 +389,57 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading flex items-center gap-2">
+                <Link2 className="h-5 w-5" />
+                Portal Links
+              </CardTitle>
+              <CardDescription>How to share the customer portal with your customers</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 border rounded-lg bg-muted/50 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-sm font-bold text-primary">1</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Go to a Customer Record</p>
+                    <p className="text-sm text-muted-foreground">Navigate to any customer in the Customers section of FieldOS.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-sm font-bold text-primary">2</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Generate a Portal Link</p>
+                    <p className="text-sm text-muted-foreground">Use the "Generate Portal Link" action on the customer record to create a unique, secure link for that customer.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-sm font-bold text-primary">3</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Share with Your Customer</p>
+                    <p className="text-sm text-muted-foreground">Send the generated link via SMS or email. Customers can then view appointments, invoices, submit service requests, and more — no login required.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 border rounded-lg bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <strong>Note:</strong> Each portal link is unique to a customer and uses a secure token. Links do not expire unless manually regenerated.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving} className="btn-industrial">
+            <Button onClick={handleSavePortal} disabled={saving} className="btn-industrial">
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              SAVE CHANGES
+              SAVE PORTAL SETTINGS
             </Button>
           </div>
         </TabsContent>
@@ -477,6 +635,266 @@ export default function SettingsPage() {
               SAVE CHANGES
             </Button>
           </div>
+        </TabsContent>
+
+        {/* Fields Tab */}
+        <TabsContent value="fields" className="space-y-6">
+          {/* Industry Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading flex items-center gap-2">
+                <Wrench className="h-5 w-5" />
+                Industry
+              </CardTitle>
+              <CardDescription>Select your industry to load default job types and terminology</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Industry</Label>
+                <Select
+                  value={industrySettings.industry_slug || ""}
+                  onValueChange={async (v) => {
+                    try {
+                      const res = await industryAPI.updateSettings({ industry_slug: v });
+                      setIndustrySettings(res.data);
+                      toast.success("Industry updated");
+                    } catch (err) {
+                      toast.error("Failed to update industry");
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[280px]">
+                    <SelectValue placeholder="Select your industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hvac">HVAC</SelectItem>
+                    <SelectItem value="plumbing">Plumbing</SelectItem>
+                    <SelectItem value="electrical">Electrical</SelectItem>
+                    <SelectItem value="landscaping">Landscaping</SelectItem>
+                    <SelectItem value="cleaning">Cleaning</SelectItem>
+                    <SelectItem value="general">General Contractor</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Custom Fields Section */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="font-heading flex items-center gap-2">
+                  Custom Fields
+                </CardTitle>
+                <CardDescription>Define additional fields for jobs, customers, or properties</CardDescription>
+              </div>
+              <Button
+                size="sm"
+                className="btn-industrial"
+                onClick={() => {
+                  setShowAddField(true);
+                  setEditingField(null);
+                  setNewField({ name: '', type: 'TEXT', applies_to: 'job', required: false, options: [] });
+                  setFieldOptionsInput('');
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Field
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Add / Edit Field Form */}
+              {showAddField && (
+                <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                  <h4 className="font-medium text-sm">{editingField ? "Edit Field" : "New Custom Field"}</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Field Name *</Label>
+                      <Input
+                        value={newField.name}
+                        onChange={(e) => setNewField(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="e.g. Equipment Serial #"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Field Type</Label>
+                      <Select
+                        value={newField.type}
+                        onValueChange={(v) => setNewField(prev => ({ ...prev, type: v }))}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TEXT">Text</SelectItem>
+                          <SelectItem value="NUMBER">Number</SelectItem>
+                          <SelectItem value="SELECT">Select (dropdown)</SelectItem>
+                          <SelectItem value="MULTISELECT">Multi-Select (checkboxes)</SelectItem>
+                          <SelectItem value="DATE">Date</SelectItem>
+                          <SelectItem value="BOOLEAN">Yes / No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Applies To</Label>
+                      <Select
+                        value={newField.applies_to}
+                        onValueChange={(v) => setNewField(prev => ({ ...prev, applies_to: v }))}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="job">Job</SelectItem>
+                          <SelectItem value="customer">Customer</SelectItem>
+                          <SelectItem value="property">Property</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-3 pt-6">
+                      <Switch
+                        checked={newField.required}
+                        onCheckedChange={(v) => setNewField(prev => ({ ...prev, required: v }))}
+                      />
+                      <Label>Required field</Label>
+                    </div>
+                  </div>
+                  {(newField.type === 'SELECT' || newField.type === 'MULTISELECT') && (
+                    <div className="space-y-2">
+                      <Label>Options (comma-separated)</Label>
+                      <Input
+                        value={fieldOptionsInput}
+                        onChange={(e) => {
+                          setFieldOptionsInput(e.target.value);
+                          setNewField(prev => ({
+                            ...prev,
+                            options: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                          }));
+                        }}
+                        placeholder="Option 1, Option 2, Option 3"
+                      />
+                    </div>
+                  )}
+                  <div className="flex gap-2 justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowAddField(false);
+                        setEditingField(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="btn-industrial"
+                      onClick={async () => {
+                        if (!newField.name.trim()) {
+                          toast.error("Field name is required");
+                          return;
+                        }
+                        try {
+                          if (editingField) {
+                            const res = await customFieldsAPI.update(editingField.id, newField);
+                            setCustomFields(prev => prev.map(f => f.id === editingField.id ? res.data.field : f));
+                            toast.success("Field updated");
+                          } else {
+                            const res = await customFieldsAPI.create(newField);
+                            setCustomFields(prev => [...prev, res.data.field]);
+                            toast.success("Field created");
+                          }
+                          setShowAddField(false);
+                          setEditingField(null);
+                          setNewField({ name: '', type: 'TEXT', applies_to: 'job', required: false, options: [] });
+                          setFieldOptionsInput('');
+                        } catch (err) {
+                          toast.error(err.response?.data?.detail || "Failed to save field");
+                        }
+                      }}
+                    >
+                      {editingField ? "Update Field" : "Create Field"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Fields Table */}
+              {customFields.length === 0 && !showAddField ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No custom fields yet. Click "Add Field" to create one.
+                </p>
+              ) : customFields.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-medium">Name</th>
+                        <th className="text-left px-4 py-2 font-medium">Type</th>
+                        <th className="text-left px-4 py-2 font-medium">Applies To</th>
+                        <th className="text-left px-4 py-2 font-medium">Required</th>
+                        <th className="text-right px-4 py-2 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customFields.map((field) => (
+                        <tr key={field.id} className="border-t hover:bg-muted/20">
+                          <td className="px-4 py-2 font-medium">{field.name}</td>
+                          <td className="px-4 py-2 text-muted-foreground capitalize">{field.type}</td>
+                          <td className="px-4 py-2 text-muted-foreground capitalize">{field.applies_to}</td>
+                          <td className="px-4 py-2">
+                            {field.required ? (
+                              <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Required</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Optional</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => {
+                                  setEditingField(field);
+                                  setNewField({
+                                    name: field.name,
+                                    type: field.type,
+                                    applies_to: field.applies_to,
+                                    required: field.required,
+                                    options: field.options || [],
+                                  });
+                                  setFieldOptionsInput((field.options || []).join(', '));
+                                  setShowAddField(true);
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                onClick={async () => {
+                                  try {
+                                    await customFieldsAPI.delete(field.id);
+                                    setCustomFields(prev => prev.filter(f => f.id !== field.id));
+                                    toast.success("Field deleted");
+                                  } catch (err) {
+                                    toast.error("Failed to delete field");
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </Layout>

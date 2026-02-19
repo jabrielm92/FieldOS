@@ -137,10 +137,26 @@ export const reportsAPI = {
   getRevenue: (params = {}) => api.get('/reports/revenue', { params }),
 };
 
-// Templates APIs  
+// Templates APIs
 export const templatesAPI = {
   getIndustries: () => api.get('/templates/industries'),
   getIndustry: (industry) => api.get(`/templates/industries/${industry}`),
+};
+
+// Custom Fields APIs
+export const customFieldsAPI = {
+  list: () => api.get('/settings/custom-fields'),
+  create: (data) => api.post('/settings/custom-fields', data),
+  update: (id, data) => api.put(`/settings/custom-fields/${id}`, data),
+  delete: (id) => api.delete(`/settings/custom-fields/${id}`),
+};
+
+// Industry Settings APIs
+export const industryAPI = {
+  getSettings: () => api.get('/settings/industry'),
+  updateSettings: (data) => api.put('/settings/industry', data),
+  getTemplates: () => api.get('/templates/industries'),
+  getTemplate: (slug) => api.get(`/templates/industries/${slug}`),
 };
 
 // Conversation APIs

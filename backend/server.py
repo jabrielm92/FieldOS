@@ -5932,6 +5932,107 @@ async def update_review_settings(
     return {"success": True, "review_settings": filtered}
 
 
+# Custom Fields endpoints
+@v1_router.get("/settings/custom-fields")
+async def get_custom_fields(tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Get tenant's custom field definitions"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {"custom_fields": tenant.get("custom_fields", [])}
+
+@v1_router.post("/settings/custom-fields")
+async def create_custom_field(data: dict, tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Create a new custom field"""
+    if current_user.get("role") not in ["OWNER", "ADMIN", "SUPERADMIN"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    field = {
+        "id": str(uuid4()),
+        "name": data.get("name"),
+        "slug": data.get("slug", data.get("name", "").lower().replace(" ", "_")),
+        "type": data.get("type", "TEXT"),  # TEXT, NUMBER, SELECT, MULTISELECT, DATE, BOOLEAN
+        "options": data.get("options", []),
+        "applies_to": data.get("applies_to", "job"),  # job, customer, property
+        "required": data.get("required", False),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {"$push": {"custom_fields": field}}
+    )
+    return {"success": True, "field": field}
+
+@v1_router.put("/settings/custom-fields/{field_id}")
+async def update_custom_field(field_id: str, data: dict, tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Update a custom field"""
+    if current_user.get("role") not in ["OWNER", "ADMIN", "SUPERADMIN"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update_data = {k: v for k, v in data.items() if k not in ["id", "created_at"]}
+
+    result = await db.tenants.update_one(
+        {"id": tenant_id, "custom_fields.id": field_id},
+        {"$set": {f"custom_fields.$.{k}": v for k, v in update_data.items()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Custom field not found")
+
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    field = next((f for f in tenant.get("custom_fields", []) if f["id"] == field_id), None)
+    return {"success": True, "field": field}
+
+@v1_router.delete("/settings/custom-fields/{field_id}")
+async def delete_custom_field(field_id: str, tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Delete a custom field"""
+    if current_user.get("role") not in ["OWNER", "ADMIN", "SUPERADMIN"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {"$pull": {"custom_fields": {"id": field_id}}}
+    )
+    return {"success": True}
+
+@v1_router.get("/settings/industry")
+async def get_industry_settings(tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Get tenant's industry settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {
+        "industry_slug": tenant.get("industry_slug", ""),
+        "custom_job_types": tenant.get("custom_job_types", []),
+        "disabled_job_types": tenant.get("disabled_job_types", [])
+    }
+
+@v1_router.put("/settings/industry")
+async def update_industry_settings(data: dict, tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Update tenant's industry settings"""
+    if current_user.get("role") not in ["OWNER", "ADMIN", "SUPERADMIN"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update = {}
+    if "industry_slug" in data:
+        update["industry_slug"] = data["industry_slug"]
+    if "custom_job_types" in data:
+        update["custom_job_types"] = data["custom_job_types"]
+    if "disabled_job_types" in data:
+        update["disabled_job_types"] = data["disabled_job_types"]
+
+    if update:
+        update["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.tenants.update_one({"id": tenant_id}, {"$set": update})
+
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    return {
+        "industry_slug": tenant.get("industry_slug", ""),
+        "custom_job_types": tenant.get("custom_job_types", []),
+        "disabled_job_types": tenant.get("disabled_job_types", [])
+    }
+
+
 @v1_router.get("/reviews/pending")
 async def get_pending_reviews(
     tenant_id: str = Depends(get_tenant_id),
