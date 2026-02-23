@@ -28,6 +28,11 @@ import TrackingPage from "./pages/tracking/TrackingPage";
 import InvoicesPage from "./pages/invoices/InvoicesPage";
 import PaymentPage from "./pages/payment/PaymentPage";
 import OnboardingPage from "./pages/onboarding/OnboardingPage";
+import SignupPage from "./pages/auth/SignupPage";
+import PricingPage from "./pages/billing/PricingPage";
+import BillingPage from "./pages/billing/BillingPage";
+import BillingSuccessPage from "./pages/billing/BillingSuccessPage";
+import TechAppPage from "./pages/tech/TechAppPage";
 
 // Authenticated Layout - wraps BrandingProvider around protected routes
 function AuthenticatedLayout({ children }) {
@@ -96,6 +101,11 @@ function AppRoutes() {
       <Route path="/login" element={
         <PublicRoute>
           <LoginPage />
+        </PublicRoute>
+      } />
+      <Route path="/signup" element={
+        <PublicRoute>
+          <SignupPage />
         </PublicRoute>
       } />
 
@@ -212,6 +222,28 @@ function AppRoutes() {
           <AuthenticatedLayout>
             <InvoicesPage />
           </AuthenticatedLayout>
+        </ProtectedRoute>
+      } />
+
+      {/* Pricing (Public) */}
+      <Route path="/pricing" element={<PricingPage />} />
+
+      {/* Billing Success (Public - post Stripe checkout) */}
+      <Route path="/billing/success" element={<BillingSuccessPage />} />
+
+      {/* Billing Management (Protected) */}
+      <Route path="/billing" element={
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <BillingPage />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
+      } />
+
+      {/* Technician Mobile App */}
+      <Route path="/tech" element={
+        <ProtectedRoute>
+          <TechAppPage />
         </ProtectedRoute>
       } />
 

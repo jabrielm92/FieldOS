@@ -280,6 +280,84 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     )
 
 
+class RegisterRequest(BaseModel):
+    business_name: str
+    owner_name: str
+    email: str
+    password: str
+    phone: str
+    industry_slug: Optional[str] = "general"
+
+
+@v1_router.post("/auth/register", response_model=TokenResponse)
+async def register_tenant(request: RegisterRequest):
+    """Self-service tenant registration - creates new tenant + owner user"""
+    import re
+    from models import generate_id, utc_now
+
+    existing = await db.users.find_one({"email": request.email})
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+
+    slug = re.sub(r'[^a-z0-9-]', '', re.sub(r'\s+', '-', request.business_name.lower().strip()))
+    slug = slug[:40] or "tenant"
+    base_slug = slug
+    counter = 1
+    while await db.tenants.find_one({"slug": slug}):
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
+    now = utc_now()
+    tenant_id = generate_id()
+    user_id = generate_id()
+
+    tenant_doc = {
+        "id": tenant_id,
+        "name": request.business_name,
+        "slug": slug,
+        "primary_contact_name": request.owner_name,
+        "primary_contact_email": request.email,
+        "primary_phone": request.phone,
+        "timezone": "America/New_York",
+        "booking_mode": "TIME_WINDOWS",
+        "tone_profile": "PROFESSIONAL",
+        "industry_template": request.industry_slug or "general",
+        "voice_ai_enabled": False,
+        "subscription_plan": "STARTER",
+        "subscription_status": "TRIALING",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    await db.tenants.insert_one(tenant_doc)
+
+    user_doc = {
+        "id": user_id,
+        "tenant_id": tenant_id,
+        "email": request.email,
+        "name": request.owner_name,
+        "role": "OWNER",
+        "status": "ACTIVE",
+        "password_hash": hash_password(request.password),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    await db.users.insert_one(user_doc)
+
+    token = create_access_token(user_id, tenant_id, "OWNER")
+
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(
+            id=user_id,
+            email=request.email,
+            name=request.owner_name,
+            role=UserRole.OWNER,
+            status=UserStatus.ACTIVE,
+            tenant_id=tenant_id,
+        )
+    )
+
+
 # ============= SUPERADMIN ENDPOINTS =============
 
 @v1_router.get("/admin/tenants")
@@ -7088,12 +7166,16 @@ async def health_check():
 
 # Initialize and include modular routes
 from routes.admin import router as admin_router, init_admin_routes
+from routes.billing import router as billing_router
+from routes.integrations import router as integrations_router
 
 # Initialize route dependencies
 init_admin_routes(db, require_superadmin, serialize_doc, serialize_docs, hash_password, UserRole, UserStatus, User, Tenant)
 
 # Include routers
 v1_router.include_router(admin_router)
+v1_router.include_router(billing_router)
+v1_router.include_router(integrations_router)
 
 api_router.include_router(v1_router)
 app.include_router(api_router)

@@ -112,14 +112,9 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
               Don't have an account?{" "}
-              <a 
-                href="https://calendly.com/arisolutionsinc/fieldos-demo" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 font-medium"
-              >
-                Book a demo
-              </a>
+              <Link to="/signup" className="text-blue-400 hover:text-blue-300 font-medium">
+                Start free trial
+              </Link>
             </p>
           </div>
         </div>

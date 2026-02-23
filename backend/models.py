@@ -733,3 +733,34 @@ class WebFormLeadRequest(BaseModel):
     preferred_date: Optional[str] = None
     preferred_time: Optional[str] = None
     send_confirmation_sms: bool = True
+
+
+# ============= SUBSCRIPTION / BILLING MODELS =============
+
+class PlanTier(str, Enum):
+    STARTER = "STARTER"
+    PRO = "PRO"
+    ENTERPRISE = "ENTERPRISE"
+
+class SubscriptionStatus(str, Enum):
+    TRIALING = "TRIALING"
+    ACTIVE = "ACTIVE"
+    PAST_DUE = "PAST_DUE"
+    CANCELED = "CANCELED"
+    UNPAID = "UNPAID"
+
+class TenantSubscription(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=generate_id)
+    tenant_id: str
+    plan: PlanTier = PlanTier.STARTER
+    status: SubscriptionStatus = SubscriptionStatus.TRIALING
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    stripe_checkout_session_id: Optional[str] = None
+    current_period_start: Optional[datetime] = None
+    current_period_end: Optional[datetime] = None
+    trial_end: Optional[datetime] = None
+    canceled_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)

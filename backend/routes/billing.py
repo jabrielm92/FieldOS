@@ -1,0 +1,338 @@
+"""
+Billing routes - SaaS subscription management for FieldOS tenants
+Tenants pay FieldOS via Stripe Billing (subscriptions).
+"""
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime, timezone, timedelta
+import os
+import logging
+
+from core.database import db
+from core.auth import get_current_user, get_tenant_id
+from core.utils import serialize_doc
+
+router = APIRouter(prefix="/billing", tags=["billing"])
+logger = logging.getLogger(__name__)
+
+# Plan definitions - these map to Stripe Price IDs set in environment
+PLANS = {
+    "STARTER": {
+        "name": "Starter",
+        "price_monthly": 79,
+        "stripe_price_id": os.environ.get("STRIPE_PRICE_STARTER", ""),
+        "limits": {
+            "jobs_per_month": 100,
+            "technicians": 3,
+            "users": 5,
+        },
+        "features": [
+            "Jobs, customers & scheduling",
+            "Invoicing + Stripe payments",
+            "Customer portal",
+            "SMS communications",
+            "Dispatch board",
+            "Email support",
+        ],
+    },
+    "PRO": {
+        "name": "Pro",
+        "price_monthly": 179,
+        "stripe_price_id": os.environ.get("STRIPE_PRICE_PRO", ""),
+        "limits": {
+            "jobs_per_month": 500,
+            "technicians": 10,
+            "users": 15,
+        },
+        "features": [
+            "Everything in Starter",
+            "AI Voice receptionist",
+            "AI SMS assistant",
+            "Campaigns & marketing",
+            "Revenue analytics",
+            "QuickBooks export",
+            "Priority support",
+        ],
+    },
+    "ENTERPRISE": {
+        "name": "Enterprise",
+        "price_monthly": 349,
+        "stripe_price_id": os.environ.get("STRIPE_PRICE_ENTERPRISE", ""),
+        "limits": {
+            "jobs_per_month": -1,  # unlimited
+            "technicians": -1,
+            "users": -1,
+        },
+        "features": [
+            "Everything in Pro",
+            "Unlimited jobs & technicians",
+            "White-label branding",
+            "Custom domain",
+            "Dedicated onboarding",
+            "SLA support",
+        ],
+    },
+}
+
+
+class CreateCheckoutRequest(BaseModel):
+    plan: str  # STARTER, PRO, ENTERPRISE
+    success_url: str
+    cancel_url: str
+
+
+class CreatePortalRequest(BaseModel):
+    return_url: str
+
+
+@router.get("/plans")
+async def get_plans():
+    """Return available subscription plans (no auth required for pricing page)"""
+    return {"plans": PLANS}
+
+
+@router.get("/subscription")
+async def get_subscription(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user),
+):
+    """Get the current tenant's subscription status"""
+    sub = await db.subscriptions.find_one({"tenant_id": tenant_id}, {"_id": 0})
+    if not sub:
+        # Return a default trial subscription record
+        return {
+            "plan": "STARTER",
+            "status": "TRIALING",
+            "trial_end": None,
+            "current_period_end": None,
+            "stripe_customer_id": None,
+            "stripe_subscription_id": None,
+        }
+    return serialize_doc(sub)
+
+
+@router.post("/checkout")
+async def create_checkout_session(
+    body: CreateCheckoutRequest,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user),
+):
+    """Create a Stripe Checkout session for a subscription plan"""
+    try:
+        import stripe
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Stripe library not installed")
+
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY_FIELDFOS")
+    if not stripe_key:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+
+    stripe.api_key = stripe_key
+
+    plan = body.plan.upper()
+    if plan not in PLANS:
+        raise HTTPException(status_code=400, detail=f"Unknown plan: {plan}")
+
+    price_id = PLANS[plan]["stripe_price_id"]
+    if not price_id:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Stripe price ID not configured for plan {plan}. Set STRIPE_PRICE_{plan} in environment.",
+        )
+
+    # Get or create Stripe customer for this tenant
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    sub = await db.subscriptions.find_one({"tenant_id": tenant_id}, {"_id": 0})
+    stripe_customer_id = sub.get("stripe_customer_id") if sub else None
+
+    if not stripe_customer_id:
+        customer = stripe.Customer.create(
+            email=tenant.get("primary_contact_email"),
+            name=tenant.get("name"),
+            metadata={"tenant_id": tenant_id, "tenant_slug": tenant.get("slug", "")},
+        )
+        stripe_customer_id = customer.id
+
+    # Create checkout session
+    session = stripe.checkout.Session.create(
+        customer=stripe_customer_id,
+        mode="subscription",
+        line_items=[{"price": price_id, "quantity": 1}],
+        success_url=body.success_url + "?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url=body.cancel_url,
+        metadata={"tenant_id": tenant_id, "plan": plan},
+        subscription_data={
+            "trial_period_days": 14,
+            "metadata": {"tenant_id": tenant_id, "plan": plan},
+        },
+        allow_promotion_codes=True,
+    )
+
+    # Upsert subscription record
+    now = datetime.now(timezone.utc).isoformat()
+    await db.subscriptions.update_one(
+        {"tenant_id": tenant_id},
+        {
+            "$set": {
+                "tenant_id": tenant_id,
+                "stripe_customer_id": stripe_customer_id,
+                "stripe_checkout_session_id": session.id,
+                "plan": plan,
+                "status": "TRIALING",
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": str(__import__("uuid").uuid4()),
+                "created_at": now,
+            },
+        },
+        upsert=True,
+    )
+
+    return {"checkout_url": session.url, "session_id": session.id}
+
+
+@router.post("/portal")
+async def create_billing_portal(
+    body: CreatePortalRequest,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user),
+):
+    """Create a Stripe Billing Portal session for self-serve plan management"""
+    try:
+        import stripe
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Stripe library not installed")
+
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY_FIELDFOS")
+    if not stripe_key:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+
+    stripe.api_key = stripe_key
+
+    sub = await db.subscriptions.find_one({"tenant_id": tenant_id}, {"_id": 0})
+    if not sub or not sub.get("stripe_customer_id"):
+        raise HTTPException(status_code=400, detail="No billing account found. Please subscribe first.")
+
+    session = stripe.billing_portal.Session.create(
+        customer=sub["stripe_customer_id"],
+        return_url=body.return_url,
+    )
+    return {"portal_url": session.url}
+
+
+@router.post("/webhook")
+async def stripe_subscription_webhook(request: Request):
+    """Handle Stripe subscription lifecycle webhooks"""
+    try:
+        import stripe
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Stripe library not installed")
+
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY_FIELDFOS")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET_FIELDFOS")
+
+    if not stripe_key:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+
+    stripe.api_key = stripe_key
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    try:
+        if webhook_secret and sig_header:
+            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+        else:
+            event = stripe.Event.construct_from(
+                __import__("json").loads(payload), stripe.api_key
+            )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
+
+    now = datetime.now(timezone.utc).isoformat()
+    event_type = event["type"]
+    data_obj = event["data"]["object"]
+
+    if event_type in ("customer.subscription.created", "customer.subscription.updated"):
+        tenant_id = data_obj.get("metadata", {}).get("tenant_id")
+        if tenant_id:
+            plan = data_obj.get("metadata", {}).get("plan", "STARTER")
+            status_map = {
+                "trialing": "TRIALING",
+                "active": "ACTIVE",
+                "past_due": "PAST_DUE",
+                "canceled": "CANCELED",
+                "unpaid": "UNPAID",
+            }
+            stripe_status = data_obj.get("status", "active")
+            mapped_status = status_map.get(stripe_status, "ACTIVE")
+
+            period_start = datetime.fromtimestamp(
+                data_obj["current_period_start"], tz=timezone.utc
+            ).isoformat() if data_obj.get("current_period_start") else None
+            period_end = datetime.fromtimestamp(
+                data_obj["current_period_end"], tz=timezone.utc
+            ).isoformat() if data_obj.get("current_period_end") else None
+            trial_end = datetime.fromtimestamp(
+                data_obj["trial_end"], tz=timezone.utc
+            ).isoformat() if data_obj.get("trial_end") else None
+
+            await db.subscriptions.update_one(
+                {"tenant_id": tenant_id},
+                {
+                    "$set": {
+                        "stripe_subscription_id": data_obj["id"],
+                        "stripe_customer_id": data_obj["customer"],
+                        "plan": plan,
+                        "status": mapped_status,
+                        "current_period_start": period_start,
+                        "current_period_end": period_end,
+                        "trial_end": trial_end,
+                        "updated_at": now,
+                    },
+                    "$setOnInsert": {
+                        "id": str(__import__("uuid").uuid4()),
+                        "tenant_id": tenant_id,
+                        "created_at": now,
+                    },
+                },
+                upsert=True,
+            )
+            # Also update tenant record with plan info
+            await db.tenants.update_one(
+                {"id": tenant_id},
+                {"$set": {"subscription_plan": plan, "subscription_status": mapped_status, "updated_at": now}},
+            )
+
+    elif event_type == "customer.subscription.deleted":
+        tenant_id = data_obj.get("metadata", {}).get("tenant_id")
+        if tenant_id:
+            await db.subscriptions.update_one(
+                {"tenant_id": tenant_id},
+                {"$set": {"status": "CANCELED", "canceled_at": now, "updated_at": now}},
+            )
+            await db.tenants.update_one(
+                {"id": tenant_id},
+                {"$set": {"subscription_status": "CANCELED", "updated_at": now}},
+            )
+
+    elif event_type == "checkout.session.completed":
+        tenant_id = data_obj.get("metadata", {}).get("tenant_id")
+        if tenant_id:
+            await db.subscriptions.update_one(
+                {"tenant_id": tenant_id},
+                {
+                    "$set": {
+                        "stripe_customer_id": data_obj.get("customer"),
+                        "stripe_checkout_session_id": data_obj["id"],
+                        "updated_at": now,
+                    }
+                },
+            )
+
+    return {"received": True}
