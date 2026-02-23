@@ -66,8 +66,8 @@ export default function PricingPage() {
             <Zap className="h-6 w-6 text-blue-400" />
             <span className="text-xl font-black text-white tracking-tight">FieldOS</span>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-4">Choose your plan</h1>
-          <p className="text-gray-400 text-lg">14-day free trial on all plans. No credit card required to start.</p>
+          <h1 className="text-4xl font-bold text-white mb-4">Simple, transparent pricing</h1>
+          <p className="text-gray-400 text-lg">One-time setup fee + monthly retainer. No surprises.</p>
         </div>
 
         {/* Plans */}
@@ -91,12 +91,24 @@ export default function PricingPage() {
                     Most Popular
                   </div>
                 )}
-                <div className="mb-6">
-                  <h2 className="text-xl font-bold text-white mb-1">{plan.name}</h2>
-                  <div className="flex items-baseline gap-1">
+                <div className="mb-2">
+                  <h2 className="text-xl font-bold text-white mb-0.5">{plan.name}</h2>
+                  {plan.tagline && (
+                    <p className="text-gray-500 text-xs mb-4">{plan.tagline}</p>
+                  )}
+                  {/* Monthly retainer */}
+                  <div className="flex items-baseline gap-1 mb-1">
                     <span className="text-4xl font-black text-white">${plan.price_monthly}</span>
                     <span className="text-gray-400">/mo</span>
                   </div>
+                  {/* Setup fee */}
+                  {plan.setup_fee && (
+                    <div className="inline-flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 mb-5">
+                      <span className="text-gray-400 text-xs">+</span>
+                      <span className="text-white text-xs font-semibold">${plan.setup_fee}</span>
+                      <span className="text-gray-500 text-xs">one-time setup fee</span>
+                    </div>
+                  )}
                 </div>
 
                 <ul className="space-y-3 flex-1 mb-8">
@@ -123,7 +135,7 @@ export default function PricingPage() {
                       Redirecting...
                     </>
                   ) : (
-                    `Start with ${plan.name}`
+                    `Get Started with ${plan.name}`
                   )}
                 </button>
               </div>
@@ -131,14 +143,11 @@ export default function PricingPage() {
           })}
         </div>
 
-        {/* Skip for now (trial) */}
-        <div className="text-center">
-          <button
-            onClick={() => navigate("/onboarding")}
-            className="text-sm text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
-          >
-            Continue with free trial →
-          </button>
+        {/* What's included note */}
+        <div className="max-w-2xl mx-auto text-center">
+          <p className="text-gray-500 text-sm">
+            Setup fee covers onboarding, configuration, and go-live support. Monthly retainer includes all platform features, AI services, SMS, and priority support for your plan.
+          </p>
         </div>
       </div>
     </div>

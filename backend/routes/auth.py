@@ -104,8 +104,8 @@ async def register(request: RegisterRequest):
         "tone_profile": "PROFESSIONAL",
         "industry_template": request.industry_slug or "general",
         "voice_ai_enabled": False,
-        "subscription_plan": "STARTER",
-        "subscription_status": "TRIALING",
+        "subscription_plan": None,
+        "subscription_status": "INACTIVE",
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }

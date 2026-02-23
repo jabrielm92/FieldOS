@@ -61,8 +61,8 @@ export default function SignupPage() {
             </div>
             <span className="text-3xl font-black text-white tracking-tight">FieldOS</span>
           </Link>
-          <p className="text-gray-400">Start your 14-day free trial</p>
-          <p className="text-xs text-gray-500 mt-1">No credit card required to start</p>
+          <p className="text-gray-400">Create your account</p>
+          <p className="text-xs text-gray-500 mt-1">Next step: choose your plan</p>
         </div>
 
         <div className="bg-[#0d1424] border border-white/10 rounded-2xl p-8 shadow-2xl">
@@ -135,7 +135,7 @@ export default function SignupPage() {
                   Creating account...
                 </>
               ) : (
-                "Start Free Trial"
+                "Create Account"
               )}
             </button>
           </form>

@@ -14,8 +14,8 @@ export default function BillingSuccessPage() {
         <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
           <CheckCircle2 className="h-10 w-10 text-green-400" />
         </div>
-        <h1 className="text-3xl font-bold text-white mb-2">You're subscribed!</h1>
-        <p className="text-gray-400 mb-4">Setting up your account...</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Welcome to FieldOS!</h1>
+        <p className="text-gray-400 mb-4">Payment confirmed. Setting up your account...</p>
         <Loader2 className="h-5 w-5 text-blue-400 animate-spin mx-auto" />
       </div>
     </div>

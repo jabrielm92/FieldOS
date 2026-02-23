@@ -17,60 +17,77 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
 
 # Plan definitions - these map to Stripe Price IDs set in environment
+# Pricing model: one-time setup fee + monthly retainer (no trial)
+# Monthly costs covered per tenant: Twilio (~$8), OpenAI (~$25), ElevenLabs (~$15),
+# infrastructure (~$8), support — minimum ~$56/mo before margin.
 PLANS = {
     "STARTER": {
         "name": "Starter",
-        "price_monthly": 79,
+        "tagline": "For solo operators & small crews",
+        "setup_fee": 497,
+        "price_monthly": 149,
         "stripe_price_id": os.environ.get("STRIPE_PRICE_STARTER", ""),
+        "stripe_setup_fee_price_id": os.environ.get("STRIPE_SETUP_FEE_STARTER", ""),
         "limits": {
-            "jobs_per_month": 100,
+            "jobs_per_month": 150,
             "technicians": 3,
             "users": 5,
         },
         "features": [
+            "Up to 3 technicians",
             "Jobs, customers & scheduling",
-            "Invoicing + Stripe payments",
-            "Customer portal",
-            "SMS communications",
+            "Invoicing + Stripe payment collection",
+            "Customer self-service portal",
+            "Automated SMS reminders",
             "Dispatch board",
+            "Revenue reports & CSV export",
             "Email support",
         ],
     },
     "PRO": {
         "name": "Pro",
-        "price_monthly": 179,
+        "tagline": "For growing field service companies",
+        "setup_fee": 797,
+        "price_monthly": 299,
         "stripe_price_id": os.environ.get("STRIPE_PRICE_PRO", ""),
+        "stripe_setup_fee_price_id": os.environ.get("STRIPE_SETUP_FEE_PRO", ""),
         "limits": {
-            "jobs_per_month": 500,
+            "jobs_per_month": -1,  # unlimited
             "technicians": 10,
             "users": 15,
         },
         "features": [
+            "Up to 10 technicians",
             "Everything in Starter",
-            "AI Voice receptionist",
-            "AI SMS assistant",
-            "Campaigns & marketing",
-            "Revenue analytics",
-            "QuickBooks export",
+            "AI Voice receptionist (24/7 call answering)",
+            "AI SMS assistant (auto-qualify leads)",
+            "Automated booking & lead capture",
+            "SMS marketing campaigns",
+            "QuickBooks sync",
             "Priority support",
         ],
     },
     "ENTERPRISE": {
         "name": "Enterprise",
-        "price_monthly": 349,
+        "tagline": "For multi-location & high-volume operations",
+        "setup_fee": 1497,
+        "price_monthly": 549,
         "stripe_price_id": os.environ.get("STRIPE_PRICE_ENTERPRISE", ""),
+        "stripe_setup_fee_price_id": os.environ.get("STRIPE_SETUP_FEE_ENTERPRISE", ""),
         "limits": {
-            "jobs_per_month": -1,  # unlimited
+            "jobs_per_month": -1,
             "technicians": -1,
             "users": -1,
         },
         "features": [
+            "Unlimited technicians & users",
             "Everything in Pro",
-            "Unlimited jobs & technicians",
-            "White-label branding",
-            "Custom domain",
-            "Dedicated onboarding",
-            "SLA support",
+            "White-label branding & custom domain",
+            "Dedicated onboarding & training",
+            "Custom AI voice & SMS prompts",
+            "Multi-location support",
+            "SLA-backed support",
+            "Quarterly business reviews",
         ],
     },
 }
@@ -100,11 +117,9 @@ async def get_subscription(
     """Get the current tenant's subscription status"""
     sub = await db.subscriptions.find_one({"tenant_id": tenant_id}, {"_id": 0})
     if not sub:
-        # Return a default trial subscription record
         return {
-            "plan": "STARTER",
-            "status": "TRIALING",
-            "trial_end": None,
+            "plan": None,
+            "status": "INACTIVE",
             "current_period_end": None,
             "stripe_customer_id": None,
             "stripe_subscription_id": None,
@@ -157,7 +172,17 @@ async def create_checkout_session(
         )
         stripe_customer_id = customer.id
 
-    # Create checkout session
+    # Build setup fee invoice item (charged on first invoice alongside first month)
+    setup_fee_price_id = PLANS[plan].get("stripe_setup_fee_price_id", "")
+    subscription_data = {
+        "metadata": {"tenant_id": tenant_id, "plan": plan},
+    }
+    if setup_fee_price_id:
+        subscription_data["add_invoice_items"] = [
+            {"price": setup_fee_price_id, "quantity": 1}
+        ]
+
+    # Create checkout session - no trial, payment required immediately
     session = stripe.checkout.Session.create(
         customer=stripe_customer_id,
         mode="subscription",
@@ -165,11 +190,9 @@ async def create_checkout_session(
         success_url=body.success_url + "?session_id={CHECKOUT_SESSION_ID}",
         cancel_url=body.cancel_url,
         metadata={"tenant_id": tenant_id, "plan": plan},
-        subscription_data={
-            "trial_period_days": 14,
-            "metadata": {"tenant_id": tenant_id, "plan": plan},
-        },
+        subscription_data=subscription_data,
         allow_promotion_codes=True,
+        billing_address_collection="auto",
     )
 
     # Upsert subscription record
@@ -182,7 +205,7 @@ async def create_checkout_session(
                 "stripe_customer_id": stripe_customer_id,
                 "stripe_checkout_session_id": session.id,
                 "plan": plan,
-                "status": "TRIALING",
+                "status": "PENDING_PAYMENT",
                 "updated_at": now,
             },
             "$setOnInsert": {
@@ -263,11 +286,12 @@ async def stripe_subscription_webhook(request: Request):
         if tenant_id:
             plan = data_obj.get("metadata", {}).get("plan", "STARTER")
             status_map = {
-                "trialing": "TRIALING",
                 "active": "ACTIVE",
                 "past_due": "PAST_DUE",
                 "canceled": "CANCELED",
                 "unpaid": "UNPAID",
+                "incomplete": "PENDING_PAYMENT",
+                "incomplete_expired": "CANCELED",
             }
             stripe_status = data_obj.get("status", "active")
             mapped_status = status_map.get(stripe_status, "ACTIVE")

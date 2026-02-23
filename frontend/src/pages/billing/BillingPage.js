@@ -7,18 +7,20 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "";
 
 const STATUS_COLORS = {
   ACTIVE: "text-green-400",
-  TRIALING: "text-blue-400",
   PAST_DUE: "text-yellow-400",
   CANCELED: "text-red-400",
   UNPAID: "text-red-400",
+  PENDING_PAYMENT: "text-yellow-400",
+  INACTIVE: "text-gray-400",
 };
 
 const STATUS_LABELS = {
   ACTIVE: "Active",
-  TRIALING: "Free Trial",
   PAST_DUE: "Past Due",
   CANCELED: "Canceled",
   UNPAID: "Unpaid",
+  PENDING_PAYMENT: "Payment Pending",
+  INACTIVE: "No Subscription",
 };
 
 export default function BillingPage() {
@@ -61,8 +63,8 @@ export default function BillingPage() {
     );
   }
 
-  const status = sub?.status || "TRIALING";
-  const plan = sub?.plan || "STARTER";
+  const status = sub?.status || "INACTIVE";
+  const plan = sub?.plan;
   const statusColor = STATUS_COLORS[status] || "text-gray-400";
   const statusLabel = STATUS_LABELS[status] || status;
   const hasActiveSubscription = sub?.stripe_subscription_id;
@@ -82,7 +84,7 @@ export default function BillingPage() {
               <CreditCard className="h-5 w-5 text-blue-400" />
             </div>
             <div>
-              <p className="text-white font-semibold">{plan} Plan</p>
+              <p className="text-white font-semibold">{plan ? `${plan} Plan` : "No Active Plan"}</p>
               <p className={`text-sm font-medium ${statusColor}`}>{statusLabel}</p>
             </div>
           </div>
@@ -94,23 +96,16 @@ export default function BillingPage() {
           )}
         </div>
 
-        {sub?.current_period_end && (
+        {sub?.current_period_end && status === "ACTIVE" && (
           <p className="text-sm text-gray-400 mb-4">
-            {status === "TRIALING" ? "Trial ends" : "Renews on"}{" "}
+            Renews on{" "}
             {new Date(sub.current_period_end).toLocaleDateString("en-US", {
               year: "numeric", month: "long", day: "numeric",
             })}
           </p>
         )}
-        {sub?.trial_end && status === "TRIALING" && !sub?.current_period_end && (
-          <p className="text-sm text-gray-400 mb-4">
-            Trial ends {new Date(sub.trial_end).toLocaleDateString("en-US", {
-              year: "numeric", month: "long", day: "numeric",
-            })}
-          </p>
-        )}
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           {hasActiveSubscription ? (
             <button
               onClick={handleManageBilling}
@@ -130,15 +125,7 @@ export default function BillingPage() {
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
             >
               <CreditCard className="h-4 w-4" />
-              Subscribe Now
-            </a>
-          )}
-          {status === "TRIALING" && (
-            <a
-              href="/pricing"
-              className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              Upgrade Plan
+              View Plans & Subscribe
             </a>
           )}
         </div>
