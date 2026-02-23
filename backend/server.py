@@ -2007,6 +2007,61 @@ async def update_invoice_settings(
     return {"success": True}
 
 
+# ============= VOICE AI SETTINGS =============
+
+VOICE_FIELDS = [
+    "voice_ai_enabled", "elevenlabs_api_key", "elevenlabs_voice_id",
+    "voice_provider", "voice_model", "voice_name", "voice_greeting",
+    "voice_system_prompt", "voice_collect_fields", "voice_business_hours",
+    "voice_after_hours_message",
+]
+
+@v1_router.get("/settings/voice")
+async def get_voice_settings(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get voice AI settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    settings = {f: tenant.get(f) for f in VOICE_FIELDS}
+    # Mask ElevenLabs API key
+    key = settings.get("elevenlabs_api_key", "")
+    if key and len(key) > 8:
+        settings["elevenlabs_api_key_masked"] = key[:4] + "..." + key[-4:]
+        settings["elevenlabs_configured"] = True
+    else:
+        settings["elevenlabs_api_key_masked"] = ""
+        settings["elevenlabs_configured"] = False
+    settings["elevenlabs_api_key"] = ""  # never return plaintext key
+    return settings
+
+
+@v1_router.put("/settings/voice")
+async def update_voice_settings(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update voice AI settings"""
+    allowed = set(VOICE_FIELDS)
+    set_data = {}
+    for k, v in data.items():
+        if k not in allowed:
+            continue
+        # Don't overwrite the real key with a masked value or empty
+        if k == "elevenlabs_api_key":
+            if not v or "..." in str(v):
+                continue
+        set_data[k] = v
+    if not set_data:
+        return {"success": True}
+    set_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.tenants.update_one({"id": tenant_id}, {"$set": set_data})
+    return {"success": True}
+
+
 # ============= CONVERSATIONS & MESSAGES =============
 
 @v1_router.get("/conversations")

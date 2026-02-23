@@ -9,8 +9,8 @@ import { Switch } from "../../components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { toast } from "sonner";
-import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save, Star, Link2, Wrench, Trash2, Pencil, Plus, Receipt } from "lucide-react";
-import { settingsAPI, customFieldsAPI, industryAPI, invoiceAPI } from "../../lib/api";
+import { Building2, MessageSquare, Clock, Palette, Globe, Phone, Loader2, Save, Star, Link2, Wrench, Trash2, Pencil, Plus, Receipt, Mic } from "lucide-react";
+import { settingsAPI, customFieldsAPI, industryAPI, invoiceAPI, voiceSettingsAPI } from "../../lib/api";
 import { useBranding } from "../../contexts/BrandingContext";
 
 export default function SettingsPage() {
@@ -44,22 +44,44 @@ export default function SettingsPage() {
   });
   const [savingInvoice, setSavingInvoice] = useState(false);
 
+  // Voice AI Settings state
+  const [voiceSettings, setVoiceSettings] = useState({
+    voice_ai_enabled: false,
+    elevenlabs_api_key: '',
+    elevenlabs_voice_id: '',
+    voice_greeting: '',
+    voice_system_prompt: '',
+    voice_after_hours_message: '',
+    elevenlabs_configured: false,
+    elevenlabs_api_key_masked: '',
+  });
+  const [savingVoice, setSavingVoice] = useState(false);
+
+  // Job Types state
+  const [customJobTypes, setCustomJobTypes] = useState([]);
+  const [newJobType, setNewJobType] = useState('');
+
   useEffect(() => {
     fetchTenantSettings();
   }, []);
 
   const fetchTenantSettings = async () => {
     try {
-      const [tenantRes, fieldsRes, industryRes, invoiceRes] = await Promise.allSettled([
+      const [tenantRes, fieldsRes, industryRes, invoiceRes, voiceRes] = await Promise.allSettled([
         settingsAPI.getTenantSettings(),
         customFieldsAPI.list(),
         industryAPI.getSettings(),
         invoiceAPI.getInvoiceSettings(),
+        voiceSettingsAPI.get(),
       ]);
       if (tenantRes.status === 'fulfilled') setTenant(tenantRes.value.data);
       if (fieldsRes.status === 'fulfilled') setCustomFields(fieldsRes.value.data.custom_fields || []);
-      if (industryRes.status === 'fulfilled') setIndustrySettings(industryRes.value.data);
+      if (industryRes.status === 'fulfilled') {
+        setIndustrySettings(industryRes.value.data);
+        setCustomJobTypes(industryRes.value.data.custom_job_types || []);
+      }
       if (invoiceRes.status === 'fulfilled') setInvoiceSettings(prev => ({ ...prev, ...invoiceRes.value.data }));
+      if (voiceRes.status === 'fulfilled') setVoiceSettings(prev => ({ ...prev, ...voiceRes.value.data }));
       if (tenantRes.status === 'rejected') toast.error("Failed to load settings");
     } catch (error) {
       toast.error("Failed to load settings");
@@ -195,6 +217,10 @@ export default function SettingsPage() {
           <TabsTrigger value="fields" className="flex items-center gap-1 text-xs sm:text-sm">
             <Wrench className="h-4 w-4 hidden sm:block" />
             Fields
+          </TabsTrigger>
+          <TabsTrigger value="voice" className="flex items-center gap-1 text-xs sm:text-sm">
+            <Mic className="h-4 w-4 hidden sm:block" />
+            Voice AI
           </TabsTrigger>
         </TabsList>
 
@@ -703,6 +729,79 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Job Types Section */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="font-heading flex items-center gap-2">
+                  <Wrench className="h-5 w-5" />
+                  Job Types
+                </CardTitle>
+                <CardDescription>Custom job type labels for your industry</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  value={newJobType}
+                  onChange={e => setNewJobType(e.target.value)}
+                  placeholder="e.g. AC Tune-Up, Drain Cleaning..."
+                  onKeyDown={async e => {
+                    if (e.key === 'Enter' && newJobType.trim()) {
+                      const updated = [...customJobTypes, newJobType.trim()];
+                      try {
+                        const res = await industryAPI.updateSettings({ custom_job_types: updated });
+                        setCustomJobTypes(res.data.custom_job_types || updated);
+                        setNewJobType('');
+                        toast.success("Job type added");
+                      } catch { toast.error("Failed to add job type"); }
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  className="btn-industrial flex-shrink-0"
+                  onClick={async () => {
+                    if (!newJobType.trim()) return;
+                    const updated = [...customJobTypes, newJobType.trim()];
+                    try {
+                      const res = await industryAPI.updateSettings({ custom_job_types: updated });
+                      setCustomJobTypes(res.data.custom_job_types || updated);
+                      setNewJobType('');
+                      toast.success("Job type added");
+                    } catch { toast.error("Failed to add job type"); }
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add
+                </Button>
+              </div>
+              {customJobTypes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No custom job types yet. Add one above.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {customJobTypes.map((jt, idx) => (
+                    <span key={idx} className="flex items-center gap-1 bg-muted px-3 py-1 rounded-full text-sm">
+                      {jt}
+                      <button
+                        className="ml-1 text-muted-foreground hover:text-destructive"
+                        onClick={async () => {
+                          const updated = customJobTypes.filter((_, i) => i !== idx);
+                          try {
+                            const res = await industryAPI.updateSettings({ custom_job_types: updated });
+                            setCustomJobTypes(res.data.custom_job_types || updated);
+                            toast.success("Job type removed");
+                          } catch { toast.error("Failed to remove job type"); }
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Custom Fields Section */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -1093,6 +1192,142 @@ export default function SettingsPage() {
             >
               {savingInvoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
               SAVE INVOICE SETTINGS
+            </Button>
+          </div>
+        </TabsContent>
+        {/* Voice AI Tab */}
+        <TabsContent value="voice" className="space-y-6">
+          {/* Enable / Status */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading flex items-center gap-2">
+                <Mic className="h-5 w-5" />
+                Voice AI Agent
+              </CardTitle>
+              <CardDescription>
+                Configure your AI-powered voice agent powered by ElevenLabs Conversational AI. Customers who call your Twilio number will be handled by this agent.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+                <div>
+                  <Label className="text-base">Enable Voice AI</Label>
+                  <p className="text-sm text-muted-foreground">AI agent answers inbound calls automatically</p>
+                </div>
+                <Switch
+                  checked={voiceSettings.voice_ai_enabled || false}
+                  onCheckedChange={v => setVoiceSettings(prev => ({ ...prev, voice_ai_enabled: v }))}
+                />
+              </div>
+
+              {voiceSettings.elevenlabs_configured && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-300">
+                  <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+                  ElevenLabs API key configured ({voiceSettings.elevenlabs_api_key_masked})
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ElevenLabs Credentials */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading text-base">ElevenLabs Configuration</CardTitle>
+              <CardDescription>Connect your ElevenLabs account for natural-sounding AI voice</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>ElevenLabs API Key</Label>
+                <Input
+                  type="password"
+                  placeholder={voiceSettings.elevenlabs_configured ? "••••••••" : "Enter your ElevenLabs API key"}
+                  value={voiceSettings.elevenlabs_api_key || ''}
+                  onChange={e => setVoiceSettings(prev => ({ ...prev, elevenlabs_api_key: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Found in your ElevenLabs dashboard under API Keys
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>ElevenLabs Agent ID / Voice ID</Label>
+                <Input
+                  placeholder="e.g. 21m00Tcm4TlvDq8ikWAM"
+                  value={voiceSettings.elevenlabs_voice_id || ''}
+                  onChange={e => setVoiceSettings(prev => ({ ...prev, elevenlabs_voice_id: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Your Conversational AI agent ID from ElevenLabs dashboard
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Voice Behavior */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-heading text-base">Voice Agent Behavior</CardTitle>
+              <CardDescription>Customize how the AI agent greets and assists callers</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Greeting Message</Label>
+                <Input
+                  placeholder={`Thank you for calling ${tenant?.name || 'us'}. How can I help you today?`}
+                  value={voiceSettings.voice_greeting || ''}
+                  onChange={e => setVoiceSettings(prev => ({ ...prev, voice_greeting: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">What the AI says when a call is answered</p>
+              </div>
+              <div className="space-y-2">
+                <Label>System Prompt / Instructions</Label>
+                <Textarea
+                  placeholder={`You are a helpful scheduling assistant for ${tenant?.name || 'a field service company'}. Your job is to collect customer name, phone number, and the service needed, then book an appointment.`}
+                  value={voiceSettings.voice_system_prompt || ''}
+                  onChange={e => setVoiceSettings(prev => ({ ...prev, voice_system_prompt: e.target.value }))}
+                  rows={5}
+                />
+                <p className="text-xs text-muted-foreground">Instructions for the AI agent — describe your business, services, and how to handle calls</p>
+              </div>
+              <div className="space-y-2">
+                <Label>After-Hours Message</Label>
+                <Input
+                  placeholder="Our office is currently closed. Please call back during business hours or leave a message."
+                  value={voiceSettings.voice_after_hours_message || ''}
+                  onChange={e => setVoiceSettings(prev => ({ ...prev, voice_after_hours_message: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">Played when calls come in outside business hours</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button
+              className="btn-industrial"
+              disabled={savingVoice}
+              onClick={async () => {
+                setSavingVoice(true);
+                try {
+                  await voiceSettingsAPI.update({
+                    voice_ai_enabled: voiceSettings.voice_ai_enabled,
+                    elevenlabs_api_key: voiceSettings.elevenlabs_api_key,
+                    elevenlabs_voice_id: voiceSettings.elevenlabs_voice_id,
+                    voice_greeting: voiceSettings.voice_greeting,
+                    voice_system_prompt: voiceSettings.voice_system_prompt,
+                    voice_after_hours_message: voiceSettings.voice_after_hours_message,
+                  });
+                  // Re-fetch to get masked key
+                  const res = await voiceSettingsAPI.get();
+                  setVoiceSettings(prev => ({ ...prev, ...res.data, elevenlabs_api_key: '' }));
+                  toast.success("Voice AI settings saved");
+                } catch {
+                  toast.error("Failed to save voice settings");
+                } finally {
+                  setSavingVoice(false);
+                }
+              }}
+            >
+              {savingVoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              SAVE VOICE SETTINGS
             </Button>
           </div>
         </TabsContent>

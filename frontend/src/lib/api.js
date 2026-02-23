@@ -211,6 +211,12 @@ export const dashboardAPI = {
   getReports: (params = {}) => api.get('/reports/summary', { params }),
 };
 
+// Voice AI Settings APIs
+export const voiceSettingsAPI = {
+  get: () => api.get('/settings/voice'),
+  update: (data) => api.put('/settings/voice', data),
+};
+
 // Public APIs (no auth)
 const BACKEND_URL_PUBLIC = import.meta.env.VITE_BACKEND_URL;
 export const publicAPI = {
