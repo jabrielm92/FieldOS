@@ -16,7 +16,7 @@ from core.utils import serialize_doc
 router = APIRouter(prefix="/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
 
-# Plan definitions - these map to Stripe Price IDs set in environment
+# Plan definitions - pricing is passed inline to Stripe via price_data (no pre-created price IDs needed)
 # Pricing model: one-time setup fee + monthly retainer (no trial)
 # Monthly costs covered per tenant: Twilio (~$8), OpenAI (~$25), ElevenLabs (~$15),
 # infrastructure (~$8), support — minimum ~$56/mo before margin.
@@ -26,8 +26,6 @@ PLANS = {
         "tagline": "For solo operators & small crews",
         "setup_fee": 497,
         "price_monthly": 149,
-        "stripe_price_id": os.environ.get("STRIPE_PRICE_STARTER", ""),
-        "stripe_setup_fee_price_id": os.environ.get("STRIPE_SETUP_FEE_STARTER", ""),
         "limits": {
             "jobs_per_month": 150,
             "technicians": 3,
@@ -49,8 +47,6 @@ PLANS = {
         "tagline": "For growing field service companies",
         "setup_fee": 797,
         "price_monthly": 299,
-        "stripe_price_id": os.environ.get("STRIPE_PRICE_PRO", ""),
-        "stripe_setup_fee_price_id": os.environ.get("STRIPE_SETUP_FEE_PRO", ""),
         "limits": {
             "jobs_per_month": -1,  # unlimited
             "technicians": 10,
@@ -72,8 +68,6 @@ PLANS = {
         "tagline": "For multi-location & high-volume operations",
         "setup_fee": 1497,
         "price_monthly": 549,
-        "stripe_price_id": os.environ.get("STRIPE_PRICE_ENTERPRISE", ""),
-        "stripe_setup_fee_price_id": os.environ.get("STRIPE_SETUP_FEE_ENTERPRISE", ""),
         "limits": {
             "jobs_per_month": -1,
             "technicians": -1,
@@ -139,7 +133,7 @@ async def create_checkout_session(
     except ImportError:
         raise HTTPException(status_code=500, detail="Stripe library not installed")
 
-    stripe_key = os.environ.get("STRIPE_SECRET_KEY_FIELDFOS")
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY")
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
@@ -149,12 +143,9 @@ async def create_checkout_session(
     if plan not in PLANS:
         raise HTTPException(status_code=400, detail=f"Unknown plan: {plan}")
 
-    price_id = PLANS[plan]["stripe_price_id"]
-    if not price_id:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Stripe price ID not configured for plan {plan}. Set STRIPE_PRICE_{plan} in environment.",
-        )
+    plan_data = PLANS[plan]
+    price_monthly_cents = plan_data["price_monthly"] * 100
+    setup_fee_cents = plan_data["setup_fee"] * 100
 
     # Get or create Stripe customer for this tenant
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
@@ -172,25 +163,38 @@ async def create_checkout_session(
         )
         stripe_customer_id = customer.id
 
-    # Build setup fee invoice item (charged on first invoice alongside first month)
-    setup_fee_price_id = PLANS[plan].get("stripe_setup_fee_price_id", "")
-    subscription_data = {
-        "metadata": {"tenant_id": tenant_id, "plan": plan},
-    }
-    if setup_fee_price_id:
-        subscription_data["add_invoice_items"] = [
-            {"price": setup_fee_price_id, "quantity": 1}
-        ]
-
     # Create checkout session - no trial, payment required immediately
+    # Setup fee is charged as a one-time invoice item on the first invoice
     session = stripe.checkout.Session.create(
         customer=stripe_customer_id,
         mode="subscription",
-        line_items=[{"price": price_id, "quantity": 1}],
+        line_items=[
+            {
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"FieldOS {plan_data['name']} Plan"},
+                    "unit_amount": price_monthly_cents,
+                    "recurring": {"interval": "month"},
+                },
+                "quantity": 1,
+            }
+        ],
         success_url=body.success_url + "?session_id={CHECKOUT_SESSION_ID}",
         cancel_url=body.cancel_url,
         metadata={"tenant_id": tenant_id, "plan": plan},
-        subscription_data=subscription_data,
+        subscription_data={
+            "metadata": {"tenant_id": tenant_id, "plan": plan},
+            "add_invoice_items": [
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {"name": f"FieldOS {plan_data['name']} Setup & Onboarding Fee"},
+                        "unit_amount": setup_fee_cents,
+                    },
+                    "quantity": 1,
+                }
+            ],
+        },
         allow_promotion_codes=True,
         billing_address_collection="auto",
     )
@@ -231,7 +235,7 @@ async def create_billing_portal(
     except ImportError:
         raise HTTPException(status_code=500, detail="Stripe library not installed")
 
-    stripe_key = os.environ.get("STRIPE_SECRET_KEY_FIELDFOS")
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY")
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
@@ -256,8 +260,8 @@ async def stripe_subscription_webhook(request: Request):
     except ImportError:
         raise HTTPException(status_code=500, detail="Stripe library not installed")
 
-    stripe_key = os.environ.get("STRIPE_SECRET_KEY_FIELDFOS")
-    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET_FIELDFOS")
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
 
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Stripe not configured")
