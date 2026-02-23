@@ -118,6 +118,7 @@ export const quoteAPI = {
   get: (id) => api.get(`/quotes/${id}`),
   create: (data) => api.post('/quotes', data),
   update: (id, data) => api.put(`/quotes/${id}`, data),
+  convertToInvoice: (id, data) => api.post(`/quotes/${id}/convert-to-invoice`, data),
 };
 
 // Invoice APIs
@@ -132,6 +133,11 @@ export const invoiceAPI = {
   getOverdue: () => api.get('/invoices/overdue'),
   getInvoiceSettings: () => api.get('/settings/invoice'),
   updateInvoiceSettings: (data) => api.put('/settings/invoice', data),
+  send: (id) => api.post(`/invoices/${id}/send`),
+  remind: (id) => api.post(`/invoices/${id}/remind`),
+  recordPayment: (id, data) => api.post(`/invoices/${id}/record-payment`, data),
+  voidInvoice: (id) => api.post(`/invoices/${id}/void`),
+  deleteInvoice: (id) => api.delete(`/invoices/${id}`),
 };
 
 // Public invoice payment (no auth)

@@ -1577,6 +1577,82 @@ async def update_quote(
     return serialize_doc(quote)
 
 
+class ConvertToInvoiceRequest(BaseModel):
+    due_date: Optional[str] = None
+    send_immediately: bool = False
+
+
+@v1_router.post("/quotes/{quote_id}/convert-to-invoice")
+async def convert_quote_to_invoice(
+    quote_id: str,
+    data: ConvertToInvoiceRequest = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Convert a quote to an invoice"""
+    if data is None:
+        data = ConvertToInvoiceRequest()
+    quote = await db.quotes.find_one({"id": quote_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    due_date = data.due_date if data.due_date else (now + timedelta(days=30)).strftime("%Y-%m-%d")
+    send_immediately = data.send_immediately
+    # Generate invoice number
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    invoice_settings = (tenant or {}).get("invoice_settings") or {}
+    next_num = invoice_settings.get("next_invoice_number", 1)
+    prefix = invoice_settings.get("invoice_prefix", "INV")
+    current_year = now.year
+    invoice_number = f"{prefix}-{current_year}-{next_num:04d}"
+    # Increment counter
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {"$set": {"invoice_settings.next_invoice_number": next_num + 1}}
+    )
+    # Create invoice
+    invoice_id = str(uuid4())
+    invoice_doc = {
+        "id": invoice_id,
+        "tenant_id": tenant_id,
+        "customer_id": quote.get("customer_id", ""),
+        "job_id": quote.get("job_id") or "",
+        "amount": quote.get("amount", 0),
+        "currency": "USD",
+        "status": InvoiceStatus.SENT.value if send_immediately else InvoiceStatus.DRAFT.value,
+        "due_date": due_date,
+        "invoice_number": invoice_number,
+        "quote_id": quote_id,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    await db.invoices.insert_one(invoice_doc)
+    # Send SMS if requested
+    if send_immediately:
+        customer = await db.customers.find_one({"id": invoice_doc["customer_id"]}, {"_id": 0})
+        if customer and customer.get("phone") and tenant and tenant.get("twilio_phone_number"):
+            name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or customer.get("name", "there")
+            company = tenant.get("name", "Us")
+            amount = invoice_doc["amount"]
+            payment_link = invoice_doc.get("stripe_payment_link", "")
+            if payment_link:
+                message = f"Hi {name}! Invoice #{invoice_number} from {company} for ${amount:.2f} is ready. {payment_link}"
+            else:
+                message = f"Hi {name}! Invoice #{invoice_number} from {company} for ${amount:.2f} is ready. Please call us to arrange payment."
+            try:
+                from services.twilio_service import twilio_service
+                await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
+                await db.invoices.update_one({"id": invoice_id}, {"$set": {"sent_at": now_iso}})
+                invoice_doc["sent_at"] = now_iso
+            except Exception:
+                pass
+    # Remove _id for response
+    invoice_doc.pop("_id", None)
+    return serialize_doc(invoice_doc)
+
+
+
 # ============= INVOICES ENDPOINTS =============
 
 @v1_router.get("/invoices")
@@ -1698,6 +1774,164 @@ async def mark_invoice_paid(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     return {"success": True, "message": "Invoice marked as paid"}
+
+
+@v1_router.post("/invoices/{invoice_id}/send")
+async def send_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Send invoice via SMS"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+    if not customer or not customer.get("phone"):
+        raise HTTPException(status_code=400, detail="Customer phone not found")
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant or not tenant.get("twilio_phone_number"):
+        raise HTTPException(status_code=400, detail="SMS not configured")
+    name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or customer.get("name", "there")
+    company = tenant.get("name", "Us")
+    number = invoice.get("invoice_number", f"INV-{invoice_id[:6].upper()}")
+    amount = invoice.get("amount", 0)
+    payment_link = invoice.get("stripe_payment_link", "")
+    if payment_link:
+        message = f"Hi {name}! Invoice #{number} from {company} for ${amount:.2f} is ready. {payment_link}"
+    else:
+        message = f"Hi {name}! Invoice #{number} from {company} for ${amount:.2f} is ready. Please call us to arrange payment."
+    from services.twilio_service import twilio_service
+    await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
+    now = datetime.now(timezone.utc).isoformat()
+    await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": {"status": InvoiceStatus.SENT.value, "sent_at": now, "updated_at": now}}
+    )
+    return {"success": True}
+
+
+@v1_router.post("/invoices/{invoice_id}/remind")
+async def remind_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Send invoice reminder via SMS"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") in [InvoiceStatus.PAID.value, "CANCELLED"]:
+        raise HTTPException(status_code=400, detail="Cannot send reminder for paid or cancelled invoice")
+    customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+    if not customer or not customer.get("phone"):
+        raise HTTPException(status_code=400, detail="Customer phone not found")
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant or not tenant.get("twilio_phone_number"):
+        raise HTTPException(status_code=400, detail="SMS not configured")
+    name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or customer.get("name", "there")
+    company = tenant.get("name", "Us")
+    number = invoice.get("invoice_number", f"INV-{invoice_id[:6].upper()}")
+    amount = invoice.get("amount", 0)
+    payment_link = invoice.get("stripe_payment_link", "")
+    if payment_link:
+        message = f"Friendly reminder: Invoice #{number} from {company} for ${amount:.2f} is still outstanding. {payment_link}"
+    else:
+        message = f"Friendly reminder: Invoice #{number} from {company} for ${amount:.2f} is still outstanding. Please call us to arrange payment."
+    from services.twilio_service import twilio_service
+    await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
+    now = datetime.now(timezone.utc).isoformat()
+    reminder_count = invoice.get("reminder_count", 0) + 1
+    await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": {"reminder_count": reminder_count, "last_reminder_at": now, "updated_at": now}}
+    )
+    return {"success": True}
+
+
+class RecordPaymentRequest(BaseModel):
+    amount: float
+    method: Optional[str] = "CASH"
+    notes: Optional[str] = ""
+
+
+@v1_router.post("/invoices/{invoice_id}/record-payment")
+async def record_invoice_payment(
+    invoice_id: str,
+    data: RecordPaymentRequest,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Record a payment against an invoice"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    now = datetime.now(timezone.utc).isoformat()
+    payment_entry = {
+        "amount": data.amount,
+        "method": data.method or "CASH",
+        "notes": data.notes or "",
+        "recorded_at": now
+    }
+    payments = invoice.get("payments", [])
+    payments.append(payment_entry)
+    amount_paid = sum(p.get("amount", 0) for p in payments)
+    invoice_total = invoice.get("amount", 0)
+    amount_due = invoice_total - amount_paid
+    update_fields = {
+        "payments": payments,
+        "amount_paid": amount_paid,
+        "amount_due": max(amount_due, 0),
+        "updated_at": now
+    }
+    if amount_due <= 0:
+        update_fields["status"] = InvoiceStatus.PAID.value
+        update_fields["paid_at"] = now
+    else:
+        update_fields["status"] = InvoiceStatus.PARTIALLY_PAID.value
+    await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": update_fields}
+    )
+    updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    return serialize_doc(updated)
+
+
+@v1_router.post("/invoices/{invoice_id}/void")
+async def void_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Void an invoice"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") == InvoiceStatus.PAID.value:
+        raise HTTPException(status_code=400, detail="Cannot void a paid invoice")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": {"status": "CANCELLED", "voided_at": now, "updated_at": now}}
+    )
+    return {"success": True}
+
+
+@v1_router.delete("/invoices/{invoice_id}")
+async def delete_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a draft invoice"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") != InvoiceStatus.DRAFT.value:
+        raise HTTPException(status_code=400, detail="Only DRAFT invoices can be deleted")
+    await db.invoices.delete_one({"id": invoice_id, "tenant_id": tenant_id})
+    return {"success": True}
+
 
 
 @v1_router.get("/invoices/public/{token}")

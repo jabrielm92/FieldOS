@@ -63,6 +63,8 @@ export default function InvoicesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [showRecordPayment, setShowRecordPayment] = useState(false);
+  const [paymentInvoice, setPaymentInvoice] = useState(null);
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -174,7 +176,8 @@ export default function InvoicesPage() {
             </thead>
             <tbody>
               {filtered.map(inv => (
-                <InvoiceRow key={inv.id} inv={inv} onOpen={openDetail} onRefresh={fetchInvoices} />
+                <InvoiceRow key={inv.id} inv={inv} onOpen={openDetail} onRefresh={fetchInvoices}
+                  onRecordPayment={(inv) => { setPaymentInvoice(inv); setShowRecordPayment(true); }} />
               ))}
             </tbody>
           </table>
@@ -189,6 +192,14 @@ export default function InvoicesPage() {
           open={showDetail}
           onOpenChange={setShowDetail}
           onRefresh={fetchInvoices}
+        />
+      )}
+      {paymentInvoice && (
+        <RecordPaymentModal
+          open={showRecordPayment}
+          onOpenChange={setShowRecordPayment}
+          invoice={paymentInvoice}
+          onSuccess={() => { setShowRecordPayment(false); fetchInvoices(); }}
         />
       )}
     </Layout>
@@ -216,7 +227,7 @@ function StatCard({ icon, label, value, color }) {
 }
 
 // ─── Invoice Table Row ────────────────────────────────────────────────────────
-function InvoiceRow({ inv, onOpen, onRefresh }) {
+function InvoiceRow({ inv, onOpen, onRefresh, onRecordPayment }) {
   const [acting, setActing] = useState(false);
 
   const markPaid = async (e) => {
@@ -257,6 +268,64 @@ function InvoiceRow({ inv, onOpen, onRefresh }) {
       onRefresh();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to send payment link");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const sendInvoice = async (e) => {
+    e.stopPropagation();
+    setActing(true);
+    try {
+      await invoiceAPI.send(inv.id);
+      toast.success("Invoice sent via SMS");
+      onRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send invoice");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const sendReminder = async (e) => {
+    e.stopPropagation();
+    setActing(true);
+    try {
+      await invoiceAPI.remind(inv.id);
+      toast.success("Reminder sent via SMS");
+      onRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send reminder");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const voidInvoice = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to void this invoice? This cannot be undone.")) return;
+    setActing(true);
+    try {
+      await invoiceAPI.voidInvoice(inv.id);
+      toast.success("Invoice voided");
+      onRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to void invoice");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const deleteInvoice = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to permanently delete this draft invoice?")) return;
+    setActing(true);
+    try {
+      await invoiceAPI.deleteInvoice(inv.id);
+      toast.success("Invoice deleted");
+      onRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to delete invoice");
     } finally {
       setActing(false);
     }
@@ -307,6 +376,31 @@ function InvoiceRow({ inv, onOpen, onRefresh }) {
               {inv.stripe_payment_link && inv.status !== "PAID" && (
                 <DropdownMenuItem onClick={sendPaymentLink}>
                   <Send className="h-4 w-4 mr-2" /> Send via SMS
+                </DropdownMenuItem>
+              )}
+              {inv.status === "DRAFT" && (
+                <DropdownMenuItem onClick={sendInvoice}>
+                  <Send className="h-4 w-4 mr-2" /> Send Invoice
+                </DropdownMenuItem>
+              )}
+              {["SENT", "OVERDUE", "PARTIALLY_PAID"].includes(inv.status) && (
+                <DropdownMenuItem onClick={sendReminder}>
+                  <Send className="h-4 w-4 mr-2" /> Send Reminder
+                </DropdownMenuItem>
+              )}
+              {inv.status !== "PAID" && inv.status !== "CANCELLED" && (
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRecordPayment(inv); }}>
+                  <DollarSign className="h-4 w-4 mr-2" /> Record Payment
+                </DropdownMenuItem>
+              )}
+              {inv.status !== "PAID" && inv.status !== "CANCELLED" && (
+                <DropdownMenuItem onClick={voidInvoice} className="text-orange-600">
+                  <XCircle className="h-4 w-4 mr-2" /> Void Invoice
+                </DropdownMenuItem>
+              )}
+              {inv.status === "DRAFT" && (
+                <DropdownMenuItem onClick={deleteInvoice} className="text-red-600">
+                  <XCircle className="h-4 w-4 mr-2" /> Delete
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -437,6 +531,34 @@ function InvoiceDetailModal({ invoice, open, onOpenChange, onRefresh }) {
                 <Button variant="outline" className="flex-1" onClick={sendPaymentLink} disabled={!!acting}>
                   {acting === "send" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
                   Send SMS
+                </Button>
+              )}
+              {invoice.status === "DRAFT" && (
+                <Button variant="outline" className="flex-1" onClick={() => run("sendInv", async () => {
+                  try {
+                    await invoiceAPI.send(invoice.id);
+                    toast.success("Invoice sent via SMS");
+                    onRefresh();
+                  } catch (err) {
+                    toast.error(err.response?.data?.detail || "Failed to send invoice");
+                  }
+                })} disabled={!!acting}>
+                  {acting === "sendInv" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                  Send Invoice
+                </Button>
+              )}
+              {["SENT", "OVERDUE"].includes(invoice.status) && (
+                <Button variant="outline" className="flex-1" onClick={() => run("remind", async () => {
+                  try {
+                    await invoiceAPI.remind(invoice.id);
+                    toast.success("Reminder sent via SMS");
+                    onRefresh();
+                  } catch (err) {
+                    toast.error(err.response?.data?.detail || "Failed to send reminder");
+                  }
+                })} disabled={!!acting}>
+                  {acting === "remind" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                  Send Reminder
                 </Button>
               )}
             </div>
@@ -593,6 +715,111 @@ function CreateInvoiceModal({ open, onOpenChange, onSuccess }) {
             <Button type="submit" className="btn-industrial" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Receipt className="h-4 w-4 mr-2" />}
               Create Invoice
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Record Payment Modal ─────────────────────────────────────────────────────
+function RecordPaymentModal({ open, onOpenChange, invoice, onSuccess }) {
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("CASH");
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open && invoice) {
+      const amountDue = invoice.amount_due != null ? invoice.amount_due : invoice.amount;
+      setAmount(amountDue?.toString() || "");
+      setMethod("CASH");
+      setNotes("");
+    }
+  }, [open, invoice]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!amount || parseFloat(amount) <= 0) {
+      toast.error("Please enter a valid payment amount");
+      return;
+    }
+    setLoading(true);
+    try {
+      await invoiceAPI.recordPayment(invoice.id, {
+        amount: parseFloat(amount),
+        method,
+        notes,
+      });
+      toast.success("Payment recorded successfully");
+      onSuccess();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to record payment");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!invoice) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-heading flex items-center gap-2">
+            <DollarSign className="h-5 w-5" />
+            Record Payment
+          </DialogTitle>
+          <DialogDescription>
+            Record a payment for invoice {invoice.invoice_number || `INV-${invoice.id?.slice(0, 6).toUpperCase()}`}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Amount ($) *</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="pl-9"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Method</Label>
+              <Select value={method} onValueChange={setMethod}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CASH">Cash</SelectItem>
+                  <SelectItem value="CHECK">Check</SelectItem>
+                  <SelectItem value="CREDIT_CARD">Credit Card</SelectItem>
+                  <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
+                  <SelectItem value="OTHER">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Any notes about this payment..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" className="btn-industrial" disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
+              Record Payment
             </Button>
           </DialogFooter>
         </form>
