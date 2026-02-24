@@ -55,7 +55,6 @@ class PropertyType(str, Enum):
 
 
 class LeadSource(str, Enum):
-    VAPI_CALL = "VAPI_CALL"
     MISSED_CALL_SMS = "MISSED_CALL_SMS"
     WEB_FORM = "WEB_FORM"
     LANDING_PAGE = "LANDING_PAGE"
@@ -667,57 +666,6 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
-# ============= VAPI MODELS =============
-
-class VapiCreateLeadRequest(BaseModel):
-    tenant_slug: str
-    # Support both field naming conventions
-    caller_phone: Optional[str] = None
-    caller_number: Optional[str] = None  # Alias for caller_phone
-    caller_name: Optional[str] = None
-    captured_name: Optional[str] = None  # Alias for caller_name
-    captured_email: Optional[str] = None  # Optional email
-    issue_type: Optional[str] = None
-    issue_description: Optional[str] = None  # Alias for description
-    urgency: Optional[str] = "ROUTINE"
-    description: Optional[str] = None
-    # Address fields - support both formats
-    address_line1: Optional[str] = None
-    captured_address: Optional[str] = None  # Alias - will be parsed
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-
-
-class VapiCheckAvailabilityRequest(BaseModel):
-    tenant_slug: str
-    date: str  # YYYY-MM-DD
-    job_type: Optional[str] = "DIAGNOSTIC"
-
-
-class VapiBookJobRequest(BaseModel):
-    tenant_slug: str
-    lead_id: str
-    customer_id: str
-    property_id: str
-    job_type: str
-    window_start: str  # ISO datetime
-    window_end: str
-
-
-class VapiSendSmsRequest(BaseModel):
-    tenant_slug: str
-    to_phone: str
-    message: str
-
-
-class VapiCallSummaryRequest(BaseModel):
-    tenant_slug: str
-    lead_id: str
-    summary: str
-    vapi_session_id: Optional[str] = None
-
-
 class WebFormLeadRequest(BaseModel):
     """Request model for web form lead submission"""
     tenant_slug: str
@@ -733,3 +681,35 @@ class WebFormLeadRequest(BaseModel):
     preferred_date: Optional[str] = None
     preferred_time: Optional[str] = None
     send_confirmation_sms: bool = True
+
+
+# ============= SUBSCRIPTION / BILLING MODELS =============
+
+class PlanTier(str, Enum):
+    STARTER = "STARTER"
+    PRO = "PRO"
+    ENTERPRISE = "ENTERPRISE"
+
+class SubscriptionStatus(str, Enum):
+    INACTIVE = "INACTIVE"
+    PENDING_PAYMENT = "PENDING_PAYMENT"
+    ACTIVE = "ACTIVE"
+    PAST_DUE = "PAST_DUE"
+    CANCELED = "CANCELED"
+    UNPAID = "UNPAID"
+
+class TenantSubscription(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=generate_id)
+    tenant_id: str
+    plan: PlanTier = PlanTier.STARTER
+    status: SubscriptionStatus = SubscriptionStatus.TRIALING
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    stripe_checkout_session_id: Optional[str] = None
+    current_period_start: Optional[datetime] = None
+    current_period_end: Optional[datetime] = None
+    trial_end: Optional[datetime] = None
+    canceled_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)

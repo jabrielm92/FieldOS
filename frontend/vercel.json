@@ -1,8 +1,5 @@
 {
-  "buildCommand": "yarn build",
   "outputDirectory": "build",
-  "framework": "create-react-app",
-  "installCommand": "yarn install --legacy-peer-deps",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]

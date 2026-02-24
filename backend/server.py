@@ -38,9 +38,6 @@ from models import (
     Campaign, CampaignCreate, CampaignRecipient,
     # Auth
     LoginRequest, TokenResponse,
-    # Vapi
-    VapiCreateLeadRequest, VapiCheckAvailabilityRequest,
-    VapiBookJobRequest, VapiSendSmsRequest, VapiCallSummaryRequest,
     # Web Form
     WebFormLeadRequest
 )
@@ -203,34 +200,6 @@ async def get_tenant_id(current_user: dict = Depends(get_current_user)) -> Optio
     return tenant_id
 
 
-def verify_vapi_secret(
-    x_vapi_secret: str = Header(None, alias="x-vapi-secret"),
-    authorization: str = Header(None)
-) -> bool:
-    """Verify Vapi webhook authentication"""
-    # Check for Vapi API key in authorization header
-    vapi_api_key = os.environ.get('VAPI_API_KEY')
-    
-    # Vapi sends the secret in x-vapi-secret header or as Bearer token
-    if x_vapi_secret:
-        if vapi_api_key and x_vapi_secret == vapi_api_key:
-            return True
-    
-    if authorization:
-        # Check Bearer token format
-        if authorization.startswith("Bearer "):
-            token = authorization[7:]
-            if vapi_api_key and token == vapi_api_key:
-                return True
-    
-    # In development, allow requests without auth for testing
-    if not vapi_api_key:
-        logger.warning("VAPI_API_KEY not configured - allowing request for testing")
-        return True
-    
-    # Log for debugging but don't block - Vapi tool calls may not include auth
-    logger.info("Vapi request received (auth headers not matched, allowing for tool calls)")
-    return True
 
 
 # ============= AUTH ENDPOINTS =============
@@ -277,6 +246,84 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         role=current_user["role"],
         status=current_user["status"],
         tenant_id=current_user.get("tenant_id")
+    )
+
+
+class RegisterRequest(BaseModel):
+    business_name: str
+    owner_name: str
+    email: str
+    password: str
+    phone: str
+    industry_slug: Optional[str] = "general"
+
+
+@v1_router.post("/auth/register", response_model=TokenResponse)
+async def register_tenant(request: RegisterRequest):
+    """Self-service tenant registration - creates new tenant + owner user"""
+    import re
+    from models import generate_id, utc_now
+
+    existing = await db.users.find_one({"email": request.email})
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+
+    slug = re.sub(r'[^a-z0-9-]', '', re.sub(r'\s+', '-', request.business_name.lower().strip()))
+    slug = slug[:40] or "tenant"
+    base_slug = slug
+    counter = 1
+    while await db.tenants.find_one({"slug": slug}):
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
+    now = utc_now()
+    tenant_id = generate_id()
+    user_id = generate_id()
+
+    tenant_doc = {
+        "id": tenant_id,
+        "name": request.business_name,
+        "slug": slug,
+        "primary_contact_name": request.owner_name,
+        "primary_contact_email": request.email,
+        "primary_phone": request.phone,
+        "timezone": "America/New_York",
+        "booking_mode": "TIME_WINDOWS",
+        "tone_profile": "PROFESSIONAL",
+        "industry_template": request.industry_slug or "general",
+        "voice_ai_enabled": False,
+        "subscription_plan": None,
+        "subscription_status": "INACTIVE",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    await db.tenants.insert_one(tenant_doc)
+
+    user_doc = {
+        "id": user_id,
+        "tenant_id": tenant_id,
+        "email": request.email,
+        "name": request.owner_name,
+        "role": "OWNER",
+        "status": "ACTIVE",
+        "password_hash": hash_password(request.password),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    await db.users.insert_one(user_doc)
+
+    token = create_access_token(user_id, tenant_id, "OWNER")
+
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(
+            id=user_id,
+            email=request.email,
+            name=request.owner_name,
+            role=UserRole.OWNER,
+            status=UserStatus.ACTIVE,
+            tenant_id=tenant_id,
+        )
     )
 
 
@@ -679,6 +726,38 @@ async def bulk_delete_customers(
     result = await db.customers.delete_many({"id": {"$in": customer_ids}, "tenant_id": tenant_id})
     
     return {"success": True, "deleted_count": result.deleted_count}
+
+
+@v1_router.post("/customers/{customer_id}/review-opt-out")
+async def customer_review_opt_out(
+    customer_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Opt a customer out of automated review requests"""
+    result = await db.customers.update_one(
+        {"id": customer_id, "tenant_id": tenant_id},
+        {"$set": {"review_opt_out": True, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True}
+
+
+@v1_router.post("/customers/{customer_id}/review-opt-in")
+async def customer_review_opt_in(
+    customer_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Re-enable review requests for a customer"""
+    result = await db.customers.update_one(
+        {"id": customer_id, "tenant_id": tenant_id},
+        {"$set": {"review_opt_out": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True}
 
 
 # ============= PROPERTIES ENDPOINTS =============
@@ -1151,62 +1230,235 @@ async def update_job(
     return serialize_doc(job)
 
 
+class EnRouteRequest(BaseModel):
+    technician_id: Optional[str] = None
+    estimated_minutes: int = 30
+    send_sms: bool = True
+    include_tracking_link: bool = True
+
+
 @v1_router.post("/jobs/{job_id}/en-route")
 async def mark_job_en_route(
     job_id: str,
+    data: EnRouteRequest = None,
     tenant_id: str = Depends(get_tenant_id),
     current_user: dict = Depends(get_current_user)
 ):
-    """Mark job as en-route and send SMS"""
+    """Mark job as en-route, generate tracking token, and send SMS"""
+    import secrets as _sec
+    if data is None:
+        data = EnRouteRequest()
     job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    # Update job status
+
+    tracking_token = _sec.token_urlsafe(16)
+    now = datetime.now(timezone.utc)
+    estimated_arrival = (now + timedelta(minutes=data.estimated_minutes)).isoformat()
+    tech_id = data.technician_id or job.get("assigned_technician_id")
+
     await db.jobs.update_one(
         {"id": job_id},
         {"$set": {
             "status": JobStatus.EN_ROUTE.value,
+            "en_route_at": now.isoformat(),
             "en_route_sms_sent": True,
-            "updated_at": datetime.now(timezone.utc).isoformat()
+            "tracking_token": tracking_token,
+            "estimated_arrival": estimated_arrival,
+            "assigned_technician_id": tech_id,
+            "updated_at": now.isoformat()
         }}
     )
-    
-    # Get customer and tenant for SMS
     customer = await db.customers.find_one({"id": job["customer_id"]}, {"_id": 0})
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
-    
-    if customer and tenant and tenant.get("twilio_phone_number"):
+    sms_sent = False
+
+    if data.send_sms and customer and tenant and tenant.get("twilio_phone_number"):
         from services.twilio_service import twilio_service
-        
         tech = None
-        if job.get("assigned_technician_id"):
-            tech = await db.technicians.find_one({"id": job["assigned_technician_id"]}, {"_id": 0})
-        
-        tech_name = tech["name"] if tech else "Our technician"
-        message = f"Hi {customer['first_name']}, {tech_name} is on the way! They should arrive shortly. {tenant.get('sms_signature', '')}"
-        
+        if tech_id:
+            tech = await db.technicians.find_one({"id": tech_id}, {"_id": 0})
+        tech_name = (tech.get("name") if tech else None) or "Your technician"
+        eta_time = (now + timedelta(minutes=data.estimated_minutes)).strftime("%-I:%M %p")
+        message = (
+            f"Hi {customer.get('first_name', 'there')}! "
+            f"{tech_name} from {tenant['name']} is on the way. "
+            f"Estimated arrival: {eta_time} (~{data.estimated_minutes} min)."
+        )
+        if data.include_tracking_link:
+            base_url = tenant.get("app_url", "https://app.fieldos.com")
+            message += f" Track: {base_url}/track/{tracking_token}"
+        if tenant.get("sms_signature"):
+            message += f" {tenant['sms_signature']}"
         result = await twilio_service.send_sms(
             to_phone=customer["phone"],
             body=message,
             from_phone=tenant["twilio_phone_number"]
         )
-        
-        # Log the message
-        if result["success"]:
+        sms_sent = result.get("success", False)
+        if sms_sent:
             msg = Message(
                 tenant_id=tenant_id,
-                conversation_id="",  # Will be linked if conversation exists
+                conversation_id="",
                 customer_id=customer["id"],
                 direction=MessageDirection.OUTBOUND,
                 sender_type=SenderType.SYSTEM,
                 content=message,
                 metadata={"twilio_sid": result.get("provider_message_id")}
             )
-            msg_dict = msg.model_dump(mode='json')
-            await db.messages.insert_one(msg_dict)
-    
-    return {"message": "Job marked en-route", "sms_sent": True}
+            await db.messages.insert_one(msg.model_dump(mode='json'))
+
+    return {"success": True, "sms_sent": sms_sent, "tracking_token": tracking_token}
+
+
+@v1_router.post("/jobs/{job_id}/arrived")
+async def mark_job_arrived(
+    job_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark technician as arrived on site"""
+    job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    now = datetime.now(timezone.utc)
+    await db.jobs.update_one(
+        {"id": job_id},
+        {"$set": {
+            "status": JobStatus.IN_PROGRESS.value,
+            "actual_arrival": now.isoformat(),
+            "updated_at": now.isoformat()
+        }}
+    )
+    return {"success": True, "arrived_at": now.isoformat()}
+
+
+class _CompletionPhoto(BaseModel):
+    type: str = "OTHER"
+    url: str
+    caption: Optional[str] = None
+
+
+class _AdditionalCharge(BaseModel):
+    description: str
+    amount: float
+
+
+class JobCompleteRequest(BaseModel):
+    technician_id: Optional[str] = None
+    completion_notes: Optional[str] = None
+    photos: Optional[List[_CompletionPhoto]] = None
+    signature_url: Optional[str] = None
+    additional_charges: Optional[List[_AdditionalCharge]] = None
+    send_invoice: bool = True
+    request_review: bool = True
+
+
+@v1_router.post("/jobs/{job_id}/complete")
+async def complete_job(
+    job_id: str,
+    data: JobCompleteRequest,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Complete job: mark done, auto-create invoice, send payment SMS, schedule review"""
+    import secrets as _sec
+    job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    customer = await db.customers.find_one({"id": job["customer_id"]}, {"_id": 0})
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    now = datetime.now(timezone.utc)
+
+    update_fields = {"status": JobStatus.COMPLETED.value, "completed_at": now.isoformat(), "updated_at": now.isoformat()}
+    if data.completion_notes:
+        update_fields["completion_notes"] = data.completion_notes
+    if data.photos:
+        update_fields["completion_photos"] = [p.model_dump() for p in data.photos]
+    if data.signature_url:
+        update_fields["signature_url"] = data.signature_url
+    if data.technician_id:
+        update_fields["assigned_technician_id"] = data.technician_id
+    await db.jobs.update_one({"id": job_id}, {"$set": update_fields})
+
+    invoice_doc = None
+    invoice_sent = False
+
+    if data.send_invoice and customer:
+        existing = await db.invoices.find_one({"job_id": job_id, "tenant_id": tenant_id})
+        if not existing:
+            line_items = []
+            base_amount = job.get("quote_amount", 0) or 0
+            if base_amount:
+                line_items.append({
+                    "description": f"{job.get('job_type', 'Service')} - {data.completion_notes or 'Service completed'}",
+                    "quantity": 1, "unit_price": base_amount, "total": base_amount, "type": "LABOR"
+                })
+            for charge in (data.additional_charges or []):
+                line_items.append({"description": charge.description, "quantity": 1,
+                                   "unit_price": charge.amount, "total": charge.amount, "type": "FEE"})
+            subtotal = sum(i["total"] for i in line_items)
+            inv_settings = (tenant.get("invoice_settings") or {}) if tenant else {}
+            tax_rate = inv_settings.get("default_tax_rate", 0)
+            tax_amount = round(subtotal * tax_rate / 100, 2)
+            total = round(subtotal + tax_amount, 2)
+            next_num = inv_settings.get("next_invoice_number", 1)
+            prefix = inv_settings.get("invoice_prefix", "INV")
+            invoice_number = f"{prefix}-{now.year}-{next_num:04d}"
+            await db.tenants.update_one({"id": tenant_id}, {"$set": {"invoice_settings.next_invoice_number": next_num + 1}})
+            due_date = (now + timedelta(days=inv_settings.get("default_payment_terms", 10))).date().isoformat()
+            payment_token = _sec.token_urlsafe(16)
+            invoice_doc = {
+                "id": str(uuid4()), "tenant_id": tenant_id,
+                "customer_id": job["customer_id"], "property_id": job.get("property_id"),
+                "job_id": job_id, "quote_id": job.get("quote_id"),
+                "invoice_number": invoice_number, "line_items": line_items,
+                "subtotal": subtotal, "discount_type": None, "discount_value": 0, "discount_amount": 0,
+                "tax_rate": tax_rate, "tax_amount": tax_amount, "total": total,
+                "amount_paid": 0, "amount_due": total, "status": "SENT",
+                "invoice_date": now.isoformat(), "due_date": due_date, "sent_at": now.isoformat(),
+                "payment_link_token": payment_token, "payments": [],
+                "notes": inv_settings.get("invoice_footer_text", ""),
+                "created_at": now.isoformat(), "updated_at": now.isoformat(),
+            }
+            await db.invoices.insert_one(invoice_doc)
+            await db.jobs.update_one({"id": job_id}, {"$set": {"invoice_id": invoice_doc["id"]}})
+
+            if tenant and tenant.get("twilio_phone_number") and customer.get("phone"):
+                from services.twilio_service import twilio_service
+                base_url = tenant.get("app_url", "https://app.fieldos.com")
+                payment_link = f"{base_url}/pay/{payment_token}"
+                notes_line = f"\nSummary: {data.completion_notes}" if data.completion_notes else ""
+                msg_body = (
+                    f"Hi {customer.get('first_name', 'there')}! "
+                    f"Your {job.get('job_type', 'service')} is complete.{notes_line}\n"
+                    f"Invoice #{invoice_number}: ${total:.2f}\n"
+                    f"Pay securely: {payment_link}"
+                )
+                if tenant.get("sms_signature"):
+                    msg_body += f" {tenant['sms_signature']}"
+                res = await twilio_service.send_sms(
+                    to_phone=customer["phone"], body=msg_body, from_phone=tenant["twilio_phone_number"]
+                )
+                invoice_sent = res.get("success", False)
+
+    review_scheduled_at = None
+    if data.request_review and tenant:
+        review_settings = tenant.get("review_settings") or {}
+        delay_hours = review_settings.get("delay_hours", 2)
+        review_scheduled_at = (now + timedelta(hours=delay_hours)).isoformat()
+        await db.jobs.update_one({"id": job_id}, {"$set": {"review_scheduled_at": review_scheduled_at}})
+
+    updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    return {
+        "success": True,
+        "job": serialize_doc(updated_job),
+        "invoice": serialize_doc(invoice_doc) if invoice_doc else None,
+        "invoice_sent": invoice_sent,
+        "review_scheduled": review_scheduled_at is not None,
+        "review_send_at": review_scheduled_at,
+    }
 
 
 class OnMyWayRequest(BaseModel):
@@ -1225,30 +1477,23 @@ async def send_on_my_way(
     job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
     customer = await db.customers.find_one({"id": job.get("customer_id")}, {"_id": 0})
     if not customer or not customer.get("phone"):
         raise HTTPException(status_code=400, detail="Customer phone not found")
-    
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     if not tenant or not tenant.get("twilio_phone_number"):
         raise HTTPException(status_code=400, detail="SMS not configured")
-    
     tech = await db.technicians.find_one({"id": job.get("assigned_technician_id")}, {"_id": 0}) if job.get("assigned_technician_id") else None
     tech_name = tech.get("name", "Your technician") if tech else "Your technician"
-    
     if data.custom_message:
         message = data.custom_message
     else:
         message = f"Hi {customer.get('first_name', 'there')}! {tech_name} from {tenant['name']} is on the way and will arrive in approximately {data.eta_minutes} minutes."
         if tenant.get("sms_signature"):
             message += f" {tenant['sms_signature']}"
-    
     from services.twilio_service import twilio_service
-    await twilio_service.send_sms(to_phone=customer["phone"], message=message, from_phone=tenant["twilio_phone_number"])
-    
+    await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
     await db.jobs.update_one({"id": job_id}, {"$set": {"status": JobStatus.EN_ROUTE.value, "en_route_at": datetime.now(timezone.utc).isoformat(), "eta_minutes": data.eta_minutes}})
-    
     return {"success": True, "message": "On My Way notification sent"}
 
 
@@ -1267,33 +1512,34 @@ async def request_review(
     job = await db.jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
     if job.get("status") != JobStatus.COMPLETED.value:
         raise HTTPException(status_code=400, detail="Job must be completed")
-    
     customer = await db.customers.find_one({"id": job.get("customer_id")}, {"_id": 0})
     if not customer or not customer.get("phone"):
         raise HTTPException(status_code=400, detail="Customer phone not found")
-    
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     if not tenant or not tenant.get("twilio_phone_number"):
         raise HTTPException(status_code=400, detail="SMS not configured")
-    
-    branding = tenant.get("branding", {})
-    review_urls = {"google": branding.get("google_review_url", ""), "yelp": branding.get("yelp_review_url", ""), "facebook": branding.get("facebook_review_url", "")}
+    review_settings = tenant.get("review_settings") or {}
+    branding = tenant.get("branding") or {}
+    review_urls = {
+        "google": review_settings.get("google_review_url") or branding.get("google_review_url", ""),
+        "yelp": review_settings.get("yelp_review_url") or branding.get("yelp_review_url", ""),
+        "facebook": review_settings.get("facebook_review_url") or branding.get("facebook_review_url", ""),
+    }
     review_url = review_urls.get(data.platform, "")
-    
     message = f"Hi {customer.get('first_name', 'there')}! Thank you for choosing {tenant['name']}. We hope you're satisfied with our service!"
     if review_url:
         message += f" We'd love your feedback: {review_url}"
     if tenant.get("sms_signature"):
         message += f" {tenant['sms_signature']}"
-    
     from services.twilio_service import twilio_service
-    await twilio_service.send_sms(to_phone=customer["phone"], message=message, from_phone=tenant["twilio_phone_number"])
-    
-    await db.jobs.update_one({"id": job_id}, {"$set": {"review_requested_at": datetime.now(timezone.utc).isoformat(), "review_platform": data.platform}})
-    
+    await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
+    await db.jobs.update_one({"id": job_id}, {"$set": {
+        "review_requested_at": datetime.now(timezone.utc).isoformat(),
+        "review_platform": data.platform,
+        "review_request_sent": True,
+    }})
     return {"success": True, "message": "Review request sent"}
 
 
@@ -1376,6 +1622,82 @@ async def update_quote(
     
     quote = await db.quotes.find_one({"id": quote_id}, {"_id": 0})
     return serialize_doc(quote)
+
+
+class ConvertToInvoiceRequest(BaseModel):
+    due_date: Optional[str] = None
+    send_immediately: bool = False
+
+
+@v1_router.post("/quotes/{quote_id}/convert-to-invoice")
+async def convert_quote_to_invoice(
+    quote_id: str,
+    data: ConvertToInvoiceRequest = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Convert a quote to an invoice"""
+    if data is None:
+        data = ConvertToInvoiceRequest()
+    quote = await db.quotes.find_one({"id": quote_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    due_date = data.due_date if data.due_date else (now + timedelta(days=30)).strftime("%Y-%m-%d")
+    send_immediately = data.send_immediately
+    # Generate invoice number
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    invoice_settings = (tenant or {}).get("invoice_settings") or {}
+    next_num = invoice_settings.get("next_invoice_number", 1)
+    prefix = invoice_settings.get("invoice_prefix", "INV")
+    current_year = now.year
+    invoice_number = f"{prefix}-{current_year}-{next_num:04d}"
+    # Increment counter
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {"$set": {"invoice_settings.next_invoice_number": next_num + 1}}
+    )
+    # Create invoice
+    invoice_id = str(uuid4())
+    invoice_doc = {
+        "id": invoice_id,
+        "tenant_id": tenant_id,
+        "customer_id": quote.get("customer_id", ""),
+        "job_id": quote.get("job_id") or "",
+        "amount": quote.get("amount", 0),
+        "currency": "USD",
+        "status": InvoiceStatus.SENT.value if send_immediately else InvoiceStatus.DRAFT.value,
+        "due_date": due_date,
+        "invoice_number": invoice_number,
+        "quote_id": quote_id,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    await db.invoices.insert_one(invoice_doc)
+    # Send SMS if requested
+    if send_immediately:
+        customer = await db.customers.find_one({"id": invoice_doc["customer_id"]}, {"_id": 0})
+        if customer and customer.get("phone") and tenant and tenant.get("twilio_phone_number"):
+            name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or customer.get("name", "there")
+            company = tenant.get("name", "Us")
+            amount = invoice_doc["amount"]
+            payment_link = invoice_doc.get("stripe_payment_link", "")
+            if payment_link:
+                message = f"Hi {name}! Invoice #{invoice_number} from {company} for ${amount:.2f} is ready. {payment_link}"
+            else:
+                message = f"Hi {name}! Invoice #{invoice_number} from {company} for ${amount:.2f} is ready. Please call us to arrange payment."
+            try:
+                from services.twilio_service import twilio_service
+                await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
+                await db.invoices.update_one({"id": invoice_id}, {"$set": {"sent_at": now_iso}})
+                invoice_doc["sent_at"] = now_iso
+            except Exception:
+                pass
+    # Remove _id for response
+    invoice_doc.pop("_id", None)
+    return serialize_doc(invoice_doc)
+
 
 
 # ============= INVOICES ENDPOINTS =============
@@ -1497,8 +1819,294 @@ async def mark_invoice_paid(
     
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
+
     return {"success": True, "message": "Invoice marked as paid"}
+
+
+@v1_router.post("/invoices/{invoice_id}/send")
+async def send_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Send invoice via SMS"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+    if not customer or not customer.get("phone"):
+        raise HTTPException(status_code=400, detail="Customer phone not found")
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant or not tenant.get("twilio_phone_number"):
+        raise HTTPException(status_code=400, detail="SMS not configured")
+    name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or customer.get("name", "there")
+    company = tenant.get("name", "Us")
+    number = invoice.get("invoice_number", f"INV-{invoice_id[:6].upper()}")
+    amount = invoice.get("amount", 0)
+    payment_link = invoice.get("stripe_payment_link", "")
+    if payment_link:
+        message = f"Hi {name}! Invoice #{number} from {company} for ${amount:.2f} is ready. {payment_link}"
+    else:
+        message = f"Hi {name}! Invoice #{number} from {company} for ${amount:.2f} is ready. Please call us to arrange payment."
+    from services.twilio_service import twilio_service
+    await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
+    now = datetime.now(timezone.utc).isoformat()
+    await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": {"status": InvoiceStatus.SENT.value, "sent_at": now, "updated_at": now}}
+    )
+    return {"success": True}
+
+
+@v1_router.post("/invoices/{invoice_id}/remind")
+async def remind_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Send invoice reminder via SMS"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") in [InvoiceStatus.PAID.value, "CANCELLED"]:
+        raise HTTPException(status_code=400, detail="Cannot send reminder for paid or cancelled invoice")
+    customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+    if not customer or not customer.get("phone"):
+        raise HTTPException(status_code=400, detail="Customer phone not found")
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant or not tenant.get("twilio_phone_number"):
+        raise HTTPException(status_code=400, detail="SMS not configured")
+    name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or customer.get("name", "there")
+    company = tenant.get("name", "Us")
+    number = invoice.get("invoice_number", f"INV-{invoice_id[:6].upper()}")
+    amount = invoice.get("amount", 0)
+    payment_link = invoice.get("stripe_payment_link", "")
+    if payment_link:
+        message = f"Friendly reminder: Invoice #{number} from {company} for ${amount:.2f} is still outstanding. {payment_link}"
+    else:
+        message = f"Friendly reminder: Invoice #{number} from {company} for ${amount:.2f} is still outstanding. Please call us to arrange payment."
+    from services.twilio_service import twilio_service
+    await twilio_service.send_sms(to_phone=customer["phone"], body=message, from_phone=tenant["twilio_phone_number"])
+    now = datetime.now(timezone.utc).isoformat()
+    reminder_count = invoice.get("reminder_count", 0) + 1
+    await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": {"reminder_count": reminder_count, "last_reminder_at": now, "updated_at": now}}
+    )
+    return {"success": True}
+
+
+class RecordPaymentRequest(BaseModel):
+    amount: float
+    method: Optional[str] = "CASH"
+    notes: Optional[str] = ""
+
+
+@v1_router.post("/invoices/{invoice_id}/record-payment")
+async def record_invoice_payment(
+    invoice_id: str,
+    data: RecordPaymentRequest,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Record a payment against an invoice"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    now = datetime.now(timezone.utc).isoformat()
+    payment_entry = {
+        "amount": data.amount,
+        "method": data.method or "CASH",
+        "notes": data.notes or "",
+        "recorded_at": now
+    }
+    payments = invoice.get("payments", [])
+    payments.append(payment_entry)
+    amount_paid = sum(p.get("amount", 0) for p in payments)
+    invoice_total = invoice.get("amount", 0)
+    amount_due = invoice_total - amount_paid
+    update_fields = {
+        "payments": payments,
+        "amount_paid": amount_paid,
+        "amount_due": max(amount_due, 0),
+        "updated_at": now
+    }
+    if amount_due <= 0:
+        update_fields["status"] = InvoiceStatus.PAID.value
+        update_fields["paid_at"] = now
+    else:
+        update_fields["status"] = InvoiceStatus.PARTIALLY_PAID.value
+    await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": update_fields}
+    )
+    updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    return serialize_doc(updated)
+
+
+@v1_router.post("/invoices/{invoice_id}/void")
+async def void_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Void an invoice"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") == InvoiceStatus.PAID.value:
+        raise HTTPException(status_code=400, detail="Cannot void a paid invoice")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.invoices.update_one(
+        {"id": invoice_id, "tenant_id": tenant_id},
+        {"$set": {"status": "CANCELLED", "voided_at": now, "updated_at": now}}
+    )
+    return {"success": True}
+
+
+@v1_router.delete("/invoices/{invoice_id}")
+async def delete_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a draft invoice"""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") != InvoiceStatus.DRAFT.value:
+        raise HTTPException(status_code=400, detail="Only DRAFT invoices can be deleted")
+    await db.invoices.delete_one({"id": invoice_id, "tenant_id": tenant_id})
+    return {"success": True}
+
+
+
+@v1_router.get("/invoices/public/{token}")
+async def get_invoice_by_token(token: str):
+    """
+    Public endpoint — no auth required.
+    Returns invoice data for the customer-facing /pay/:token page.
+    """
+    invoice = await db.invoices.find_one({"payment_link_token": token}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found or link has expired")
+
+    tenant = await db.tenants.find_one({"id": invoice.get("tenant_id")}, {"_id": 0})
+    customer = await db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0})
+
+    cust_name = ""
+    if customer:
+        cust_name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or customer.get("name", "")
+
+    company_info = {
+        "name": (tenant or {}).get("name", "FieldOS"),
+        "logo_url": ((tenant or {}).get("branding") or {}).get("logo_url"),
+        "primary_color": ((tenant or {}).get("branding") or {}).get("primary_color", "#0066CC"),
+        "phone": (tenant or {}).get("primary_phone"),
+    }
+
+    return {
+        "id": invoice["id"],
+        "invoice_number": invoice.get("invoice_number", f"INV-{invoice['id'][:6].upper()}"),
+        "amount": invoice.get("amount", 0),
+        "status": invoice.get("status", "SENT"),
+        "due_date": invoice.get("due_date"),
+        "notes": invoice.get("notes", ""),
+        "stripe_payment_link": invoice.get("stripe_payment_link"),
+        "paid_at": invoice.get("paid_at"),
+        "customer": {"name": cust_name} if cust_name else None,
+        "company": company_info,
+    }
+
+
+# ============= INVOICE SETTINGS =============
+
+@v1_router.get("/settings/invoice")
+async def get_invoice_settings(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get invoice settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    settings = tenant.get("invoice_settings") or {}
+    stripe_key = tenant.get("stripe_secret_key", "")
+    if stripe_key and len(stripe_key) > 8:
+        stripe_key = stripe_key[:7] + "..." + stripe_key[-4:]
+    return {**settings, "stripe_secret_key": stripe_key, "stripe_configured": bool(tenant.get("stripe_secret_key"))}
+
+
+@v1_router.put("/settings/invoice")
+async def update_invoice_settings(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update invoice settings"""
+    stripe_key = data.pop("stripe_secret_key", None)
+    set_data = {f"invoice_settings.{k}": v for k, v in data.items()
+                if k not in ("stripe_configured",) and v is not None}
+    if stripe_key and "..." not in stripe_key and len(stripe_key) > 10:
+        set_data["stripe_secret_key"] = stripe_key
+    set_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.tenants.update_one({"id": tenant_id}, {"$set": set_data})
+    return {"success": True}
+
+
+# ============= VOICE AI SETTINGS =============
+
+VOICE_FIELDS = [
+    "voice_ai_enabled", "elevenlabs_api_key", "elevenlabs_voice_id",
+    "voice_provider", "voice_model", "voice_name", "voice_greeting",
+    "voice_system_prompt", "voice_collect_fields", "voice_business_hours",
+    "voice_after_hours_message",
+]
+
+@v1_router.get("/settings/voice")
+async def get_voice_settings(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get voice AI settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    settings = {f: tenant.get(f) for f in VOICE_FIELDS}
+    # Mask ElevenLabs API key
+    key = settings.get("elevenlabs_api_key", "")
+    if key and len(key) > 8:
+        settings["elevenlabs_api_key_masked"] = key[:4] + "..." + key[-4:]
+        settings["elevenlabs_configured"] = True
+    else:
+        settings["elevenlabs_api_key_masked"] = ""
+        settings["elevenlabs_configured"] = False
+    settings["elevenlabs_api_key"] = ""  # never return plaintext key
+    return settings
+
+
+@v1_router.put("/settings/voice")
+async def update_voice_settings(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update voice AI settings"""
+    allowed = set(VOICE_FIELDS)
+    set_data = {}
+    for k, v in data.items():
+        if k not in allowed:
+            continue
+        # Don't overwrite the real key with a masked value or empty
+        if k == "elevenlabs_api_key":
+            if not v or "..." in str(v):
+                continue
+        set_data[k] = v
+    if not set_data:
+        return {"success": True}
+    set_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.tenants.update_one({"id": tenant_id}, {"$set": set_data})
+    return {"success": True}
 
 
 # ============= CONVERSATIONS & MESSAGES =============
@@ -2466,620 +3074,6 @@ async def get_reports_summary(
             "conversion_rate": round(accepted_quotes / total_quotes * 100, 1) if total_quotes > 0 else 0
         }
     }
-
-
-# ============= VAPI ENDPOINTS =============
-
-@v1_router.post("/vapi/create-lead")
-async def vapi_create_lead(
-    data: VapiCreateLeadRequest,
-    _: bool = Depends(verify_vapi_secret)
-):
-    """Create lead from Vapi call"""
-    try:
-        logger.info(f"Vapi create-lead called with data: {data.model_dump(mode='json')}")
-        
-        # Get tenant by slug
-        tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
-        if not tenant:
-            logger.error(f"Tenant not found: {data.tenant_slug}")
-            raise HTTPException(status_code=404, detail="Tenant not found")
-        
-        tenant_id = tenant["id"]
-        
-        # Resolve field aliases (support both old Make.com names and new names)
-        phone_raw = data.caller_phone or data.caller_number
-        name = data.caller_name or data.captured_name
-        description = data.description or data.issue_description
-        issue_type = data.issue_type or data.issue_description  # Use issue_description as issue_type if not provided
-        
-        # Normalize phone to E.164 format (+1XXXXXXXXXX)
-        phone = normalize_phone_e164(phone_raw) if phone_raw else None
-        
-        # Parse address - support both structured and single-line formats
-        address_line1 = data.address_line1
-        city = data.city
-        state = data.state
-        postal_code = data.postal_code
-        
-        if data.captured_address and not address_line1:
-            # Try to parse "123 Main St, Chicago, IL 60601" format
-            parts = [p.strip() for p in data.captured_address.split(',')]
-            if len(parts) >= 1:
-                address_line1 = parts[0]
-            if len(parts) >= 2:
-                city = parts[1]
-            if len(parts) >= 3:
-                # Try to parse "IL 60601" or just "IL"
-                state_zip = parts[2].strip().split()
-                if len(state_zip) >= 1:
-                    state = state_zip[0]
-                if len(state_zip) >= 2:
-                    postal_code = state_zip[1]
-        
-        if not phone:
-            raise HTTPException(status_code=400, detail="Phone number is required (caller_phone or caller_number)")
-        
-        # Find or create customer
-        customer = await db.customers.find_one(
-            {"phone": phone, "tenant_id": tenant_id}, {"_id": 0}
-        )
-        
-        if not customer:
-            # Parse name
-            first_name = "Unknown"
-            last_name = ""
-            if name:
-                parts = name.split(" ", 1)
-                first_name = parts[0]
-                last_name = parts[1] if len(parts) > 1 else ""
-            
-            # Convert empty email to None to pass validation
-            email = data.captured_email if data.captured_email and data.captured_email.strip() else None
-            
-            customer = Customer(
-                tenant_id=tenant_id,
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone,
-                email=email
-            )
-            customer_dict = customer.model_dump(mode='json')
-            await db.customers.insert_one(customer_dict)
-            customer = customer_dict
-        
-        # Create property if address provided
-        property_id = None
-        if address_line1:
-            prop = Property(
-                tenant_id=tenant_id,
-                customer_id=customer["id"],
-                address_line1=address_line1,
-                city=city or "",
-                state=state or "",
-                postal_code=postal_code or ""
-            )
-            prop_dict = prop.model_dump(mode='json')
-            await db.properties.insert_one(prop_dict)
-            property_id = prop.id
-        
-        # Create lead
-        urgency_value = Urgency.ROUTINE
-        if data.urgency:
-            try:
-                urgency_value = Urgency(data.urgency.upper())
-            except ValueError:
-                pass
-        
-        lead = Lead(
-            tenant_id=tenant_id,
-            customer_id=customer["id"],
-            property_id=property_id,
-            source=LeadSource.VAPI_CALL,
-            channel=LeadChannel.VOICE,
-            status=LeadStatus.NEW,
-            issue_type=issue_type,
-            urgency=urgency_value,
-            description=description
-        )
-        lead_dict = lead.model_dump(mode='json')
-        lead_dict["caller_name"] = name  # Store caller name directly on lead
-        lead_dict["caller_phone"] = phone  # Store caller phone directly on lead
-        await db.leads.insert_one(lead_dict)
-        
-        # Find or create conversation (prevent duplicates)
-        conv = await db.conversations.find_one(
-            {"customer_id": customer["id"], "tenant_id": tenant_id},
-            {"_id": 0}
-        )
-        
-        if not conv:
-            new_conv = Conversation(
-                tenant_id=tenant_id,
-                customer_id=customer["id"],
-                lead_id=lead.id,
-                primary_channel=PreferredChannel.SMS
-            )
-            conv_dict = new_conv.model_dump(mode='json')
-            await db.conversations.insert_one(conv_dict)
-            conv = conv_dict
-        else:
-            # Update conversation to link to new lead
-            await db.conversations.update_one(
-                {"id": conv["id"]},
-                {"$set": {"lead_id": lead.id, "updated_at": datetime.now(timezone.utc).isoformat()}}
-            )
-        
-        # Return clear response for Vapi - structured for AI to understand
-        first_name = customer.get("first_name", "there")
-        conv_id = conv.get("id") if isinstance(conv, dict) else conv.id
-        return {
-            "result": "success",
-            "status": "lead_created",
-            "lead_id": lead.id,
-            "customer_id": customer["id"],
-            "property_id": property_id,
-            "conversation_id": conv_id,
-            "customer_name": first_name,
-            "instructions": f"IMPORTANT: The lead has been successfully created in the system. The customer {first_name} is now registered. Their customer ID is {customer['id']}. You should now ask the customer what date they would like to schedule their service appointment, then call the check-availability tool with that date."
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in vapi_create_lead: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error creating lead: {str(e)}")
-
-
-@v1_router.post("/vapi/get-current-date")
-async def vapi_get_current_date(
-    _: bool = Depends(verify_vapi_secret)
-):
-    """
-    Get current server date - Vapi utility tool.
-    Call this tool first if you need to know today's date before checking availability.
-    """
-    current_date = datetime.now(timezone.utc)
-    tomorrow = current_date + timedelta(days=1)
-    
-    return {
-        "result": "success",
-        "today": {
-            "date": current_date.strftime("%Y-%m-%d"),
-            "formatted": current_date.strftime("%A, %B %d, %Y"),
-            "day_of_week": current_date.strftime("%A")
-        },
-        "tomorrow": {
-            "date": tomorrow.strftime("%Y-%m-%d"),
-            "formatted": tomorrow.strftime("%A, %B %d, %Y"),
-            "day_of_week": tomorrow.strftime("%A")
-        },
-        "instructions": f"Today is {current_date.strftime('%A, %B %d, %Y')}. Tomorrow is {tomorrow.strftime('%A, %B %d, %Y')}. Use the 'date' values (YYYY-MM-DD format) when calling check-availability."
-    }
-
-
-@v1_router.post("/vapi/check-availability")
-async def vapi_check_availability(
-    data: VapiCheckAvailabilityRequest,
-    _: bool = Depends(verify_vapi_secret)
-):
-    """Check available time windows"""
-    import pytz
-    
-    tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    tenant_id = tenant["id"]
-    
-    # Use tenant's timezone for date calculations (default to America/New_York)
-    tenant_tz_str = tenant.get("timezone", "America/New_York")
-    try:
-        tenant_tz = pytz.timezone(tenant_tz_str)
-    except:
-        tenant_tz = pytz.timezone("America/New_York")
-    
-    # Get current date in tenant's timezone
-    current_date = datetime.now(tenant_tz)
-    current_date_str = current_date.strftime("%Y-%m-%d")
-    current_date_formatted = current_date.strftime("%A, %B %d, %Y")
-    
-    # Parse date - handle relative dates like "tomorrow", "today"
-    date_input = data.date.lower().strip() if data.date else current_date_str
-    
-    if date_input in ["today", "now"]:
-        target_date = current_date
-    elif date_input == "tomorrow":
-        target_date = current_date + timedelta(days=1)
-    else:
-        # Try to parse YYYY-MM-DD format
-        try:
-            target_date = datetime.strptime(data.date, "%Y-%m-%d")
-            # Make it timezone-aware in tenant's timezone
-            target_date = tenant_tz.localize(target_date)
-        except ValueError:
-            # Return helpful error with current date reference
-            return {
-                "result": "error",
-                "status": "invalid_date",
-                "error": f"Invalid date format. Use YYYY-MM-DD format.",
-                "current_server_date": current_date_str,
-                "current_server_date_formatted": current_date_formatted,
-                "instructions": f"IMPORTANT: The date format was invalid. Today's date is {current_date_formatted}. Ask the customer to specify a date, then call this tool again with the date in YYYY-MM-DD format. For example, if they say 'tomorrow', you should pass '{(current_date + timedelta(days=1)).strftime('%Y-%m-%d')}'."
-            }
-    
-    # Define standard time windows
-    windows = [
-        {"start": "08:00", "end": "12:00", "label": "Morning (8am-12pm)"},
-        {"start": "12:00", "end": "17:00", "label": "Afternoon (12pm-5pm)"},
-    ]
-    
-    # Check existing jobs for that date
-    date_start = target_date.replace(hour=0, minute=0, second=0)
-    date_end = target_date.replace(hour=23, minute=59, second=59)
-    
-    existing_jobs = await db.jobs.count_documents({
-        "tenant_id": tenant_id,
-        "service_window_start": {
-            "$gte": date_start.isoformat(),
-            "$lte": date_end.isoformat()
-        },
-        "status": {"$nin": [JobStatus.CANCELLED.value, JobStatus.COMPLETED.value]}
-    })
-    
-    # Simple capacity check (assume max 4 jobs per window)
-    max_capacity = 4
-    available_slots = max(0, max_capacity - existing_jobs)
-    
-    available_windows = []
-    for window in windows:
-        if available_slots > 0:
-            # Build full ISO datetime strings for the booking
-            start_hour, start_min = map(int, window["start"].split(":"))
-            end_hour, end_min = map(int, window["end"].split(":"))
-            
-            window_start_dt = target_date.replace(hour=start_hour, minute=start_min, second=0, microsecond=0)
-            window_end_dt = target_date.replace(hour=end_hour, minute=end_min, second=0, microsecond=0)
-            
-            available_windows.append({
-                "date": target_date.strftime("%Y-%m-%d"),  # Always use calculated date, not input
-                "start": window["start"],
-                "end": window["end"],
-                "label": window["label"],
-                "available": True,
-                # Include full ISO datetime strings for book-job
-                "window_start": window_start_dt.isoformat(),
-                "window_end": window_end_dt.isoformat()
-            })
-            available_slots -= 1
-    
-    # Format date for human-readable response
-    date_formatted = target_date.strftime("%A, %B %d, %Y")
-    
-    # Format response for Vapi - structured for AI to understand
-    # Include current server date so Vapi AI knows the reference point
-    if len(available_windows) == 0:
-        return {
-            "result": "no_availability",
-            "status": "fully_booked",
-            "date": target_date.strftime("%Y-%m-%d"),
-            "date_formatted": date_formatted,
-            "current_server_date": current_date_str,
-            "current_server_date_formatted": current_date_formatted,
-            "windows": [],
-            "has_availability": False,
-            "instructions": f"IMPORTANT: There are NO available time slots for {date_formatted}. Tell the customer that unfortunately, that date is fully booked. Ask them to suggest an alternative date and you will check availability for that date instead. Remember: Today is {current_date_formatted}."
-        }
-    else:
-        slots_text = ", ".join([w["label"] for w in available_windows])
-        return {
-            "result": "success",
-            "status": "slots_available",
-            "date": target_date.strftime("%Y-%m-%d"),
-            "date_formatted": date_formatted,
-            "current_server_date": current_date_str,
-            "current_server_date_formatted": current_date_formatted,
-            "windows": available_windows,
-            "has_availability": True,
-            "available_slots": slots_text,
-            "instructions": f"IMPORTANT: Good news! For {date_formatted}, the following time slots are available: {slots_text}. Tell the customer these options and ask which one works best for them. Once they choose, call the book-job tool using the window_start and window_end values from the chosen slot to complete the booking. Remember: Today is {current_date_formatted}."
-        }
-
-
-@v1_router.post("/vapi/book-job")
-async def vapi_book_job(
-    data: VapiBookJobRequest,
-    _: bool = Depends(verify_vapi_secret)
-):
-    """Book a job from Vapi"""
-    tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    tenant_id = tenant["id"]
-    
-    # Verify customer and property
-    customer = await db.customers.find_one({"id": data.customer_id, "tenant_id": tenant_id}, {"_id": 0})
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    
-    prop = await db.properties.find_one({"id": data.property_id, "tenant_id": tenant_id}, {"_id": 0})
-    if not prop:
-        raise HTTPException(status_code=404, detail="Property not found")
-    
-    # Parse job type
-    try:
-        job_type = JobType(data.job_type.upper())
-    except ValueError:
-        job_type = JobType.DIAGNOSTIC
-    
-    # Parse dates
-    try:
-        window_start = datetime.fromisoformat(data.window_start.replace('Z', '+00:00'))
-        window_end = datetime.fromisoformat(data.window_end.replace('Z', '+00:00'))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid datetime format")
-    
-    # Get lead urgency for quote calculation (if lead exists)
-    lead_urgency = None
-    if data.lead_id:
-        lead = await db.leads.find_one({"id": data.lead_id}, {"_id": 0, "urgency": 1})
-        if lead:
-            lead_urgency = lead.get("urgency")
-    
-    # Check for existing job for this lead to prevent duplicates (idempotency)
-    if data.lead_id:
-        existing_job = await db.jobs.find_one({
-            "lead_id": data.lead_id,
-            "tenant_id": tenant_id,
-            "status": {"$in": ["BOOKED", "EN_ROUTE", "ON_SITE"]}
-        }, {"_id": 0})
-        
-        if existing_job:
-            # Return existing job info instead of creating duplicate
-            customer = await db.customers.find_one({"id": data.customer_id}, {"_id": 0})
-            window_start_dt = datetime.fromisoformat(existing_job["service_window_start"])
-            window_end_dt = datetime.fromisoformat(existing_job["service_window_end"])
-            window_date = window_start_dt.strftime("%A, %B %d")
-            window_time_str = f"{window_start_dt.strftime('%I:%M %p')} to {window_end_dt.strftime('%I:%M %p')}"
-            customer_name = customer.get("first_name", "Customer") if customer else "Customer"
-            
-            return {
-                "result": "success",
-                "status": "job_already_booked",
-                "job_id": existing_job["id"],
-                "booking_details": {
-                    "date": window_date,
-                    "time_window": window_time_str,
-                    "customer_name": customer_name
-                },
-                "sms_sent": False,
-                "instructions": f"IMPORTANT: A job is already booked for this lead! Tell {customer_name} that their service appointment was already confirmed for {window_date} between {window_time_str}. Ask if there's anything else you can help them with."
-            }
-    
-    # Calculate quote amount based on job type and urgency
-    quote_amount = calculate_quote_amount(job_type.value, lead_urgency)
-    
-    # Create job
-    job = Job(
-        tenant_id=tenant_id,
-        customer_id=data.customer_id,
-        property_id=data.property_id,
-        lead_id=data.lead_id,
-        job_type=job_type,
-        priority=JobPriority.NORMAL,
-        service_window_start=window_start,
-        service_window_end=window_end,
-        status=JobStatus.BOOKED,
-        created_by=JobCreatedBy.AI,
-        quote_amount=quote_amount
-    )
-    
-    job_dict = job.model_dump(mode='json')
-    await db.jobs.insert_one(job_dict)
-    
-    # Create a Quote record linked to the job
-    lead_data = None
-    if data.lead_id:
-        lead_data = await db.leads.find_one({"id": data.lead_id}, {"_id": 0})
-    
-    quote_description = f"{job_type.value} service"
-    if lead_data:
-        if lead_data.get("issue_type"):
-            quote_description = f"{job_type.value} - {lead_data.get('issue_type')}"
-        if lead_data.get("description"):
-            quote_description += f"\n{lead_data.get('description')}"
-    
-    quote = Quote(
-        tenant_id=tenant_id,
-        customer_id=data.customer_id,
-        property_id=data.property_id,
-        job_id=job.id,
-        amount=quote_amount,
-        description=quote_description,
-        status=QuoteStatus.SENT  # Auto-sent since job is booked
-    )
-    
-    quote_dict = quote.model_dump(mode='json')
-    quote_dict["sent_at"] = datetime.now(timezone.utc).isoformat()
-    await db.quotes.insert_one(quote_dict)
-    
-    # Link quote to job
-    await db.jobs.update_one(
-        {"id": job.id},
-        {"$set": {"quote_id": quote.id}}
-    )
-    
-    # Update lead status
-    if data.lead_id:
-        await db.leads.update_one(
-            {"id": data.lead_id},
-            {"$set": {"status": LeadStatus.JOB_BOOKED.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
-        )
-    
-    # Send confirmation SMS and store in conversation
-    if tenant.get("twilio_phone_number"):
-        from services.twilio_service import twilio_service
-        
-        window_date = window_start.strftime("%A, %B %d")
-        window_time = f"{window_start.strftime('%I:%M %p')} - {window_end.strftime('%I:%M %p')}"
-        
-        sms_sig_confirm = (tenant.get('sms_signature') or '').strip()
-        message = f"Hi {customer['first_name']}, your service visit is confirmed for {window_date}, {window_time}. We'll send a reminder before your appointment.{' ' + sms_sig_confirm if sms_sig_confirm else ''}"
-        
-        sms_result = await twilio_service.send_sms(
-            to_phone=customer["phone"],
-            body=message,
-            from_phone=tenant["twilio_phone_number"]
-        )
-        
-        # Find or create conversation and store the message
-        conv = await db.conversations.find_one(
-            {"customer_id": data.customer_id, "tenant_id": tenant_id},
-            {"_id": 0}
-        )
-        
-        if conv:
-            # Store the confirmation message
-            msg = Message(
-                tenant_id=tenant_id,
-                conversation_id=conv["id"],
-                customer_id=data.customer_id,
-                direction=MessageDirection.OUTBOUND,
-                sender_type=SenderType.SYSTEM,
-                channel=PreferredChannel.SMS,
-                content=message
-            )
-            msg_dict = msg.model_dump(mode='json')
-            msg_dict["metadata"] = {"twilio_sid": sms_result.get("provider_message_id"), "job_id": job.id}
-            await db.messages.insert_one(msg_dict)
-            
-            # Update conversation
-            await db.conversations.update_one(
-                {"id": conv["id"]},
-                {"$set": {
-                    "last_message_at": datetime.now(timezone.utc).isoformat(),
-                    "last_message_from": SenderType.SYSTEM.value,
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                }}
-            )
-        
-        # Send quote SMS with payment link placeholder (continuation, no greeting)
-        sms_sig = (tenant.get('sms_signature') or '').strip()
-        quote_message = f"Your service quote for {job_type.value} is ${quote_amount:.2f}. Pay securely here: [YOUR PAYMENT LINK HERE]. Reply with any questions!{' ' + sms_sig if sms_sig else ''}"
-        
-        quote_sms_result = await twilio_service.send_sms(
-            to_phone=customer["phone"],
-            body=quote_message,
-            from_phone=tenant["twilio_phone_number"]
-        )
-        
-        # Store the quote SMS in conversation
-        if conv:
-            quote_msg = Message(
-                tenant_id=tenant_id,
-                conversation_id=conv["id"],
-                customer_id=data.customer_id,
-                direction=MessageDirection.OUTBOUND,
-                sender_type=SenderType.SYSTEM,
-                channel=PreferredChannel.SMS,
-                content=quote_message
-            )
-            quote_msg_dict = quote_msg.model_dump(mode='json')
-            quote_msg_dict["metadata"] = {"twilio_sid": quote_sms_result.get("provider_message_id"), "quote_id": quote.id}
-            await db.messages.insert_one(quote_msg_dict)
-    
-    # Format confirmation for Vapi - structured for AI to understand
-    window_date = window_start.strftime("%A, %B %d")
-    window_time_str = f"{window_start.strftime('%I:%M %p')} to {window_end.strftime('%I:%M %p')}"
-    customer_name = customer.get("first_name", "Customer")
-    
-    return {
-        "result": "success",
-        "status": "job_booked",
-        "job_id": job.id,
-        "booking_details": {
-            "date": window_date,
-            "time_window": window_time_str,
-            "customer_name": customer_name
-        },
-        "sms_sent": True,
-        "instructions": f"IMPORTANT: The appointment has been SUCCESSFULLY BOOKED! Tell {customer_name} the following: Their service appointment is confirmed for {window_date} between {window_time_str}. They will receive a confirmation text message shortly. Ask if there's anything else you can help them with, then thank them for calling and end the call politely."
-    }
-
-
-@v1_router.post("/vapi/send-sms")
-async def vapi_send_sms(
-    data: VapiSendSmsRequest,
-    _: bool = Depends(verify_vapi_secret)
-):
-    """Send SMS via Vapi"""
-    tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    if not tenant.get("twilio_phone_number"):
-        raise HTTPException(status_code=400, detail="Tenant has no Twilio phone configured")
-    
-    from services.twilio_service import twilio_service
-    
-    result = await twilio_service.send_sms(
-        to_phone=data.to_phone,
-        body=data.message,
-        from_phone=tenant["twilio_phone_number"]
-    )
-    
-    if result["success"]:
-        return {
-            "success": True,
-            "message_id": result.get("provider_message_id"),
-            "message": f"SMS sent successfully to {data.to_phone}."
-        }
-    else:
-        return {
-            "success": False,
-            "error": result.get("error"),
-            "message": f"Failed to send SMS: {result.get('error', 'Unknown error')}"
-        }
-
-
-@v1_router.post("/vapi/call-summary")
-async def vapi_call_summary(
-    data: VapiCallSummaryRequest,
-    _: bool = Depends(verify_vapi_secret)
-):
-    """Log call summary from Vapi"""
-    tenant = await db.tenants.find_one({"slug": data.tenant_slug}, {"_id": 0})
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    tenant_id = tenant["id"]
-    
-    # Get lead
-    lead = await db.leads.find_one({"id": data.lead_id, "tenant_id": tenant_id}, {"_id": 0})
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    
-    # Find conversation
-    conv = await db.conversations.find_one({"lead_id": data.lead_id}, {"_id": 0})
-    
-    # Create summary message
-    msg = Message(
-        tenant_id=tenant_id,
-        conversation_id=conv["id"] if conv else "",
-        customer_id=lead.get("customer_id", ""),
-        lead_id=data.lead_id,
-        direction=MessageDirection.INBOUND,
-        sender_type=SenderType.SYSTEM,
-        channel=PreferredChannel.CALL,
-        content=data.summary,
-        is_call_summary=True,
-        metadata={"vapi_session_id": data.vapi_session_id}
-    )
-    
-    msg_dict = msg.model_dump(mode='json')
-    await db.messages.insert_one(msg_dict)
-    
-    return {"success": True, "message_id": msg.id}
 
 
 # ============= SELF-HOSTED VOICE AI (TWILIO CONVERSATIONRELAY) =============
@@ -5700,6 +5694,227 @@ async def update_branding_settings(
     return {"success": True, "branding": filtered_branding}
 
 
+# ============= REVIEW SETTINGS =============
+
+@v1_router.get("/settings/reviews")
+async def get_review_settings(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get tenant review request settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return tenant.get("review_settings") or {}
+
+
+@v1_router.put("/settings/reviews")
+async def update_review_settings(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update tenant review request settings"""
+    allowed = [
+        "enabled", "delay_hours", "google_review_url", "yelp_review_url",
+        "facebook_review_url", "preferred_platform", "message_template"
+    ]
+    filtered = {k: v for k, v in data.items() if k in allowed}
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {"$set": {"review_settings": filtered, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True, "review_settings": filtered}
+
+
+# Custom Fields endpoints
+@v1_router.get("/settings/custom-fields")
+async def get_custom_fields(tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Get tenant's custom field definitions"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {"custom_fields": tenant.get("custom_fields", [])}
+
+@v1_router.post("/settings/custom-fields")
+async def create_custom_field(data: dict, tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Create a new custom field"""
+    if current_user.get("role") not in ["OWNER", "ADMIN", "SUPERADMIN"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    field = {
+        "id": str(uuid4()),
+        "name": data.get("name"),
+        "slug": data.get("slug", data.get("name", "").lower().replace(" ", "_")),
+        "type": data.get("type", "TEXT"),  # TEXT, NUMBER, SELECT, MULTISELECT, DATE, BOOLEAN
+        "options": data.get("options", []),
+        "applies_to": data.get("applies_to", "job"),  # job, customer, property
+        "required": data.get("required", False),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {"$push": {"custom_fields": field}}
+    )
+    return {"success": True, "field": field}
+
+@v1_router.put("/settings/custom-fields/{field_id}")
+async def update_custom_field(field_id: str, data: dict, tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Update a custom field"""
+    if current_user.get("role") not in ["OWNER", "ADMIN", "SUPERADMIN"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update_data = {k: v for k, v in data.items() if k not in ["id", "created_at"]}
+
+    result = await db.tenants.update_one(
+        {"id": tenant_id, "custom_fields.id": field_id},
+        {"$set": {f"custom_fields.$.{k}": v for k, v in update_data.items()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Custom field not found")
+
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    field = next((f for f in tenant.get("custom_fields", []) if f["id"] == field_id), None)
+    return {"success": True, "field": field}
+
+@v1_router.delete("/settings/custom-fields/{field_id}")
+async def delete_custom_field(field_id: str, tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Delete a custom field"""
+    if current_user.get("role") not in ["OWNER", "ADMIN", "SUPERADMIN"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    await db.tenants.update_one(
+        {"id": tenant_id},
+        {"$pull": {"custom_fields": {"id": field_id}}}
+    )
+    return {"success": True}
+
+@v1_router.get("/settings/industry")
+async def get_industry_settings(tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Get tenant's industry settings"""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {
+        "industry_slug": tenant.get("industry_slug", ""),
+        "custom_job_types": tenant.get("custom_job_types", []),
+        "disabled_job_types": tenant.get("disabled_job_types", [])
+    }
+
+@v1_router.put("/settings/industry")
+async def update_industry_settings(data: dict, tenant_id: str = Depends(get_tenant_id), current_user: dict = Depends(get_current_user)):
+    """Update tenant's industry settings"""
+    if current_user.get("role") not in ["OWNER", "ADMIN", "SUPERADMIN"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update = {}
+    if "industry_slug" in data:
+        update["industry_slug"] = data["industry_slug"]
+    if "custom_job_types" in data:
+        update["custom_job_types"] = data["custom_job_types"]
+    if "disabled_job_types" in data:
+        update["disabled_job_types"] = data["disabled_job_types"]
+
+    if update:
+        update["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.tenants.update_one({"id": tenant_id}, {"$set": update})
+
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    return {
+        "industry_slug": tenant.get("industry_slug", ""),
+        "custom_job_types": tenant.get("custom_job_types", []),
+        "disabled_job_types": tenant.get("disabled_job_types", [])
+    }
+
+
+@v1_router.get("/reviews/pending")
+async def get_pending_reviews(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get jobs that have review requests scheduled but not yet sent"""
+    jobs = await db.jobs.find({
+        "tenant_id": tenant_id,
+        "status": "COMPLETED",
+        "review_scheduled_at": {"$exists": True},
+        "review_request_sent": {"$ne": True},
+    }, {"_id": 0}).to_list(200)
+    return serialize_docs(jobs)
+
+
+@v1_router.get("/reviews/stats")
+async def get_review_stats(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get review request statistics"""
+    total_completed = await db.jobs.count_documents({"tenant_id": tenant_id, "status": "COMPLETED"})
+    total_requested = await db.jobs.count_documents({"tenant_id": tenant_id, "review_request_sent": True})
+    pending = await db.jobs.count_documents({
+        "tenant_id": tenant_id,
+        "status": "COMPLETED",
+        "review_scheduled_at": {"$exists": True},
+        "review_request_sent": {"$ne": True},
+    })
+    return {
+        "total_completed": total_completed,
+        "review_requests_sent": total_requested,
+        "pending_review_requests": pending,
+        "request_rate": round(total_requested / total_completed * 100, 1) if total_completed else 0,
+    }
+
+
+# ============= PUBLIC TRACKING =============
+
+@api_router.get("/track/{token}")
+async def get_tracking_info(token: str):
+    """Public tracking page - no auth required"""
+    job = await db.jobs.find_one({"tracking_token": token}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Tracking link not found or expired")
+
+    tenant = await db.tenants.find_one({"id": job["tenant_id"]}, {"_id": 0})
+    customer = await db.customers.find_one({"id": job["customer_id"]}, {"_id": 0})
+    prop = await db.properties.find_one({"id": job.get("property_id")}, {"_id": 0}) if job.get("property_id") else None
+    tech = None
+    if job.get("assigned_technician_id"):
+        tech_doc = await db.technicians.find_one({"id": job["assigned_technician_id"]}, {"_id": 0})
+        if tech_doc:
+            tech = {"name": tech_doc.get("name"), "photo_url": tech_doc.get("photo_url"), "vehicle_info": tech_doc.get("vehicle_info")}
+
+    minutes_remaining = None
+    if job.get("estimated_arrival"):
+        try:
+            eta = datetime.fromisoformat(job["estimated_arrival"].replace("Z", "+00:00"))
+            diff = (eta - datetime.now(timezone.utc)).total_seconds() / 60
+            minutes_remaining = max(0, int(diff))
+        except Exception:
+            pass
+
+    return {
+        "status": job.get("status"),
+        "job_type": job.get("job_type"),
+        "service_window_start": job.get("service_window_start"),
+        "service_window_end": job.get("service_window_end"),
+        "en_route_at": job.get("en_route_at"),
+        "estimated_arrival": job.get("estimated_arrival"),
+        "actual_arrival": job.get("actual_arrival"),
+        "minutes_remaining": minutes_remaining,
+        "technician": tech,
+        "company": {
+            "name": tenant.get("name") if tenant else None,
+            "phone": tenant.get("primary_phone") if tenant else None,
+            "logo_url": (tenant.get("branding") or {}).get("logo_url") if tenant else None,
+        },
+        "property_address": (
+            f"{prop.get('address_line1', '')}, {prop.get('city', '')}, {prop.get('state', '')}"
+            if prop else None
+        ),
+        "customer_first_name": customer.get("first_name") if customer else None,
+    }
+
+
 # ============= ENHANCED CUSTOMER PORTAL =============
 
 @v1_router.get("/portal/{token}/branding")
@@ -6306,12 +6521,16 @@ async def health_check():
 
 # Initialize and include modular routes
 from routes.admin import router as admin_router, init_admin_routes
+from routes.billing import router as billing_router
+from routes.integrations import router as integrations_router
 
 # Initialize route dependencies
 init_admin_routes(db, require_superadmin, serialize_doc, serialize_docs, hash_password, UserRole, UserStatus, User, Tenant)
 
 # Include routers
 v1_router.include_router(admin_router)
+v1_router.include_router(billing_router)
+v1_router.include_router(integrations_router)
 
 api_router.include_router(v1_router)
 app.include_router(api_router)
