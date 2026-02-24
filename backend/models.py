@@ -369,6 +369,13 @@ class User(UserBase):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
+class TenantSummary(BaseModel):
+    id: str
+    name: str
+    slug: Optional[str] = None
+    industry_slug: Optional[str] = None
+
+
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -376,6 +383,7 @@ class UserResponse(BaseModel):
     role: UserRole
     status: UserStatus
     tenant_id: Optional[str] = None
+    tenant: Optional[TenantSummary] = None
 
 
 class CustomerBase(BaseModel):
