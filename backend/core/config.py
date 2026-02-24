@@ -16,7 +16,6 @@ JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRATION_HOURS: int = 24
 
 # External services
-VAPI_API_KEY: str = os.environ.get('VAPI_API_KEY', '')
 OPENAI_API_KEY: str = os.environ.get('OPENAI_API_KEY', '')
 TWILIO_ACCOUNT_SID: str = os.environ.get('TWILIO_ACCOUNT_SID', '')
 TWILIO_AUTH_TOKEN: str = os.environ.get('TWILIO_AUTH_TOKEN', '')

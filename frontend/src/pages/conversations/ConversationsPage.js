@@ -404,8 +404,8 @@ function MessageBubble({ message, formatTime }) {
             <span className="text-xs text-muted-foreground">{formatTime(message.created_at)}</span>
           </div>
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{message.content}</p>
-          {message.metadata?.vapi_call_id && (
-            <p className="text-xs text-muted-foreground mt-2">Call ID: {message.metadata.vapi_call_id}</p>
+          {message.metadata?.session_id && (
+            <p className="text-xs text-muted-foreground mt-2">Call ID: {message.metadata.session_id}</p>
           )}
         </div>
       </div>

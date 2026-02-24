@@ -672,52 +672,6 @@ class FieldOSAPITester:
             self.log(f"   - Pending: {campaign_stats.get('pending', 0)}")
             self.log(f"   - Response rate: {campaign_stats.get('response_rate', 0)}%")
 
-    def test_vapi_endpoints(self):
-        """Test Vapi integration endpoints"""
-        self.log("\n=== VAPI INTEGRATION TESTS ===")
-        
-        # Test create lead from Vapi
-        vapi_headers = {"X-Vapi-Secret": "vapi-secret-key-change-in-production"}
-        
-        vapi_lead_data = {
-            "tenant_slug": "test-hvac",  # This might not exist, testing endpoint
-            "caller_phone": "+1987654321",
-            "caller_name": "Jane Customer",
-            "issue_type": "Heating Issue",
-            "urgency": "URGENT",
-            "description": "Furnace not working",
-            "address_line1": "456 Oak Ave",
-            "city": "Brooklyn",
-            "state": "NY",
-            "postal_code": "11201"
-        }
-        
-        # This might fail due to tenant slug, but tests the endpoint
-        self.run_test(
-            "Vapi Create Lead",
-            "POST",
-            "vapi/create-lead",
-            404,  # Expecting 404 due to tenant slug
-            data=vapi_lead_data,
-            headers=vapi_headers
-        )
-        
-        # Test check availability
-        availability_data = {
-            "tenant_slug": "test-hvac",
-            "date": "2024-12-20",
-            "job_type": "DIAGNOSTIC"
-        }
-        
-        self.run_test(
-            "Vapi Check Availability",
-            "POST",
-            "vapi/check-availability",
-            404,  # Expecting 404 due to tenant slug
-            data=availability_data,
-            headers=vapi_headers
-        )
-
     def test_sms_webhook(self):
         """Test SMS inbound webhook"""
         self.log("\n=== SMS WEBHOOK TEST ===")
@@ -1092,7 +1046,6 @@ class FieldOSAPITester:
         self.test_campaign_management()
         
         # Integration tests
-        self.test_vapi_endpoints()
         self.test_sms_webhook()
         
         # Dashboard and reporting

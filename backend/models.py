@@ -55,7 +55,6 @@ class PropertyType(str, Enum):
 
 
 class LeadSource(str, Enum):
-    VAPI_CALL = "VAPI_CALL"
     MISSED_CALL_SMS = "MISSED_CALL_SMS"
     WEB_FORM = "WEB_FORM"
     LANDING_PAGE = "LANDING_PAGE"
@@ -665,57 +664,6 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
-
-
-# ============= VAPI MODELS =============
-
-class VapiCreateLeadRequest(BaseModel):
-    tenant_slug: str
-    # Support both field naming conventions
-    caller_phone: Optional[str] = None
-    caller_number: Optional[str] = None  # Alias for caller_phone
-    caller_name: Optional[str] = None
-    captured_name: Optional[str] = None  # Alias for caller_name
-    captured_email: Optional[str] = None  # Optional email
-    issue_type: Optional[str] = None
-    issue_description: Optional[str] = None  # Alias for description
-    urgency: Optional[str] = "ROUTINE"
-    description: Optional[str] = None
-    # Address fields - support both formats
-    address_line1: Optional[str] = None
-    captured_address: Optional[str] = None  # Alias - will be parsed
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-
-
-class VapiCheckAvailabilityRequest(BaseModel):
-    tenant_slug: str
-    date: str  # YYYY-MM-DD
-    job_type: Optional[str] = "DIAGNOSTIC"
-
-
-class VapiBookJobRequest(BaseModel):
-    tenant_slug: str
-    lead_id: str
-    customer_id: str
-    property_id: str
-    job_type: str
-    window_start: str  # ISO datetime
-    window_end: str
-
-
-class VapiSendSmsRequest(BaseModel):
-    tenant_slug: str
-    to_phone: str
-    message: str
-
-
-class VapiCallSummaryRequest(BaseModel):
-    tenant_slug: str
-    lead_id: str
-    summary: str
-    vapi_session_id: Optional[str] = None
 
 
 class WebFormLeadRequest(BaseModel):

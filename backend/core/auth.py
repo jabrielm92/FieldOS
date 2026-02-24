@@ -9,7 +9,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 
-from core.config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRATION_HOURS, VAPI_API_KEY
+from core.config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRATION_HOURS
 from core.database import db
 from models import UserRole
 
@@ -84,19 +84,3 @@ async def get_tenant_id(current_user: dict = Depends(get_current_user)) -> Optio
     return tenant_id
 
 
-def verify_vapi_secret(
-    x_vapi_secret: str = Header(None, alias="x-vapi-secret"),
-    authorization: str = Header(None),
-) -> bool:
-    """Verify Vapi webhook authentication via x-vapi-secret or Bearer token"""
-    if x_vapi_secret and VAPI_API_KEY and x_vapi_secret == VAPI_API_KEY:
-        return True
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
-        if VAPI_API_KEY and token == VAPI_API_KEY:
-            return True
-    if not VAPI_API_KEY:
-        logger.warning("VAPI_API_KEY not configured - allowing request for testing")
-        return True
-    logger.info("Vapi request received (auth headers not matched, allowing for tool calls)")
-    return True

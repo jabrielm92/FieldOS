@@ -812,7 +812,7 @@ function CreateQuoteDialog({ open, onOpenChange, onSuccess }) {
                     <SelectItem value="none">Don't import</SelectItem>
                     {leads.map((l) => (
                       <SelectItem key={l.id} value={l.id}>
-                        {l.source === "VAPI_CALL" ? "📞 " : "📝 "}
+                        {l.source === "SELF_HOSTED_VOICE" ? "📞 " : "📝 "}
                         {l.customer?.first_name || l.caller_name || "Unknown"} - {l.issue_type || l.description?.substring(0, 30)}
                       </SelectItem>
                     ))}

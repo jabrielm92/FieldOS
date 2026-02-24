@@ -15,7 +15,7 @@ import { toast } from "sonner";
 // Helper to display lead source nicely
 const formatSource = (source) => {
   const sourceLabels = {
-    'VAPI_CALL': 'AI Receptionist',
+    'SELF_HOSTED_VOICE': 'AI Receptionist',
     'WEB_FORM': 'Web Form',
     'PHONE': 'Phone',
     'WALK_IN': 'Walk-in',
