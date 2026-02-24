@@ -1,8 +1,5 @@
 {
-  "buildCommand": "yarn build",
   "outputDirectory": "build",
-  "framework": "vite",
-  "installCommand": "yarn install --legacy-peer-deps",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
