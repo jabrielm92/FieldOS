@@ -16,43 +16,53 @@ const API_URL = import.meta.env.VITE_BACKEND_URL;
 const features = [
   {
     icon: Phone,
-    title: "AI Phone Receptionist",
-    description: "24/7 intelligent call handling that books appointments, answers questions, and never misses a lead."
+    title: "AI Voice Receptionist",
+    description: "24/7 AI answers every call, books appointments, and captures leads — never puts a customer on hold."
   },
   {
     icon: Bot,
-    title: "Smart Lead Capture",
-    description: "Automatically capture and qualify leads from calls, web forms, and SMS conversations."
+    title: "AI SMS Assistant",
+    description: "Automatically qualify inbound texts, answer FAQs, and book jobs without lifting a finger."
   },
   {
     icon: Calendar,
-    title: "Intelligent Scheduling",
-    description: "Drag-and-drop dispatch board with route optimization and real-time technician tracking."
+    title: "Dispatch Board",
+    description: "Drag-and-drop scheduling with real-time technician tracking and smart job assignment."
   },
   {
     icon: MessageSquare,
-    title: "Unified Communications",
-    description: "SMS, email, and call management in one inbox. Automated follow-ups and reminders."
+    title: "Unified Inbox",
+    description: "SMS, calls, and lead conversations in one place. Automated follow-ups and appointment reminders."
   },
   {
     icon: FileText,
     title: "Quotes & Invoicing",
-    description: "Professional quotes in minutes. Convert to invoices with one click. Get paid faster."
+    description: "Send professional quotes in minutes. One-click conversion to invoice. Collect payment via Stripe."
   },
   {
     icon: Target,
-    title: "Marketing Campaigns",
-    description: "Automated drip campaigns, seasonal promotions, and customer re-engagement."
+    title: "SMS Campaigns",
+    description: "Drip sequences, seasonal promos, and re-engagement campaigns sent automatically."
   },
   {
     icon: BarChart3,
     title: "Revenue Analytics",
-    description: "Real-time dashboards showing revenue, conversion rates, and technician performance."
+    description: "Live dashboards for revenue, job completion rates, technician performance, and CSV export."
   },
   {
     icon: Users,
     title: "Customer Portal",
-    description: "Self-service portal for customers to book, view history, and pay invoices online."
+    description: "Branded self-service portal — customers book jobs, view history, and pay invoices online."
+  },
+  {
+    icon: Zap,
+    title: "Workflow Automation",
+    description: "Visual workflow builder to automate follow-ups, status changes, and internal notifications."
+  },
+  {
+    icon: TrendingUp,
+    title: "Technician Mobile App",
+    description: "Field techs get their schedule, job details, and status updates on any device — no training needed."
   }
 ];
 
@@ -83,44 +93,49 @@ const testimonials = [
 const pricingPlans = [
   {
     name: "Starter",
-    price: "497",
-    description: "Perfect for growing service businesses",
+    monthly: "149",
+    setup: "497",
+    tagline: "For solo operators & small crews",
     features: [
-      "Up to 5 users",
-      "AI Phone Receptionist",
-      "Lead management",
-      "Job scheduling",
-      "Basic reporting",
+      "Up to 3 technicians & 5 users",
+      "Jobs, customers & scheduling",
+      "Invoicing + Stripe payment collection",
+      "Customer self-service portal",
+      "Automated SMS reminders",
+      "Dispatch board",
+      "Revenue reports & CSV export",
       "Email support"
     ]
   },
   {
-    name: "Professional",
-    price: "997",
-    description: "For established businesses ready to scale",
+    name: "Pro",
+    monthly: "299",
+    setup: "797",
+    tagline: "For growing field service companies",
     features: [
-      "Up to 15 users",
+      "Up to 10 technicians & 15 users",
       "Everything in Starter",
-      "Advanced AI automation",
-      "Quote & invoice system",
-      "Marketing campaigns",
-      "Customer portal",
+      "AI Voice receptionist (24/7)",
+      "AI SMS assistant & lead qualification",
+      "Automated booking & lead capture",
+      "SMS marketing campaigns",
       "Priority support"
     ],
     popular: true
   },
   {
     name: "Enterprise",
-    price: "Custom",
-    description: "Tailored solutions for large operations",
+    monthly: "549",
+    setup: "1,497",
+    tagline: "For multi-location & high-volume operations",
     features: [
-      "Unlimited users",
-      "Everything in Professional",
-      "Custom integrations",
-      "White-label options",
-      "Dedicated success manager",
-      "Custom AI training",
-      "SLA guarantee"
+      "Unlimited technicians & users",
+      "Everything in Pro",
+      "White-label branding & custom domain",
+      "Custom AI voice & SMS prompts",
+      "Multi-location support",
+      "Dedicated onboarding & training",
+      "SLA-backed support"
     ]
   }
 ];
@@ -305,7 +320,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
             {features.map((feature, i) => (
               <div 
                 key={i} 
@@ -428,17 +443,16 @@ export default function LandingPage() {
                     Most Popular
                   </div>
                 )}
-                <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
-                <p className="text-sm text-gray-400 mb-4">{plan.description}</p>
-                <div className="mb-6">
-                  {plan.price === "Custom" ? (
-                    <span className="text-4xl font-black">Custom</span>
-                  ) : (
-                    <>
-                      <span className="text-4xl font-black">${plan.price}</span>
-                      <span className="text-gray-400">/month</span>
-                    </>
-                  )}
+                <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
+                <p className="text-xs text-gray-500 mb-4">{plan.tagline}</p>
+                <div className="mb-2">
+                  <span className="text-4xl font-black">${plan.monthly}</span>
+                  <span className="text-gray-400">/mo</span>
+                </div>
+                <div className="inline-flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 mb-6">
+                  <span className="text-gray-400 text-xs">+</span>
+                  <span className="text-white text-xs font-semibold">${plan.setup}</span>
+                  <span className="text-gray-500 text-xs">one-time setup</span>
                 </div>
                 <ul className="space-y-3 mb-8">
                   {plan.features.map((feature, j) => (
@@ -459,7 +473,10 @@ export default function LandingPage() {
           </div>
 
           <p className="text-center mt-8 text-gray-400 text-sm">
-            * All plans can be customized to your specific needs. Contact us for a personalized quote.
+            All plans include onboarding & go-live support.{" "}
+            <Link to="/pricing" className="text-blue-400 hover:text-blue-300 underline">
+              Sign up to subscribe directly →
+            </Link>
           </p>
         </div>
       </section>
