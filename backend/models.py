@@ -691,6 +691,7 @@ class PlanTier(str, Enum):
     ENTERPRISE = "ENTERPRISE"
 
 class SubscriptionStatus(str, Enum):
+    TRIALING = "TRIALING"
     INACTIVE = "INACTIVE"
     PENDING_PAYMENT = "PENDING_PAYMENT"
     ACTIVE = "ACTIVE"
