@@ -1,0 +1,90 @@
+services:
+
+  # ──────────────────────────────────────────
+  # Backend API (FastAPI + Uvicorn)
+  # ──────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: backend/.env
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=${DB_NAME:-fieldos}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - fieldos
+
+  # ──────────────────────────────────────────
+  # Celery worker (background tasks)
+  # ──────────────────────────────────────────
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: celery -A core.celery_app worker --loglevel=info
+    env_file: backend/.env
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=${DB_NAME:-fieldos}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - fieldos
+
+  # ──────────────────────────────────────────
+  # Frontend (Vite build → Nginx)
+  # Nginx also proxies /api/ and /v1/ to backend
+  # ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Leave empty so nginx same-origin proxy handles routing,
+        # or set to your public API URL: https://api.yourdomain.com
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - fieldos
+
+  # ──────────────────────────────────────────
+  # MongoDB
+  # ──────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - fieldos
+
+  # ──────────────────────────────────────────
+  # Redis (Celery broker + cache)
+  # ──────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - fieldos
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  fieldos:
+    driver: bridge
