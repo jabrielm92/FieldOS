@@ -374,6 +374,7 @@ class TenantSummary(BaseModel):
     name: str
     slug: Optional[str] = None
     industry_slug: Optional[str] = None
+    onboarding_completed: bool = False
 
 
 class UserResponse(BaseModel):
