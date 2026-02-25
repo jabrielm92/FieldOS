@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
@@ -9,7 +10,7 @@ import {
   Shield, Clock, Star, Check,
   Headphones, Bot, FileText, Send, Target, TrendingUp,
   Menu, X, ArrowRight, Loader2, Sparkles, ChevronRight,
-  Wrench, Bolt, Droplets, Leaf, Wind, Car, Activity
+  Wrench, Bolt, Droplets, Leaf, Wind, Car, Activity, LogOut
 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
@@ -318,10 +319,19 @@ function TestimonialCard({ t, index }) {
 /* ─── Main Component ────────────────────────────────────────────────────── */
 
 export default function LandingPage() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", company: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
+
+  const dashboardPath = user?.role === "SUPERADMIN" ? "/admin" : "/dashboard";
 
   useScrollReveal();
 
@@ -395,19 +405,39 @@ export default function LandingPage() {
             </div>
 
             <div className="hidden md:flex items-center gap-3">
-              <Link to="/login">
-                <Button variant="ghost" className="text-gray-400 hover:text-white text-sm">
-                  Sign In
-                </Button>
-              </Link>
-              <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
-                <Button
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-5 rounded-xl shadow-lg shadow-blue-600/25 transition-all duration-300 hover:shadow-blue-500/40 hover:-translate-y-px"
-                >
-                  Book a Demo
-                  <ArrowRight className="ml-1.5 h-4 w-4" />
-                </Button>
-              </a>
+              {user ? (
+                <>
+                  <Link to={dashboardPath}>
+                    <Button variant="ghost" className="text-gray-400 hover:text-white text-sm">
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    onClick={handleLogout}
+                    className="text-gray-400 hover:text-red-400 text-sm flex items-center gap-1.5"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Log Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login">
+                    <Button variant="ghost" className="text-gray-400 hover:text-white text-sm">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
+                    <Button
+                      className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-5 rounded-xl shadow-lg shadow-blue-600/25 transition-all duration-300 hover:shadow-blue-500/40 hover:-translate-y-px"
+                    >
+                      Book a Demo
+                      <ArrowRight className="ml-1.5 h-4 w-4" />
+                    </Button>
+                  </a>
+                </>
+              )}
             </div>
 
             <button className="md:hidden p-2 text-gray-400 hover:text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -432,12 +462,33 @@ export default function LandingPage() {
                 {id}
               </a>
             ))}
-            <Link to="/login" className="text-gray-300 hover:text-white py-2 text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>
-              Sign In
-            </Link>
-            <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
-              <Button className="w-full bg-blue-600 hover:bg-blue-500 rounded-xl mt-1">Book a Demo</Button>
-            </a>
+            {user ? (
+              <>
+                <Link
+                  to={dashboardPath}
+                  className="text-gray-300 hover:text-white py-2 text-sm font-medium"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Dashboard
+                </Link>
+                <button
+                  onClick={() => { setMobileMenuOpen(false); handleLogout(); }}
+                  className="flex items-center gap-2 text-red-400 hover:text-red-300 py-2 text-sm font-medium"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Log Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="text-gray-300 hover:text-white py-2 text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>
+                  Sign In
+                </Link>
+                <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
+                  <Button className="w-full bg-blue-600 hover:bg-blue-500 rounded-xl mt-1">Book a Demo</Button>
+                </a>
+              </>
+            )}
           </div>
         </div>
       </nav>
