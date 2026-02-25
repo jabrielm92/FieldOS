@@ -4877,17 +4877,20 @@ async def startup_event():
     """Create default superadmin if not exists and start scheduler"""
     superadmin = await db.users.find_one({"role": UserRole.SUPERADMIN.value})
     if not superadmin:
-        admin = User(
-            email="admin@fieldos.app",
-            name="Super Admin",
-            role=UserRole.SUPERADMIN,
-            status=UserStatus.ACTIVE,
-            tenant_id=None,
-            password_hash=hash_password("admin123")
-        )
-        admin_dict = admin.model_dump(mode='json')
+        user_id = str(uuid4())
+        admin_dict = {
+            "id": user_id,
+            "email": "jabriel@arisolutionsinc.com",
+            "password_hash": hash_password("Finao028!"),
+            "name": "Jabriel Martinez",
+            "role": UserRole.SUPERADMIN.value,
+            "status": UserStatus.ACTIVE.value,
+            "tenant_id": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
         await db.users.insert_one(admin_dict)
-        logger.info("Created default superadmin: admin@fieldos.app / admin123")
+        logger.info("Created default superadmin: jabriel@arisolutionsinc.com")
     
     # Initialize background scheduler
     try:
