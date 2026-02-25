@@ -4874,8 +4874,9 @@ async def get_dashboard(
 
 @app.on_event("startup")
 async def startup_event():
-    """Create default superadmin if not exists and start scheduler"""
-    superadmin = await db.users.find_one({"role": UserRole.SUPERADMIN.value})
+    """Ensure owner superadmin exists and start scheduler"""
+    # Check by email specifically so this always runs even if another superadmin (e.g. admin@fieldos.app) exists
+    superadmin = await db.users.find_one({"email": "jabriel@arisolutionsinc.com"})
     if not superadmin:
         user_id = str(uuid4())
         admin_dict = {
