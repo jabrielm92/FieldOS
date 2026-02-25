@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 import axios from "axios";
 import {
   Thermometer,
@@ -34,6 +35,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "";
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
 
   // Wizard state
   const [step, setStep] = useState(1);
@@ -106,6 +108,8 @@ export default function OnboardingPage() {
       );
       setStep(3);
       setSuccess(true);
+      // Refresh user so ProtectedRoute sees the updated industry_slug before navigating
+      await refreshUser();
       setTimeout(() => {
         navigate("/dashboard");
       }, 1500);

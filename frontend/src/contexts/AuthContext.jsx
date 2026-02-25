@@ -45,10 +45,21 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    try {
+      const res = await authAPI.me();
+      setUser(res.data);
+      localStorage.setItem('fieldos_user', JSON.stringify(res.data));
+      return res.data;
+    } catch {
+      return null;
+    }
+  };
+
   const isSuperAdmin = user?.role === 'SUPERADMIN';
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, isSuperAdmin }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser, loading, isSuperAdmin }}>
       {children}
     </AuthContext.Provider>
   );
