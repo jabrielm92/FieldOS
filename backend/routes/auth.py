@@ -30,11 +30,14 @@ async def login(request: LoginRequest):
     if user.get("tenant_id"):
         tenant_doc = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
         if tenant_doc:
+            industry_slug = tenant_doc.get("industry_slug")
+            onboarding_completed = tenant_doc.get("onboarding_completed", False) or bool(industry_slug)
             tenant_summary = TenantSummary(
                 id=tenant_doc["id"],
                 name=tenant_doc.get("name", ""),
                 slug=tenant_doc.get("slug"),
-                industry_slug=tenant_doc.get("industry_slug"),
+                industry_slug=industry_slug,
+                onboarding_completed=onboarding_completed,
             )
 
     return TokenResponse(
@@ -64,11 +67,14 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     if current_user.get("tenant_id"):
         tenant_doc = await db.tenants.find_one({"id": current_user["tenant_id"]}, {"_id": 0})
         if tenant_doc:
+            industry_slug = tenant_doc.get("industry_slug")
+            onboarding_completed = tenant_doc.get("onboarding_completed", False) or bool(industry_slug)
             tenant_summary = TenantSummary(
                 id=tenant_doc["id"],
                 name=tenant_doc.get("name", ""),
                 slug=tenant_doc.get("slug"),
-                industry_slug=tenant_doc.get("industry_slug"),
+                industry_slug=industry_slug,
+                onboarding_completed=onboarding_completed,
             )
 
     return UserResponse(

@@ -62,9 +62,17 @@ function ProtectedRoute({ children, requireSuperAdmin = false }) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // Redirect to onboarding if no industry set (non-superadmin tenants only)
-  if (!isSuperAdmin && !user?.tenant?.industry_slug && location.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
+  // Onboarding gate (non-superadmin tenants only)
+  const onboardingDone = user?.tenant?.onboarding_completed === true;
+  if (!isSuperAdmin) {
+    // Not yet done → send to onboarding (unless already there)
+    if (!onboardingDone && location.pathname !== '/onboarding') {
+      return <Navigate to="/onboarding" replace />;
+    }
+    // Already done → never show onboarding again
+    if (onboardingDone && location.pathname === '/onboarding') {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;

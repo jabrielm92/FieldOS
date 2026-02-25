@@ -25,7 +25,7 @@ from models import (
     ConversationStatus, MessageDirection, SenderType, PreferredChannel,
     CampaignStatus, RecipientStatus, BookingMode, ToneProfile,
     # Models
-    Tenant, TenantCreate, TenantResponse,
+    Tenant, TenantCreate, TenantResponse, TenantSummary,
     User, UserCreate, UserResponse,
     Customer, CustomerCreate,
     Property, PropertyCreate,
@@ -208,15 +208,29 @@ async def get_tenant_id(current_user: dict = Depends(get_current_user)) -> Optio
 async def login(request: LoginRequest):
     """Authenticate user and return JWT token"""
     user = await db.users.find_one({"email": request.email}, {"_id": 0})
-    
+
     if not user or not verify_password(request.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    
+
     if user.get("status") == UserStatus.DISABLED.value:
         raise HTTPException(status_code=401, detail="Account is disabled")
-    
+
     token = create_access_token(user["id"], user.get("tenant_id"), user["role"])
-    
+
+    tenant_summary = None
+    if user.get("tenant_id"):
+        tenant_doc = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+        if tenant_doc:
+            industry_slug = tenant_doc.get("industry_slug")
+            onboarding_completed = tenant_doc.get("onboarding_completed", False) or bool(industry_slug)
+            tenant_summary = TenantSummary(
+                id=tenant_doc["id"],
+                name=tenant_doc.get("name", ""),
+                slug=tenant_doc.get("slug"),
+                industry_slug=industry_slug,
+                onboarding_completed=onboarding_completed,
+            )
+
     return TokenResponse(
         access_token=token,
         user=UserResponse(
@@ -225,7 +239,8 @@ async def login(request: LoginRequest):
             name=user["name"],
             role=user["role"],
             status=user["status"],
-            tenant_id=user.get("tenant_id")
+            tenant_id=user.get("tenant_id"),
+            tenant=tenant_summary,
         )
     )
 
@@ -239,13 +254,28 @@ async def logout():
 @v1_router.get("/auth/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):
     """Get current user info"""
+    tenant_summary = None
+    if current_user.get("tenant_id"):
+        tenant_doc = await db.tenants.find_one({"id": current_user["tenant_id"]}, {"_id": 0})
+        if tenant_doc:
+            industry_slug = tenant_doc.get("industry_slug")
+            onboarding_completed = tenant_doc.get("onboarding_completed", False) or bool(industry_slug)
+            tenant_summary = TenantSummary(
+                id=tenant_doc["id"],
+                name=tenant_doc.get("name", ""),
+                slug=tenant_doc.get("slug"),
+                industry_slug=industry_slug,
+                onboarding_completed=onboarding_completed,
+            )
+
     return UserResponse(
         id=current_user["id"],
         email=current_user["email"],
         name=current_user["name"],
         role=current_user["role"],
         status=current_user["status"],
-        tenant_id=current_user.get("tenant_id")
+        tenant_id=current_user.get("tenant_id"),
+        tenant=tenant_summary,
     )
 
 
@@ -5815,6 +5845,7 @@ async def update_industry_settings(data: dict, tenant_id: str = Depends(get_tena
     update = {}
     if "industry_slug" in data:
         update["industry_slug"] = data["industry_slug"]
+        update["onboarding_completed"] = True
     if "custom_job_types" in data:
         update["custom_job_types"] = data["custom_job_types"]
     if "disabled_job_types" in data:

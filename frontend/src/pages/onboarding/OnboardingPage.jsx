@@ -106,13 +106,13 @@ export default function OnboardingPage() {
         { industry_slug: selectedIndustry.slug, custom_job_types: checkedJobTypes },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      // Show success screen, then refresh user data and navigate.
+      // refreshUser fetches /auth/me which now returns onboarding_completed: true,
+      // so ProtectedRoute will allow /dashboard on the very next render.
       setStep(3);
       setSuccess(true);
-      // Refresh user so ProtectedRoute sees the updated industry_slug before navigating
       await refreshUser();
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1500);
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError("Failed to save settings. Please try again.");
       setSaving(false);
