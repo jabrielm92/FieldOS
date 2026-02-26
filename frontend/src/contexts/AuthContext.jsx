@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../lib/api';
+import { authStorage } from '../lib/authStorage';
 
 const AuthContext = createContext(null);
 
@@ -9,8 +10,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Check for existing session
-    const storedUser = localStorage.getItem('fieldos_user');
-    const token = localStorage.getItem('fieldos_token');
+    const storedUser = authStorage.getUser();
+    const token = authStorage.getToken();
     
     if (storedUser && token) {
       setUser(JSON.parse(storedUser));
@@ -18,8 +19,7 @@ export function AuthProvider({ children }) {
       authAPI.me()
         .then(res => setUser(res.data))
         .catch(() => {
-          localStorage.removeItem('fieldos_token');
-          localStorage.removeItem('fieldos_user');
+          authStorage.clearAll();
           setUser(null);
         })
         .finally(() => setLoading(false));
@@ -32,16 +32,15 @@ export function AuthProvider({ children }) {
     const response = await authAPI.login(email, password);
     const { access_token, user: userData } = response.data;
     
-    localStorage.setItem('fieldos_token', access_token);
-    localStorage.setItem('fieldos_user', JSON.stringify(userData));
+    authStorage.setToken(access_token);
+    authStorage.setUser(JSON.stringify(userData));
     setUser(userData);
     
     return userData;
   };
 
   const logout = () => {
-    localStorage.removeItem('fieldos_token');
-    localStorage.removeItem('fieldos_user');
+    authStorage.clearAll();
     setUser(null);
   };
 
@@ -49,7 +48,7 @@ export function AuthProvider({ children }) {
     try {
       const res = await authAPI.me();
       setUser(res.data);
-      localStorage.setItem('fieldos_user', JSON.stringify(res.data));
+      authStorage.setUser(JSON.stringify(res.data));
       return res.data;
     } catch {
       return null;

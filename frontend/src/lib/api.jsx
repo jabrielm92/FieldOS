@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { authStorage } from './authStorage';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-const API_BASE = `${BACKEND_URL}/api/v1`;
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').trim();
+const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api/v1` : '/api/v1';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -13,7 +14,7 @@ const api = axios.create({
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('fieldos_token');
+  const token = authStorage.getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -25,8 +26,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('fieldos_token');
-      localStorage.removeItem('fieldos_user');
+      authStorage.clearAll();
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -143,7 +143,7 @@ export const invoiceAPI = {
 // Public invoice payment (no auth)
 export const publicInvoiceAPI = {
   getByToken: (token) =>
-    axios.get(`${BACKEND_URL}/api/v1/invoices/public/${token}`),
+    axios.get(`${BACKEND_URL || ''}/api/v1/invoices/public/${token}`),
 };
 
 // Reports APIs
@@ -218,10 +218,10 @@ export const voiceSettingsAPI = {
 };
 
 // Public APIs (no auth)
-const BACKEND_URL_PUBLIC = import.meta.env.VITE_BACKEND_URL;
+const BACKEND_URL_PUBLIC = (import.meta.env.VITE_BACKEND_URL || '').trim();
 export const publicAPI = {
   getTracking: (token) =>
-    axios.get(`${BACKEND_URL_PUBLIC}/api/track/${token}`),
+    axios.get(`${BACKEND_URL_PUBLIC || ''}/api/track/${token}`),
 };
 
 export default api;

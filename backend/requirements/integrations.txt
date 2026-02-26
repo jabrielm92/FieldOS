@@ -1,0 +1,2 @@
+# Optional integrations (install when corresponding features are enabled)
+resend==2.4.0
