@@ -1,4 +1,7 @@
-# FieldOS v1 - Requirements & Architecture
+# FieldOS v1 - Historical Requirements & Architecture Notes
+
+> This document is maintained as historical context.
+> For current setup/run/deploy instructions, use `docs/RUNBOOK.md`.
 
 ## Original Problem Statement
 FieldOS is a multi-tenant Revenue & Operations OS for field service companies (HVAC, plumbing, electrical, contractors). Core features include:
@@ -17,7 +20,7 @@ FieldOS is a multi-tenant Revenue & Operations OS for field service companies (H
 
 ## Architecture Completed
 
-### Backend (/app/backend/)
+### Backend (historical path note; current repo path is `backend/`)
 - `server.py` - Main FastAPI application with all endpoints
 - `models.py` - Pydantic models for all entities
 - `services/twilio_service.py` - Twilio SMS wrapper
@@ -64,9 +67,9 @@ FieldOS is a multi-tenant Revenue & Operations OS for field service companies (H
 - Campaigns page
 - Settings page with Vapi endpoint info
 
-## Default Credentials
-- **Superadmin**: admin@fieldos.app / admin123
-- **Tenant Owner (Radiance HVAC)**: owner@radiancehvac.com / owner123
+## Demo Credentials (Historical / non-production only)
+- Demo seed credentials may exist in local/dev fixtures only.
+- Do not use shared/default credentials in production environments.
 
 ## Environment Variables Required
 ```
@@ -91,8 +94,6 @@ APP_BASE_URL=https://your-app-url
 7. **Mobile UI**: Optimize for field technician mobile usage
 8. **Real-time Updates**: Add WebSocket support for live dashboard updates
 
-## Testing
-- Backend: 100% pass rate (31/31 tests)
-- Frontend: 95% pass rate
-- Integration: 100% pass rate
-- Overall: 98% success rate
+## Testing (Historical snapshot)
+- The pass-rate values below were point-in-time during v1 development and may be outdated.
+- For current CI status and reproducible test commands, use `docs/RUNBOOK.md` and `.github/workflows/ci.yml`.
